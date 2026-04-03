@@ -8,6 +8,7 @@ import MapView from './pages/MapView';
 import ImportBulletin from './pages/ImportBulletin';
 import SimilarCasesPage from './pages/SimilarCasesPage';
 import LinkageScreen from './pages/LinkageScreen';
+import ResearchOutputs from './pages/ResearchOutputs';
 
 export default function App() {
   return (
@@ -23,6 +24,7 @@ export default function App() {
           <Route path="/map" element={<MapView />} />
           <Route path="/similar/:reportId" element={<SimilarCasesPage />} />
           <Route path="/linkage/:reportIdA/:reportIdB" element={<LinkageScreen />} />
+          <Route path="/research" element={<ResearchOutputs />} />
         </Routes>
       </Layout>
       </ToastProvider>

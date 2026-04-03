@@ -566,7 +566,254 @@ function WeatherCard({ w }: { w: Record<string, any> }) {
   );
 }
 
-type Section = 'basics' | 'encounter' | 'mobility' | 'suspect' | 'narrative' | 'gis' | 'scoring';
+// ── Case-level analytical summary (derived from current field values) ─────────
+
+/** Resolve field provenance state to a display tier */
+function _prov(fp: Record<string, string> | undefined, field: string): 'coded' | 'provisional' | 'unset' {
+  const state = fp?.[field] ?? 'unset';
+  if (state === 'analyst_filled' || state === 'reviewed') return 'coded';
+  if (state === 'ai_suggested') return 'provisional';
+  return 'unset';
+}
+
+function ProvenancePill({ p }: { p: 'coded' | 'provisional' | 'unset' }) {
+  if (p === 'provisional') return (
+    <span style={{ fontSize: 9.5, fontWeight: 600, padding: '1px 5px', borderRadius: 3,
+      background: 'var(--amber-pale)', color: 'var(--amber)', border: '1px solid var(--amber-border)',
+      marginLeft: 4, verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
+      provisional
+    </span>
+  );
+  return null;
+}
+
+function SequenceChip({ label, prov }: { label: string; prov: 'coded' | 'provisional' | 'unset' }) {
+  const isProvisional = prov === 'provisional';
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 4,
+      padding: '4px 10px', borderRadius: 6, fontSize: 12,
+      border: isProvisional ? '1px dashed var(--amber-border)' : '1px solid var(--border)',
+      background: isProvisional ? 'var(--amber-pale)' : 'var(--surface-2)',
+      color: isProvisional ? 'var(--amber)' : 'var(--text-2)',
+      fontWeight: isProvisional ? 500 : 400,
+    }}>
+      {label}
+      {isProvisional && (
+        <span style={{ fontSize: 9, opacity: 0.75 }}>~</span>
+      )}
+    </span>
+  );
+}
+
+function SummarySection({ title, items }: {
+  title: string;
+  items: { text: string; prov: 'coded' | 'provisional' | 'unset' }[];
+}) {
+  if (items.length === 0) return (
+    <div style={{ marginBottom: 18 }}>
+      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', letterSpacing: '0.05em',
+        textTransform: 'uppercase', marginBottom: 6 }}>{title}</div>
+      <div style={{ fontSize: 12, color: 'var(--text-3)', fontStyle: 'italic' }}>— not coded</div>
+    </div>
+  );
+  return (
+    <div style={{ marginBottom: 18 }}>
+      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', letterSpacing: '0.05em',
+        textTransform: 'uppercase', marginBottom: 8 }}>{title}</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {items.map((item, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 0, fontSize: 12.5, color: 'var(--text-2)', lineHeight: 1.4 }}>
+            <span style={{ marginRight: 6, color: 'var(--text-3)', flexShrink: 0 }}>·</span>
+            <span>{item.text}<ProvenancePill p={item.prov} /></span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SummaryTab({ fields }: { fields: Partial<Report> }) {
+  const fp = (fields.field_provenance as Record<string, string>) ?? {};
+
+  // ── Encounter sequence ───────────────────────────────────────────────────
+  type StageDef = [string, string, Set<string> | null];
+  const stageDefs: StageDef[] = [
+    ['Negotiation',             'negotiation_present',          new Set(['yes'])],
+    ['Service discussed',       'service_discussed',            new Set(['yes'])],
+    ['Refusal',                 'refusal_present',              new Set(['yes'])],
+    ['Pressure after refusal',  'pressure_after_refusal',       new Set(['yes'])],
+    ['Repeated pressure',       'repeated_pressure',            new Set(['yes'])],
+    ['Coercion',                'coercion_present',             new Set(['yes'])],
+    ['Intimidation',            'intimidation_present',         new Set(['yes'])],
+    ['Threats',                 'threats_present',              new Set(['yes'])],
+    ['Verbal abuse',            'verbal_abuse',                 new Set(['yes'])],
+    ['Abrupt tone change',      'abrupt_tone_change',           new Set(['yes'])],
+    ['Movement',                'movement_present',             new Set(['yes'])],
+    ['Environment shift: public→private',  'public_to_private_shift',  new Set(['yes'])],
+    ['Environment shift: public→secluded', 'public_to_secluded_shift', new Set(['yes'])],
+    ['Physical force',          'physical_force',               new Set(['yes'])],
+    ['Sexual assault',          'sexual_assault',               new Set(['yes'])],
+    ['Robbery / theft',         'robbery_theft',                new Set(['yes'])],
+    ['Stealthing',              'stealthing',                   new Set(['yes'])],
+  ];
+
+  const approach = (fields.initial_approach_type || '').trim();
+  const contactLabel = approach ? `Contact (${approach})` : 'Contact';
+  const contactProv = approach ? _prov(fp, 'initial_approach_type') : 'unset';
+
+  type SeqStage = { label: string; prov: 'coded' | 'provisional' | 'unset' };
+  const seqStages: SeqStage[] = [{ label: contactLabel, prov: contactProv }];
+
+  for (const [label, field, positiveVals] of stageDefs) {
+    const val = (fields[field as keyof Report] as string || '').trim();
+    if (!val) continue;
+    if (positiveVals === null || positiveVals.has(val)) {
+      seqStages.push({ label, prov: _prov(fp, field) });
+    }
+  }
+
+  const exitType = (fields.exit_type || '').trim();
+  if (exitType) {
+    const exitLabels: Record<string, string> = {
+      completed: 'Exit — completed', escaped: 'Exit — escaped',
+      abandoned: 'Exit — abandoned', interrupted: 'Exit — interrupted',
+      unknown: 'Exit — unknown',
+    };
+    seqStages.push({ label: exitLabels[exitType] ?? `Exit (${exitType})`, prov: _prov(fp, 'exit_type') });
+  }
+
+  const hasProvisional = seqStages.some(s => s.prov === 'provisional');
+
+  // ── Mobility items ────────────────────────────────────────────────────────
+  type SItem = { text: string; prov: 'coded' | 'provisional' | 'unset' };
+  const mobItems: SItem[] = [];
+
+  const addMob = (text: string, field: string) =>
+    mobItems.push({ text, prov: _prov(fp, field) });
+
+  if (fields.movement_present === 'yes')    addMob('Movement present', 'movement_present');
+  if (fields.movement_attempted === 'yes' && fields.movement_completed !== 'yes')
+    addMob('Movement attempted (not completed)', 'movement_attempted');
+  if (fields.movement_completed === 'yes') addMob('Movement completed', 'movement_completed');
+  if (fields.entered_vehicle === 'yes')    addMob('Entered vehicle', 'entered_vehicle');
+  const mode = (fields.mode_of_movement || '').trim();
+  if (mode)                                addMob(`Mode: ${mode}`, 'mode_of_movement');
+  if (fields.public_to_private_shift === 'yes')  addMob('Public → private shift', 'public_to_private_shift');
+  if (fields.public_to_secluded_shift === 'yes') addMob('Public → secluded shift', 'public_to_secluded_shift');
+  if (fields.cross_neighbourhood === 'yes')      addMob('Cross-neighbourhood movement', 'cross_neighbourhood');
+  if (fields.cross_municipality === 'yes')       addMob('Cross-municipality movement', 'cross_municipality');
+  if (fields.cross_city_movement === 'yes')      addMob('Cross-city movement', 'cross_city_movement');
+  const ctrl = (fields.offender_control_over_movement || '').trim();
+  if (ctrl) addMob(`Offender control: ${ctrl}`, 'offender_control_over_movement');
+  const whoCtrl = (fields.who_controlled_movement || '').trim();
+  if (whoCtrl) addMob(`Movement controlled by: ${whoCtrl}`, 'who_controlled_movement');
+  const startLoc = (fields.start_location_type || '').trim();
+  const destLoc  = (fields.destination_location_type || '').trim();
+  if (startLoc && destLoc) mobItems.push({ text: `Route: ${startLoc} → ${destLoc}`, prov: 'coded' });
+  else if (startLoc)       mobItems.push({ text: `Start: ${startLoc}`, prov: 'coded' });
+  else if (destLoc)        mobItems.push({ text: `Destination: ${destLoc}`, prov: 'coded' });
+
+  // ── Environment items ─────────────────────────────────────────────────────
+  const envItems: SItem[] = [];
+  const io = (fields.indoor_outdoor || '').trim();
+  if (io)  envItems.push({ text: io.charAt(0).toUpperCase() + io.slice(1), prov: _prov(fp, 'indoor_outdoor') });
+  const pp = (fields.public_private || '').trim();
+  if (pp)  envItems.push({ text: pp.replace(/_/g, ' ').replace(/^./, s => s.toUpperCase()), prov: _prov(fp, 'public_private') });
+  const des = (fields.deserted || '').trim();
+  if (des) envItems.push({ text: des.replace(/_/g, ' ').replace(/^./, s => s.toUpperCase()), prov: _prov(fp, 'deserted') });
+  const icLoc = (fields.initial_contact_location || '').trim();
+  if (icLoc)  envItems.push({ text: `Contact location: ${icLoc}`, prov: 'coded' });
+  const pLoc  = (fields.incident_location_primary || '').trim();
+  if (pLoc)   envItems.push({ text: `Primary incident: ${pLoc}`, prov: 'coded' });
+  const sLoc  = (fields.incident_location_secondary || '').trim();
+  if (sLoc)   envItems.push({ text: `Secondary: ${sLoc}`, prov: 'coded' });
+
+  // ── Harm items ─────────────────────────────────────────────────────────────
+  const harmItems: SItem[] = [];
+  const harmFields: [string, string][] = [
+    ['coercion_present', 'Coercion'], ['threats_present', 'Threats'],
+    ['intimidation_present', 'Intimidation'], ['verbal_abuse', 'Verbal abuse'],
+    ['verbal_abuse_before_violence', 'Verbal abuse before violence'],
+    ['physical_force', 'Physical force'], ['sexual_assault', 'Sexual assault'],
+    ['robbery_theft', 'Robbery / theft'], ['stealthing', 'Stealthing'],
+  ];
+  for (const [field, label] of harmFields) {
+    if (fields[field as keyof Report] === 'yes')
+      harmItems.push({ text: label, prov: _prov(fp, field) });
+  }
+  const trigger = (fields.escalation_trigger || '').trim();
+  if (trigger) harmItems.push({ text: `Escalation trigger: ${trigger.slice(0, 100)}`, prov: 'coded' });
+  const escPt   = (fields.escalation_point || '').trim();
+  if (escPt)   harmItems.push({ text: `Escalation point: ${escPt}`, prov: 'coded' });
+
+  // ── Exit items ────────────────────────────────────────────────────────────
+  const exitItems: SItem[] = [];
+  if (exitType) {
+    const exitLabels: Record<string, string> = {
+      completed: 'Incident completed (no disruption)', escaped: 'Victim escaped',
+      abandoned: 'Incident abandoned', interrupted: 'Incident interrupted',
+      unknown: 'Exit outcome unknown',
+    };
+    exitItems.push({ text: exitLabels[exitType] ?? `Exit: ${exitType}`, prov: _prov(fp, 'exit_type') });
+  }
+  if (fields.repeat_suspect_flag === 'yes') exitItems.push({ text: 'Repeat suspect flagged', prov: 'coded' });
+  if (fields.repeat_vehicle_flag === 'yes') exitItems.push({ text: 'Repeat vehicle flagged', prov: 'coded' });
+
+  return (
+    <div style={{ padding: '20px 24px', maxWidth: 860 }}>
+
+      {/* Provenance note */}
+      {hasProvisional && (
+        <div style={{
+          display: 'flex', alignItems: 'flex-start', gap: 7, fontSize: 11.5,
+          color: 'var(--text-3)', padding: '8px 12px',
+          background: 'var(--amber-pale)', borderRadius: 6,
+          border: '1px solid var(--amber-border)', marginBottom: 18,
+        }}>
+          <span style={{ color: 'var(--amber)', fontWeight: 600, fontSize: 10 }}>⚠</span>
+          <span>
+            Some stages in this summary are sourced from NLP analysis only and are marked
+            <strong style={{ fontWeight: 600, color: 'var(--amber)' }}> provisional</strong>.
+            These should be reviewed and confirmed by the analyst before use.
+          </span>
+        </div>
+      )}
+
+      {/* Encounter sequence */}
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', letterSpacing: '0.05em',
+          textTransform: 'uppercase', marginBottom: 10 }}>Encounter progression</div>
+        {seqStages.length <= 1 ? (
+          <div style={{ fontSize: 12.5, color: 'var(--text-3)', fontStyle: 'italic' }}>
+            — code encounter fields to generate sequence
+          </div>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 0, flexWrap: 'wrap', rowGap: 6 }}>
+            {seqStages.map((s, i) => (
+              <span key={i} style={{ display: 'inline-flex', alignItems: 'center' }}>
+                <SequenceChip label={s.label} prov={s.prov} />
+                {i < seqStages.length - 1 && (
+                  <span style={{ color: 'var(--text-3)', fontSize: 14, margin: '0 2px' }}>→</span>
+                )}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 32px' }}>
+        <SummarySection title="Harm indicators" items={harmItems} />
+        <SummarySection title="Exit / outcome" items={exitItems} />
+        <SummarySection title="Mobility pathway" items={mobItems} />
+        <SummarySection title="Environment context" items={envItems} />
+      </div>
+
+    </div>
+  );
+}
+
+type Section = 'basics' | 'encounter' | 'mobility' | 'suspect' | 'narrative' | 'gis' | 'scoring' | 'summary';
 
 // ── Behavioral domain scoring config (mirrors BINARY_FIELDS in backend/similarity.py) ──
 
@@ -1454,6 +1701,7 @@ export default function CodingScreen() {
               ['narrative', 'Narrative', ['early_escalation_score','escalation_point','summary_analytic','key_quotes','coder_notes']],
               ['gis', 'GIS', ['initial_contact_address_raw','incident_address_raw','initial_contact_confidence','incident_confidence','destination_confidence']],
               ['scoring', 'Scoring', ['physical_force','coercion_present','threats_present','pressure_after_refusal','offender_control_over_movement','sexual_assault','stealthing','refusal_present','robbery_theft','verbal_abuse','negotiation_present','service_discussed','payment_discussed','movement_present','entered_vehicle','public_to_private_shift','public_to_secluded_shift','cross_municipality','cross_neighbourhood','deserted','repeat_suspect_flag','repeat_vehicle_flag']],
+              ['summary', 'Summary', ['initial_approach_type','negotiation_present','refusal_present','pressure_after_refusal','coercion_present','threats_present','physical_force','sexual_assault','robbery_theft','exit_type','movement_present','entered_vehicle','public_to_private_shift','public_to_secluded_shift','indoor_outdoor','public_private']],
             ] as [Section, string, string[]][]).map(([sec, label, keys]) => {
               const filled = keys.filter(k => { const v = fields[k as keyof Report]; return v !== null && v !== undefined && String(v).trim() !== ''; }).length;
               return (
@@ -1772,6 +2020,7 @@ export default function CodingScreen() {
             )}
 
             {activeTab === 'scoring' && <ScoringTab fields={fields} />}
+            {activeTab === 'summary' && <SummaryTab fields={fields} />}
           </div>
         </div>
       </div>

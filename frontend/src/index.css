@@ -160,3 +160,5 @@
 .badge-green  { background: var(--green-pale); color: var(--green); border-color: var(--green-border); }
 .badge-blue   { background: var(--blue-pale); color: var(--blue); border-color: var(--blue-border); }
 .badge-stone  { background: var(--surface-2); color: var(--text-2); border-color: var(--border); }
+
+@keyframes spin { to { transform: rotate(360deg); } }
