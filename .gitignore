@@ -1,0 +1,27 @@
+# Python virtual environment
+backend_env/
+
+# Database — contains sensitive case data, never commit
+redlight.db
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+.env
+
+# Node / frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Reference documents (large / copyrighted)
+*.pdf
+*.xlsx
+
+# Claude Code local settings
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db

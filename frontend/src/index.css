@@ -1,0 +1,162 @@
+@import "tailwindcss";
+
+:root {
+  --bg:           #FAF9F6;
+  --surface:      #FFFFFF;
+  --surface-2:    #F4F2EE;
+  --surface-3:    #EDEBE6;
+  --border:       #E2DDD6;
+  --border-mid:   #CEC8BF;
+  --border-strong:#B5ADA1;
+  --text-1:       #1A1714;
+  --text-2:       #5C574F;
+  --text-3:       #9A9188;
+  --accent:       #9B1D1D;
+  --accent-dark:  #7A1515;
+  --accent-pale:  #FDF2F2;
+  --accent-border:#F5C6C6;
+  --amber:        #92400E;
+  --amber-pale:   #FFFBEB;
+  --amber-border: #FDE68A;
+  --green:        #14532D;
+  --green-pale:   #F0FDF4;
+  --green-border: #BBF7D0;
+  --blue:         #1E3A5F;
+  --blue-pale:    #EFF6FF;
+  --blue-border:  #BFDBFE;
+  --shadow-sm:    0 1px 3px rgba(26,23,20,0.07), 0 1px 2px rgba(26,23,20,0.05);
+  --shadow:       0 4px 12px rgba(26,23,20,0.08), 0 2px 4px rgba(26,23,20,0.05);
+  --shadow-lg:    0 8px 24px rgba(26,23,20,0.10), 0 4px 8px rgba(26,23,20,0.06);
+  --radius:       6px;
+  --radius-lg:    10px;
+}
+
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; }
+
+  html { height: 100%; }
+
+  body {
+    margin: 0;
+    height: 100%;
+    background: var(--bg);
+    color: var(--text-1);
+    font-family: 'DM Sans', system-ui, sans-serif;
+    font-size: 13.5px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  #root {
+    height: 100%;
+    width: 100%;
+    max-width: 100%;
+    text-align: left;
+    border: none;
+    display: flex;
+    flex-direction: column;
+  }
+
+  h1, h2, h3 {
+    font-family: 'Lora', Georgia, serif;
+    color: var(--text-1);
+  }
+}
+
+/* ── Scrollbar ──────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: var(--surface-2); }
+::-webkit-scrollbar-thumb { background: var(--border-mid); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
+
+/* ── Narrative selection highlight ──────────────────── */
+.narrative-text ::selection {
+  background: rgba(155, 29, 29, 0.15);
+}
+
+/* ── Leaflet overrides ──────────────────────────────── */
+.leaflet-container {
+  background: #e8e4dc;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+}
+.leaflet-popup-content-wrapper {
+  border-radius: var(--radius) !important;
+  box-shadow: var(--shadow) !important;
+  border: 1px solid var(--border);
+}
+.leaflet-popup-content { font-family: 'DM Sans', sans-serif; font-size: 12px; }
+
+/* ── Utility classes ─────────────────────────────────── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+.btn-primary:hover { background: var(--accent-dark); }
+.btn-primary:active { transform: scale(0.98); }
+.btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: transparent;
+  color: var(--text-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.btn-ghost:hover {
+  background: var(--surface-2);
+  color: var(--text-1);
+  border-color: var(--border-mid);
+}
+.btn-ghost:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.section-label {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 11.5px;
+  font-weight: 500;
+  border: 1px solid;
+}
+.badge-red    { background: var(--accent-pale); color: var(--accent); border-color: var(--accent-border); }
+.badge-amber  { background: var(--amber-pale); color: var(--amber); border-color: var(--amber-border); }
+.badge-green  { background: var(--green-pale); color: var(--green); border-color: var(--green-border); }
+.badge-blue   { background: var(--blue-pale); color: var(--blue); border-color: var(--blue-border); }
+.badge-stone  { background: var(--surface-2); color: var(--text-2); border-color: var(--border); }
