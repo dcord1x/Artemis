@@ -1194,3 +1194,7 @@ def analyze_narrative(text: str) -> dict:
         },
         "flags": flags,
     }
+
+# Public alias so main.py can reuse the loaded model for displaCy rendering
+# without triggering a second spacy.load() call.
+nlp_model = _nlp

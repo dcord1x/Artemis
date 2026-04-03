@@ -56,4 +56,10 @@ export const api = {
 
   analyzeReport: (reportId: string) =>
     req<{ ok: boolean; ai_suggestions: Record<string, any> }>(`/reports/${reportId}/analyze`, { method: 'POST' }),
+
+  visualizeParse: (text: string) =>
+    req<{ dep_html: string; ent_html: string }>('/nlp/visualize', {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+    }),
 };
