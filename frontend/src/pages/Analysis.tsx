@@ -199,8 +199,9 @@ export default function Analysis() {
               Pattern summary across all reports · Click any card or bar to view filtered cases · NLP counts are pre-coding signals
             </p>
           </div>
-          <button className="btn-ghost" onClick={load} style={{ fontSize: 12.5, marginTop: 4 }} title="Refresh stats">
-            <RefreshCw size={13} /> Refresh
+          <button className="btn-ghost" onClick={load} disabled={loading} style={{ fontSize: 12.5, marginTop: 4 }} title="Refresh stats">
+            <RefreshCw size={13} style={loading ? { animation: 'spin 1s linear infinite' } : undefined} />
+            {loading ? 'Refreshing…' : 'Refresh'}
           </button>
         </div>
 
@@ -232,6 +233,7 @@ export default function Analysis() {
             <NlpBar label="Physical force"         rank1={nlp?.physical.rank1 ?? 0}  rank2={nlp?.physical.rank2 ?? 0}  total={total} rank1Color="#C2410C"       onClickRank1={() => go({ nlp_physical: '1' })}   onClickRank2={() => go({ nlp_physical: '2' })} />
             <NlpBar label="Sexual assault"         rank1={nlp?.sexual.rank1 ?? 0}    rank2={nlp?.sexual.rank2 ?? 0}    total={total} rank1Color="#9F1239"        onClickRank1={() => go({ nlp_sexual: '1' })}     onClickRank2={() => go({ nlp_sexual: '2' })} />
             <NlpBar label="Movement / transport"   rank1={nlp?.movement.rank1 ?? 0}  rank2={nlp?.movement.rank2 ?? 0}  total={total} rank1Color="var(--amber)"   onClickRank1={() => go({ nlp_movement: '1' })}   onClickRank2={() => go({ nlp_movement: '2' })} />
+            <NlpBar label="Weapon / threats"        rank1={nlp?.weapon.rank1 ?? 0}    rank2={nlp?.weapon.rank2 ?? 0}    total={total} rank1Color="#B45309"        onClickRank1={() => go({ nlp_weapon: '1' })}     onClickRank2={() => go({ nlp_weapon: '2' })} />
 
             {/* Coded violence */}
             {(stats.coercion.count > 0 || stats.physical_force.count > 0 || stats.sexual_assault.count > 0) && (
@@ -243,6 +245,7 @@ export default function Analysis() {
                 {stats.physical_force.count > 0 && <NlpBar label="Physical force" rank1={stats.physical_force.count} rank2={0} total={total} rank1Color="#C2410C" onClickRank1={() => go({ physical_force: 'yes' })} />}
                 {stats.sexual_assault.count > 0 && <NlpBar label="Sexual assault" rank1={stats.sexual_assault.count} rank2={0} total={total} rank1Color="#9F1239" onClickRank1={() => go({ sexual_assault: 'yes' })} />}
                 {stats.movement.count > 0 && <NlpBar label="Movement" rank1={stats.movement.count} rank2={0} total={total} rank1Color="var(--amber)" onClickRank1={() => go({ movement_present: 'yes' })} />}
+                {stats.threats_present?.count > 0 && <NlpBar label="Threats / weapon" rank1={stats.threats_present.count} rank2={0} total={total} rank1Color="#B45309" onClickRank1={() => go({ threats_present: 'yes' })} />}
               </>
             )}
           </div>

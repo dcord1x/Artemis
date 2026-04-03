@@ -673,6 +673,7 @@ def get_stats(db: Session = Depends(get_db)):
         "physical":  {"rank1": _nlp_rank("physical_rank", 1),  "rank2": _nlp_rank("physical_rank", 2)},
         "sexual":    {"rank1": _nlp_rank("sexual_rank", 1),    "rank2": _nlp_rank("sexual_rank", 2)},
         "movement":  {"rank1": _nlp_rank("movement_rank", 1),  "rank2": _nlp_rank("movement_rank", 2)},
+        "weapon":    {"rank1": _nlp_rank("weapon_rank", 1),    "rank2": _nlp_rank("weapon_rank", 2)},
         "escalation": {
             "score3": _nlp_esc(3),
             "score4": _nlp_esc(4),
@@ -694,6 +695,7 @@ def get_stats(db: Session = Depends(get_db)):
         "movement": pct("movement_present", "yes"),
         "physical_force": pct("physical_force", "yes"),
         "sexual_assault": pct("sexual_assault", "yes"),
+        "threats_present": pct("threats_present", "yes"),
         "vehicle_present": pct("vehicle_present", "yes"),
         "vehicle_present_count": sum(1 for r in reports if r.vehicle_present == "yes") or sum(1 for r in reports if r.mode_of_movement == "vehicle"),
         "nlp_violence": nlp_violence,
@@ -724,6 +726,197 @@ def get_stats(db: Session = Depends(get_db)):
             if r.lat_initial or r.lat_incident
         ],
     }
+
+
+# ── Research analysis ─────────────────────────────────────────────────────────
+
+@app.get("/research/aggregate")
+def get_research_aggregate(db: Session = Depends(get_db)):
+    """Full cross-case research analysis: sequences, mobility, environment."""
+    from research import aggregate_sequences, aggregate_mobility, aggregate_environment
+    reports = db.query(Report).all()
+    return {
+        'sequences':   aggregate_sequences(reports),
+        'mobility':    aggregate_mobility(reports),
+        'environment': aggregate_environment(reports),
+        'total':       len(reports),
+    }
+
+
+@app.get("/reports/{report_id}/summary")
+def get_case_summary(report_id: str, db: Session = Depends(get_db)):
+    """Case-level structured analytical summary derived from coded fields."""
+    from research import build_full_case_summary
+    r = db.query(Report).filter(Report.report_id == report_id).first()
+    if not r:
+        raise HTTPException(404, "Report not found")
+    return build_full_case_summary(r)
+
+
+@app.get("/export/case-summaries")
+def export_case_summaries(db: Session = Depends(get_db)):
+    """Export per-case analytical summaries as CSV (research-ready)."""
+    from research import build_full_case_summary
+    reports = db.query(Report).all()
+
+    output = io.StringIO()
+    fieldnames = [
+        'report_id', 'coding_status', 'incident_date', 'city',
+        'encounter_sequence', 'encounter_sequence_with_provenance',
+        'has_provisional', 'mobility_summary', 'environment_summary',
+        'harm_indicators', 'exit_outcome',
+    ]
+    writer = csv.DictWriter(output, fieldnames=fieldnames)
+    writer.writeheader()
+
+    for r in reports:
+        summary = build_full_case_summary(r)
+
+        def _items_to_str(items):
+            return '; '.join(
+                item['item'] + (' [provisional]' if item['provenance'] == 'provisional' else '')
+                for item in items
+            )
+
+        writer.writerow({
+            'report_id':                        r.report_id,
+            'coding_status':                    r.coding_status or '',
+            'incident_date':                    r.incident_date or '',
+            'city':                             r.city or '',
+            'encounter_sequence':               summary['encounter_sequence_string'],
+            'encounter_sequence_with_provenance': summary['encounter_sequence_with_provenance'],
+            'has_provisional':                  'yes' if summary['has_provisional'] else 'no',
+            'mobility_summary':                 _items_to_str(summary['mobility_summary']),
+            'environment_summary':              _items_to_str(summary['environment_summary']),
+            'harm_indicators':                  _items_to_str(summary['harm_summary']),
+            'exit_outcome':                     _items_to_str(summary['exit_summary']),
+        })
+
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type='text/csv',
+        headers={'Content-Disposition': 'attachment; filename=redlight_case_summaries.csv'},
+    )
+
+
+@app.get("/export/research-tables")
+def export_research_tables(db: Session = Depends(get_db)):
+    """
+    Export all research aggregate tables as a ZIP of CSVs.
+
+    Contents:
+      aggregate_sequences.csv           — full encounter sequence frequencies
+      aggregate_sequence_patterns.csv   — stage-pair bigram frequencies
+      stage_frequency.csv               — individual stage occurrence counts
+      escalation_pathways.csv           — harm-stage-only pathway sequences
+      per_case_sequences.csv            — each case's derived sequence
+      aggregate_mobility_counts.csv     — mobility indicator counts + pct
+      aggregate_mobility_pathways.csv   — recurring mobility combinations
+      aggregate_route_patterns.csv      — start→destination type patterns
+      aggregate_environment.csv         — indoor/outdoor, public/private, deserted
+      aggregate_location_types.csv      — location type frequency
+      aggregate_env_violence.csv        — violence/movement cross-tabulations
+      aggregate_environment_patterns.csv — combined environment+harm patterns
+    """
+    import zipfile
+    from research import aggregate_sequences, aggregate_mobility, aggregate_environment
+
+    reports = db.query(Report).all()
+    seq_data = aggregate_sequences(reports)
+    mob_data = aggregate_mobility(reports)
+    env_data = aggregate_environment(reports)
+
+    zip_buf = io.BytesIO()
+    with zipfile.ZipFile(zip_buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+
+        def _csv_str(fieldnames, rows):
+            buf = io.StringIO()
+            w = csv.DictWriter(buf, fieldnames=fieldnames)
+            w.writeheader()
+            w.writerows(rows)
+            return buf.getvalue()
+
+        def _csv_rows(headers, rows):
+            buf = io.StringIO()
+            w = csv.writer(buf)
+            w.writerow(headers)
+            w.writerows(rows)
+            return buf.getvalue()
+
+        # Sequence tables
+        zf.writestr('aggregate_sequences.csv',
+            _csv_str(['sequence', 'count'], seq_data['most_common_sequences']))
+        zf.writestr('aggregate_sequence_patterns.csv',
+            _csv_str(['pattern', 'count'], seq_data['most_common_bigrams']))
+        zf.writestr('stage_frequency.csv',
+            _csv_str(['stage', 'count'], seq_data['stage_frequency']))
+        zf.writestr('escalation_pathways.csv',
+            _csv_str(['pathway', 'count'], seq_data['escalation_pathways']))
+        zf.writestr('per_case_sequences.csv',
+            _csv_str(['report_id', 'sequence', 'stage_count'], seq_data['per_case']))
+
+        # Mobility tables
+        total_m = mob_data['total'] or 1
+        mob_count_rows = [
+            [k, v, round(v / total_m * 100, 1)]
+            for k, v in mob_data['counts'].items()
+        ]
+        zf.writestr('aggregate_mobility_counts.csv',
+            _csv_rows(['mobility_indicator', 'count', 'pct_of_total'], mob_count_rows))
+        zf.writestr('aggregate_mobility_pathways.csv',
+            _csv_str(['pathway', 'count'], mob_data['recurring_pathways']))
+        zf.writestr('aggregate_route_patterns.csv',
+            _csv_str(['route', 'count'], mob_data['route_patterns']))
+        zf.writestr('cross_city_pathways.csv',
+            _csv_str(['pathway', 'count'], mob_data['cross_city_pathways']))
+
+        # Environment tables
+        env_dist_rows = []
+        for val, cnt in env_data['indoor_outdoor'].items():
+            env_dist_rows.append(['indoor_outdoor', val, cnt])
+        for val, cnt in env_data['public_private'].items():
+            env_dist_rows.append(['public_private', val, cnt])
+        for val, cnt in env_data['deserted'].items():
+            env_dist_rows.append(['deserted', val, cnt])
+        zf.writestr('aggregate_environment.csv',
+            _csv_rows(['dimension', 'value', 'count'], env_dist_rows))
+
+        zf.writestr('aggregate_location_types.csv',
+            _csv_str(['type', 'count'], env_data['location_types']))
+
+        # Cross-tabulations
+        xtab_rows = []
+        for env_dim, cross_dict in [
+            ('indoor_outdoor', env_data['violence_by_environment']),
+            ('public_private',  env_data['movement_by_setting']),
+            ('deserted',        env_data['deserted_analysis']),
+        ]:
+            for val, metrics in cross_dict.items():
+                xtab_rows.append([
+                    env_dim, val,
+                    metrics['count'],
+                    metrics['physical_force'],
+                    metrics['sexual_assault'],
+                    metrics['coercion'],
+                    metrics['movement'],
+                ])
+        zf.writestr('aggregate_env_violence.csv',
+            _csv_rows(
+                ['env_dimension', 'env_value', 'n_cases',
+                 'physical_force', 'sexual_assault', 'coercion', 'movement'],
+                xtab_rows,
+            ))
+
+        zf.writestr('aggregate_environment_patterns.csv',
+            _csv_str(['pattern', 'count'], env_data['combined_patterns']))
+
+    zip_buf.seek(0)
+    return StreamingResponse(
+        iter([zip_buf.getvalue()]),
+        media_type='application/zip',
+        headers={'Content-Disposition': 'attachment; filename=redlight_research_tables.zip'},
+    )
 
 
 # ── Static files (production build) ──────────────────────────────────────────

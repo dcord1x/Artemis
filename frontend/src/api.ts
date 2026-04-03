@@ -1,4 +1,4 @@
-import type { Report, Stats, SimilarCandidate, CompareResult } from './types';
+import type { Report, Stats, SimilarCandidate, CompareResult, ResearchAggregate, CaseSummary } from './types';
 
 // In dev: Vite proxies /api → localhost:8000. In production build: empty string (same-origin).
 const BASE = import.meta.env.VITE_API_BASE ?? '/api';
@@ -56,4 +56,18 @@ export const api = {
 
   analyzeReport: (reportId: string) =>
     req<{ ok: boolean; ai_suggestions: Record<string, any> }>(`/reports/${reportId}/analyze`, { method: 'POST' }),
+
+  // ── Research / pattern analysis ─────────────────────────────────────────
+
+  getResearchAggregate: () => req<ResearchAggregate>('/research/aggregate'),
+
+  getCaseSummary: (reportId: string) => req<CaseSummary>(`/reports/${reportId}/summary`),
+
+  exportCaseSummaries: () => {
+    window.open(BASE + '/export/case-summaries', '_blank');
+  },
+
+  exportResearchTables: () => {
+    window.open(BASE + '/export/research-tables', '_blank');
+  },
 };

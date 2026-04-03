@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Save, Sparkles, AlertTriangle, Download, Tag, X, GitCompare, ScanSearch, Lock } from 'lucide-react';
+import { Save, Sparkles, AlertTriangle, Download, Tag, X, GitCompare, ScanSearch, Lock, ChevronLeft, ChevronRight } from 'lucide-react';
 import { api } from '../api';
 import type { Report } from '../types';
 import FieldRow from '../components/FieldRow';
 import TimelineStrip from '../components/TimelineStrip';
+import { useToast } from '../components/Toast';
+import SectionPanel from '../components/SectionPanel';
 
 /**
  * Field-state-aware NLP badge.
@@ -564,7 +566,254 @@ function WeatherCard({ w }: { w: Record<string, any> }) {
   );
 }
 
-type Section = 'basics' | 'encounter' | 'mobility' | 'suspect' | 'narrative' | 'gis' | 'scoring';
+// ── Case-level analytical summary (derived from current field values) ─────────
+
+/** Resolve field provenance state to a display tier */
+function _prov(fp: Record<string, string> | undefined, field: string): 'coded' | 'provisional' | 'unset' {
+  const state = fp?.[field] ?? 'unset';
+  if (state === 'analyst_filled' || state === 'reviewed') return 'coded';
+  if (state === 'ai_suggested') return 'provisional';
+  return 'unset';
+}
+
+function ProvenancePill({ p }: { p: 'coded' | 'provisional' | 'unset' }) {
+  if (p === 'provisional') return (
+    <span style={{ fontSize: 9.5, fontWeight: 600, padding: '1px 5px', borderRadius: 3,
+      background: 'var(--amber-pale)', color: 'var(--amber)', border: '1px solid var(--amber-border)',
+      marginLeft: 4, verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
+      provisional
+    </span>
+  );
+  return null;
+}
+
+function SequenceChip({ label, prov }: { label: string; prov: 'coded' | 'provisional' | 'unset' }) {
+  const isProvisional = prov === 'provisional';
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 4,
+      padding: '4px 10px', borderRadius: 6, fontSize: 12,
+      border: isProvisional ? '1px dashed var(--amber-border)' : '1px solid var(--border)',
+      background: isProvisional ? 'var(--amber-pale)' : 'var(--surface-2)',
+      color: isProvisional ? 'var(--amber)' : 'var(--text-2)',
+      fontWeight: isProvisional ? 500 : 400,
+    }}>
+      {label}
+      {isProvisional && (
+        <span style={{ fontSize: 9, opacity: 0.75 }}>~</span>
+      )}
+    </span>
+  );
+}
+
+function SummarySection({ title, items }: {
+  title: string;
+  items: { text: string; prov: 'coded' | 'provisional' | 'unset' }[];
+}) {
+  if (items.length === 0) return (
+    <div style={{ marginBottom: 18 }}>
+      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', letterSpacing: '0.05em',
+        textTransform: 'uppercase', marginBottom: 6 }}>{title}</div>
+      <div style={{ fontSize: 12, color: 'var(--text-3)', fontStyle: 'italic' }}>— not coded</div>
+    </div>
+  );
+  return (
+    <div style={{ marginBottom: 18 }}>
+      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', letterSpacing: '0.05em',
+        textTransform: 'uppercase', marginBottom: 8 }}>{title}</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {items.map((item, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 0, fontSize: 12.5, color: 'var(--text-2)', lineHeight: 1.4 }}>
+            <span style={{ marginRight: 6, color: 'var(--text-3)', flexShrink: 0 }}>·</span>
+            <span>{item.text}<ProvenancePill p={item.prov} /></span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SummaryTab({ fields }: { fields: Partial<Report> }) {
+  const fp = (fields.field_provenance as Record<string, string>) ?? {};
+
+  // ── Encounter sequence ───────────────────────────────────────────────────
+  type StageDef = [string, string, Set<string> | null];
+  const stageDefs: StageDef[] = [
+    ['Negotiation',             'negotiation_present',          new Set(['yes'])],
+    ['Service discussed',       'service_discussed',            new Set(['yes'])],
+    ['Refusal',                 'refusal_present',              new Set(['yes'])],
+    ['Pressure after refusal',  'pressure_after_refusal',       new Set(['yes'])],
+    ['Repeated pressure',       'repeated_pressure',            new Set(['yes'])],
+    ['Coercion',                'coercion_present',             new Set(['yes'])],
+    ['Intimidation',            'intimidation_present',         new Set(['yes'])],
+    ['Threats',                 'threats_present',              new Set(['yes'])],
+    ['Verbal abuse',            'verbal_abuse',                 new Set(['yes'])],
+    ['Abrupt tone change',      'abrupt_tone_change',           new Set(['yes'])],
+    ['Movement',                'movement_present',             new Set(['yes'])],
+    ['Environment shift: public→private',  'public_to_private_shift',  new Set(['yes'])],
+    ['Environment shift: public→secluded', 'public_to_secluded_shift', new Set(['yes'])],
+    ['Physical force',          'physical_force',               new Set(['yes'])],
+    ['Sexual assault',          'sexual_assault',               new Set(['yes'])],
+    ['Robbery / theft',         'robbery_theft',                new Set(['yes'])],
+    ['Stealthing',              'stealthing',                   new Set(['yes'])],
+  ];
+
+  const approach = (fields.initial_approach_type || '').trim();
+  const contactLabel = approach ? `Contact (${approach})` : 'Contact';
+  const contactProv = approach ? _prov(fp, 'initial_approach_type') : 'unset';
+
+  type SeqStage = { label: string; prov: 'coded' | 'provisional' | 'unset' };
+  const seqStages: SeqStage[] = [{ label: contactLabel, prov: contactProv }];
+
+  for (const [label, field, positiveVals] of stageDefs) {
+    const val = (fields[field as keyof Report] as string || '').trim();
+    if (!val) continue;
+    if (positiveVals === null || positiveVals.has(val)) {
+      seqStages.push({ label, prov: _prov(fp, field) });
+    }
+  }
+
+  const exitType = (fields.exit_type || '').trim();
+  if (exitType) {
+    const exitLabels: Record<string, string> = {
+      completed: 'Exit — completed', escaped: 'Exit — escaped',
+      abandoned: 'Exit — abandoned', interrupted: 'Exit — interrupted',
+      unknown: 'Exit — unknown',
+    };
+    seqStages.push({ label: exitLabels[exitType] ?? `Exit (${exitType})`, prov: _prov(fp, 'exit_type') });
+  }
+
+  const hasProvisional = seqStages.some(s => s.prov === 'provisional');
+
+  // ── Mobility items ────────────────────────────────────────────────────────
+  type SItem = { text: string; prov: 'coded' | 'provisional' | 'unset' };
+  const mobItems: SItem[] = [];
+
+  const addMob = (text: string, field: string) =>
+    mobItems.push({ text, prov: _prov(fp, field) });
+
+  if (fields.movement_present === 'yes')    addMob('Movement present', 'movement_present');
+  if (fields.movement_attempted === 'yes' && fields.movement_completed !== 'yes')
+    addMob('Movement attempted (not completed)', 'movement_attempted');
+  if (fields.movement_completed === 'yes') addMob('Movement completed', 'movement_completed');
+  if (fields.entered_vehicle === 'yes')    addMob('Entered vehicle', 'entered_vehicle');
+  const mode = (fields.mode_of_movement || '').trim();
+  if (mode)                                addMob(`Mode: ${mode}`, 'mode_of_movement');
+  if (fields.public_to_private_shift === 'yes')  addMob('Public → private shift', 'public_to_private_shift');
+  if (fields.public_to_secluded_shift === 'yes') addMob('Public → secluded shift', 'public_to_secluded_shift');
+  if (fields.cross_neighbourhood === 'yes')      addMob('Cross-neighbourhood movement', 'cross_neighbourhood');
+  if (fields.cross_municipality === 'yes')       addMob('Cross-municipality movement', 'cross_municipality');
+  if (fields.cross_city_movement === 'yes')      addMob('Cross-city movement', 'cross_city_movement');
+  const ctrl = (fields.offender_control_over_movement || '').trim();
+  if (ctrl) addMob(`Offender control: ${ctrl}`, 'offender_control_over_movement');
+  const whoCtrl = (fields.who_controlled_movement || '').trim();
+  if (whoCtrl) addMob(`Movement controlled by: ${whoCtrl}`, 'who_controlled_movement');
+  const startLoc = (fields.start_location_type || '').trim();
+  const destLoc  = (fields.destination_location_type || '').trim();
+  if (startLoc && destLoc) mobItems.push({ text: `Route: ${startLoc} → ${destLoc}`, prov: 'coded' });
+  else if (startLoc)       mobItems.push({ text: `Start: ${startLoc}`, prov: 'coded' });
+  else if (destLoc)        mobItems.push({ text: `Destination: ${destLoc}`, prov: 'coded' });
+
+  // ── Environment items ─────────────────────────────────────────────────────
+  const envItems: SItem[] = [];
+  const io = (fields.indoor_outdoor || '').trim();
+  if (io)  envItems.push({ text: io.charAt(0).toUpperCase() + io.slice(1), prov: _prov(fp, 'indoor_outdoor') });
+  const pp = (fields.public_private || '').trim();
+  if (pp)  envItems.push({ text: pp.replace(/_/g, ' ').replace(/^./, s => s.toUpperCase()), prov: _prov(fp, 'public_private') });
+  const des = (fields.deserted || '').trim();
+  if (des) envItems.push({ text: des.replace(/_/g, ' ').replace(/^./, s => s.toUpperCase()), prov: _prov(fp, 'deserted') });
+  const icLoc = (fields.initial_contact_location || '').trim();
+  if (icLoc)  envItems.push({ text: `Contact location: ${icLoc}`, prov: 'coded' });
+  const pLoc  = (fields.incident_location_primary || '').trim();
+  if (pLoc)   envItems.push({ text: `Primary incident: ${pLoc}`, prov: 'coded' });
+  const sLoc  = (fields.incident_location_secondary || '').trim();
+  if (sLoc)   envItems.push({ text: `Secondary: ${sLoc}`, prov: 'coded' });
+
+  // ── Harm items ─────────────────────────────────────────────────────────────
+  const harmItems: SItem[] = [];
+  const harmFields: [string, string][] = [
+    ['coercion_present', 'Coercion'], ['threats_present', 'Threats'],
+    ['intimidation_present', 'Intimidation'], ['verbal_abuse', 'Verbal abuse'],
+    ['verbal_abuse_before_violence', 'Verbal abuse before violence'],
+    ['physical_force', 'Physical force'], ['sexual_assault', 'Sexual assault'],
+    ['robbery_theft', 'Robbery / theft'], ['stealthing', 'Stealthing'],
+  ];
+  for (const [field, label] of harmFields) {
+    if (fields[field as keyof Report] === 'yes')
+      harmItems.push({ text: label, prov: _prov(fp, field) });
+  }
+  const trigger = (fields.escalation_trigger || '').trim();
+  if (trigger) harmItems.push({ text: `Escalation trigger: ${trigger.slice(0, 100)}`, prov: 'coded' });
+  const escPt   = (fields.escalation_point || '').trim();
+  if (escPt)   harmItems.push({ text: `Escalation point: ${escPt}`, prov: 'coded' });
+
+  // ── Exit items ────────────────────────────────────────────────────────────
+  const exitItems: SItem[] = [];
+  if (exitType) {
+    const exitLabels: Record<string, string> = {
+      completed: 'Incident completed (no disruption)', escaped: 'Victim escaped',
+      abandoned: 'Incident abandoned', interrupted: 'Incident interrupted',
+      unknown: 'Exit outcome unknown',
+    };
+    exitItems.push({ text: exitLabels[exitType] ?? `Exit: ${exitType}`, prov: _prov(fp, 'exit_type') });
+  }
+  if (fields.repeat_suspect_flag === 'yes') exitItems.push({ text: 'Repeat suspect flagged', prov: 'coded' });
+  if (fields.repeat_vehicle_flag === 'yes') exitItems.push({ text: 'Repeat vehicle flagged', prov: 'coded' });
+
+  return (
+    <div style={{ padding: '20px 24px', maxWidth: 860 }}>
+
+      {/* Provenance note */}
+      {hasProvisional && (
+        <div style={{
+          display: 'flex', alignItems: 'flex-start', gap: 7, fontSize: 11.5,
+          color: 'var(--text-3)', padding: '8px 12px',
+          background: 'var(--amber-pale)', borderRadius: 6,
+          border: '1px solid var(--amber-border)', marginBottom: 18,
+        }}>
+          <span style={{ color: 'var(--amber)', fontWeight: 600, fontSize: 10 }}>⚠</span>
+          <span>
+            Some stages in this summary are sourced from NLP analysis only and are marked
+            <strong style={{ fontWeight: 600, color: 'var(--amber)' }}> provisional</strong>.
+            These should be reviewed and confirmed by the analyst before use.
+          </span>
+        </div>
+      )}
+
+      {/* Encounter sequence */}
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', letterSpacing: '0.05em',
+          textTransform: 'uppercase', marginBottom: 10 }}>Encounter progression</div>
+        {seqStages.length <= 1 ? (
+          <div style={{ fontSize: 12.5, color: 'var(--text-3)', fontStyle: 'italic' }}>
+            — code encounter fields to generate sequence
+          </div>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 0, flexWrap: 'wrap', rowGap: 6 }}>
+            {seqStages.map((s, i) => (
+              <span key={i} style={{ display: 'inline-flex', alignItems: 'center' }}>
+                <SequenceChip label={s.label} prov={s.prov} />
+                {i < seqStages.length - 1 && (
+                  <span style={{ color: 'var(--text-3)', fontSize: 14, margin: '0 2px' }}>→</span>
+                )}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 32px' }}>
+        <SummarySection title="Harm indicators" items={harmItems} />
+        <SummarySection title="Exit / outcome" items={exitItems} />
+        <SummarySection title="Mobility pathway" items={mobItems} />
+        <SummarySection title="Environment context" items={envItems} />
+      </div>
+
+    </div>
+  );
+}
+
+type Section = 'basics' | 'encounter' | 'mobility' | 'suspect' | 'narrative' | 'gis' | 'scoring' | 'summary';
 
 // ── Behavioral domain scoring config (mirrors BINARY_FIELDS in backend/similarity.py) ──
 
@@ -749,8 +998,12 @@ export default function CodingScreen() {
   const [flags, setFlags] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [loadingAI, setLoadingAI] = useState(false);
-  const [saved, setSaved] = useState(false);
   const [activeTab, setActiveTab] = useState<Section>('basics');
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  const [savedAgoText, setSavedAgoText] = useState('');
+  const [caseList, setCaseList] = useState<string[]>([]);
+  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const toast = useToast();
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
   const [cleanedNarrative, setCleanedNarrative] = useState('');
@@ -844,27 +1097,26 @@ export default function CodingScreen() {
     }
   }, [reportId, isNew]);
 
-  const set = useCallback((key: keyof Report, val: string | number | null) => {
-    setFields((f) => ({ ...f, [key]: val }));
-    setProvenance((p) => ({ ...p, [key]: 'analyst_filled' }));
-    setSaved(false);
+  // ── "Saved Xs ago" ticker ──────────────────────────────────────────────────
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (!lastSavedAt) return;
+      const secs = Math.floor((Date.now() - lastSavedAt.getTime()) / 1000);
+      if (secs < 5)  { setSavedAgoText('just now'); return; }
+      if (secs < 60) { setSavedAgoText(`${secs}s ago`); return; }
+      setSavedAgoText(`${Math.floor(secs / 60)}m ago`);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [lastSavedAt]);
+
+  // ── Fetch ordered case list for ← → navigation ─────────────────────────────
+  useEffect(() => {
+    api.listReports().then((reports) => {
+      setCaseList(reports.map((r) => r.report_id));
+    }).catch(() => {});
   }, []);
 
-  const markReviewed = useCallback((key: keyof Report) => {
-    setProvenance((p) => ({ ...p, [key]: 'reviewed' }));
-    setSaved(false);
-  }, []);
-
-  const prov = (key: string) => (provenance[key] || 'unset') as 'unset' | 'ai_suggested' | 'analyst_filled' | 'reviewed';
-
-  const s = (key: string) => suggestions[key] || '';
-  const acceptSuggestion = (key: keyof Report) => set(key, suggestions[key]);
-  const f = (key: keyof Report): string => {
-    const v = fields[key];
-    return v === null || v === undefined ? '' : String(v);
-  };
-
-  const handleSave = async () => {
+  const handleSave = useCallback(async (silent = false) => {
     if (!narrative.trim()) return;
     setSaving(true);
     try {
@@ -875,9 +1127,40 @@ export default function CodingScreen() {
         navigate(`/code/${updated.report_id}`);
       } else if (report) {
         await api.updateReport(report.report_id, { ...fields, cleaned_narrative: cleanedNarrative, analyst_summary: analystSummary, field_provenance: provenance, tags, ai_suggestions: { ...suggestions, flags, ...(Object.keys(nlp).length ? { nlp } : {}), ...(Object.keys(weather).length ? { weather } : {}) }, source_organization: sourceOrg, analyst_name: analystName, date_received: dateReceived } as any);
-        setSaved(true);
+        const now = new Date();
+        setLastSavedAt(now);
+        setSavedAgoText('just now');
+        if (!silent) toast('Case saved');
       }
     } finally { setSaving(false); }
+  }, [narrative, isNew, analystName, sourceOrg, dateReceived, fields, cleanedNarrative, analystSummary, provenance, tags, suggestions, flags, nlp, weather, report, navigate, toast]);
+
+  // ── Autosave: debounce 2s after last field change (existing reports only) ───
+  const scheduleAutosave = useCallback(() => {
+    if (isNew || !report) return;
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    autosaveTimerRef.current = setTimeout(() => {
+      handleSave(true);
+    }, 2000);
+  }, [isNew, report, handleSave]);
+
+  const set = useCallback((key: keyof Report, val: string | number | null) => {
+    setFields((f) => ({ ...f, [key]: val }));
+    setProvenance((p) => ({ ...p, [key]: 'analyst_filled' }));
+    scheduleAutosave();
+  }, [scheduleAutosave]);
+
+  const markReviewed = useCallback((key: keyof Report) => {
+    setProvenance((p) => ({ ...p, [key]: 'reviewed' }));
+  }, []);
+
+  const prov = (key: string) => (provenance[key] || 'unset') as 'unset' | 'ai_suggested' | 'analyst_filled' | 'reviewed';
+
+  const s = (key: string) => suggestions[key] || '';
+  const acceptSuggestion = (key: keyof Report) => set(key, suggestions[key]);
+  const f = (key: keyof Report): string => {
+    const v = fields[key];
+    return v === null || v === undefined ? '' : String(v);
   };
 
   const handleAISuggest = async () => {
@@ -921,6 +1204,37 @@ export default function CodingScreen() {
   const status = f('coding_status') || 'uncoded';
   const statusCfg = STATUS_CONFIG[status] || STATUS_CONFIG.uncoded;
 
+  // ── Case navigation ─────────────────────────────────────────────────────────
+  const currentIndex = report ? caseList.indexOf(report.report_id) : -1;
+  const prevId = currentIndex > 0 ? caseList[currentIndex - 1] : null;
+  const nextId = currentIndex >= 0 && currentIndex < caseList.length - 1 ? caseList[currentIndex + 1] : null;
+
+  // ── Keyboard shortcuts ──────────────────────────────────────────────────────
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      // Ctrl+S → save
+      if (e.ctrlKey && e.key === 's') {
+        e.preventDefault();
+        handleSave(false);
+        return;
+      }
+      // Ctrl+ArrowLeft → prev case
+      if (e.ctrlKey && e.key === 'ArrowLeft' && prevId) {
+        e.preventDefault();
+        navigate(`/code/${prevId}`);
+        return;
+      }
+      // Ctrl+ArrowRight → next case
+      if (e.ctrlKey && e.key === 'ArrowRight' && nextId) {
+        e.preventDefault();
+        navigate(`/code/${nextId}`);
+        return;
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [prevId, nextId, handleSave, navigate]);
+
   // NLP provenance: verify the stored NLP data was generated from this specific report.
   // If _source_report_id is present and doesn't match the current report, NLP data is stale.
   // If _source_report_id is absent (older records), we allow display but can't verify.
@@ -943,10 +1257,38 @@ export default function CodingScreen() {
         flexWrap: 'wrap',
         boxShadow: 'var(--shadow-sm)',
       }}>
+        {/* Case nav arrows + ID + counter */}
         {report && (
-          <span style={{ fontFamily: 'DM Sans, monospace', fontSize: 11.5, color: 'var(--text-3)', letterSpacing: '0.03em' }}>
-            {report.report_id}
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <button
+              className="btn-ghost"
+              onClick={() => prevId && navigate(`/code/${prevId}`)}
+              disabled={!prevId}
+              title="Previous case (Ctrl+←)"
+              style={{ padding: '4px 7px', fontSize: 12 }}
+            >
+              <ChevronLeft size={14} />
+            </button>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1.1 }}>
+              <span style={{ fontFamily: 'DM Sans, monospace', fontSize: 11, color: 'var(--text-3)', letterSpacing: '0.03em' }}>
+                {report.report_id}
+              </span>
+              {caseList.length > 0 && currentIndex >= 0 && (
+                <span style={{ fontSize: 9.5, color: 'var(--text-3)' }}>
+                  {currentIndex + 1} / {caseList.length}
+                </span>
+              )}
+            </div>
+            <button
+              className="btn-ghost"
+              onClick={() => nextId && navigate(`/code/${nextId}`)}
+              disabled={!nextId}
+              title="Next case (Ctrl+→)"
+              style={{ padding: '4px 7px', fontSize: 12 }}
+            >
+              <ChevronRight size={14} />
+            </button>
+          </div>
         )}
 
         <div style={{
@@ -956,6 +1298,13 @@ export default function CodingScreen() {
         }}>
           {statusCfg.label}
         </div>
+
+        {/* Autosave indicator */}
+        {lastSavedAt && (
+          <span style={{ fontSize: 11, color: 'var(--text-3)', fontStyle: 'italic' }}>
+            Saved {savedAgoText}
+          </span>
+        )}
 
         {flags.length > 0 && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
@@ -1037,12 +1386,12 @@ export default function CodingScreen() {
 
           <button
             className="btn-primary"
-            onClick={handleSave}
+            onClick={() => handleSave(false)}
             disabled={saving || !narrative.trim()}
             style={{ fontSize: 12.5 }}
           >
             <Save size={13} />
-            {saving ? 'Saving…' : saved ? 'Saved ✓' : 'Save'}
+            {saving ? 'Saving…' : 'Save'}
           </button>
 
           <button
@@ -1218,7 +1567,7 @@ export default function CodingScreen() {
                     }}
                     placeholder="Paste or type a cleaned / transcribed version here. This is analyst-added content — it does not replace the source."
                     value={cleanedNarrative}
-                    onChange={(e) => { setCleanedNarrative(e.target.value); setSaved(false); }}
+                    onChange={(e) => { setCleanedNarrative(e.target.value); scheduleAutosave(); }}
                     onFocus={(e) => (e.target.style.borderColor = 'var(--accent)')}
                     onBlur={(e) => (e.target.style.borderColor = 'var(--accent-border)')}
                   />
@@ -1265,7 +1614,7 @@ export default function CodingScreen() {
                     }}
                     placeholder="Analyst's interpretive summary — your analytic reading of this case. Distinct from cleaned transcription. Not source material."
                     value={analystSummary}
-                    onChange={(e) => { setAnalystSummary(e.target.value); setSaved(false); }}
+                    onChange={(e) => { setAnalystSummary(e.target.value); scheduleAutosave(); }}
                     onFocus={(e) => (e.target.style.borderColor = '#0D9488')}
                     onBlur={(e) => (e.target.style.borderColor = '#99F6E4')}
                   />
@@ -1352,6 +1701,7 @@ export default function CodingScreen() {
               ['narrative', 'Narrative', ['early_escalation_score','escalation_point','summary_analytic','key_quotes','coder_notes']],
               ['gis', 'GIS', ['initial_contact_address_raw','incident_address_raw','initial_contact_confidence','incident_confidence','destination_confidence']],
               ['scoring', 'Scoring', ['physical_force','coercion_present','threats_present','pressure_after_refusal','offender_control_over_movement','sexual_assault','stealthing','refusal_present','robbery_theft','verbal_abuse','negotiation_present','service_discussed','payment_discussed','movement_present','entered_vehicle','public_to_private_shift','public_to_secluded_shift','cross_municipality','cross_neighbourhood','deserted','repeat_suspect_flag','repeat_vehicle_flag']],
+              ['summary', 'Summary', ['initial_approach_type','negotiation_present','refusal_present','pressure_after_refusal','coercion_present','threats_present','physical_force','sexual_assault','robbery_theft','exit_type','movement_present','entered_vehicle','public_to_private_shift','public_to_secluded_shift','indoor_outdoor','public_private']],
             ] as [Section, string, string[]][]).map(([sec, label, keys]) => {
               const filled = keys.filter(k => { const v = fields[k as keyof Report]; return v !== null && v !== undefined && String(v).trim() !== ''; }).length;
               return (
@@ -1386,21 +1736,36 @@ export default function CodingScreen() {
 
             {activeTab === 'basics' && (
               <div style={{ marginBottom: 12 }}>
-                <FieldRow label="Incident date" value={f('incident_date')} onChange={(v) => set('incident_date', v)} suggested={s('incident_date')} onAcceptSuggestion={() => acceptSuggestion('incident_date')} placeholder="YYYY-MM-DD" provenance={prov('incident_date')} onMarkReviewed={() => markReviewed('incident_date')}
-                  badge={showNlpChips ? <DateCertaintyBadge certainty={nlp.date_certainty ?? ''} reason={nlp.date_certainty_reason} /> : undefined}
-                />
-                <FieldRow label="Time exact" value={f('incident_time_exact')} onChange={(v) => set('incident_time_exact', v)} suggested={s('incident_time_exact')} onAcceptSuggestion={() => acceptSuggestion('incident_time_exact')} provenance={prov('incident_time_exact')} onMarkReviewed={() => markReviewed('incident_time_exact')}
-                  badge={showNlpChips ? <TimeBucketBadge bucket={nlp.temporal?.time_of_day_bucket ?? ''} source={nlp.temporal?.time_of_day_source ?? ''} weather={weather} /> : undefined}
-                />
-                <FieldRow label="Time range" value={f('incident_time_range')} onChange={(v) => set('incident_time_range', v)} suggested={s('incident_time_range')} onAcceptSuggestion={() => acceptSuggestion('incident_time_range')} placeholder="e.g. 10pm–midnight" provenance={prov('incident_time_range')} onMarkReviewed={() => markReviewed('incident_time_range')} />
-                <FieldRow label="Day of week" value={f('day_of_week')} onChange={(v) => set('day_of_week', v)} type="select" options={['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']} suggested={s('day_of_week')} onAcceptSuggestion={() => acceptSuggestion('day_of_week')} provenance={prov('day_of_week')} onMarkReviewed={() => markReviewed('day_of_week')} />
-                <FieldRow label="Primary case city" value={f('city')} onChange={(v) => set('city', v)} suggested={s('city')} onAcceptSuggestion={() => acceptSuggestion('city')} placeholder="Summary / fallback if stages differ" provenance={prov('city')} onMarkReviewed={() => markReviewed('city')} />
-                <FieldRow label="Neighbourhood" value={f('neighbourhood')} onChange={(v) => set('neighbourhood', v)} suggested={s('neighbourhood')} onAcceptSuggestion={() => acceptSuggestion('neighbourhood')} provenance={prov('neighbourhood')} onMarkReviewed={() => markReviewed('neighbourhood')} />
+                <SectionPanel title="Date & Time" fieldKeys={['incident_date','incident_time_exact','incident_time_range','day_of_week']} fields={fields}>
+                  <FieldRow label="Incident date" value={f('incident_date')} onChange={(v) => set('incident_date', v)} suggested={s('incident_date')} onAcceptSuggestion={() => acceptSuggestion('incident_date')} placeholder="YYYY-MM-DD" provenance={prov('incident_date')} onMarkReviewed={() => markReviewed('incident_date')}
+                    badge={showNlpChips ? <DateCertaintyBadge certainty={nlp.date_certainty ?? ''} reason={nlp.date_certainty_reason} /> : undefined}
+                  />
+                  <FieldRow label="Time exact" value={f('incident_time_exact')} onChange={(v) => set('incident_time_exact', v)} suggested={s('incident_time_exact')} onAcceptSuggestion={() => acceptSuggestion('incident_time_exact')} provenance={prov('incident_time_exact')} onMarkReviewed={() => markReviewed('incident_time_exact')}
+                    badge={showNlpChips ? <TimeBucketBadge bucket={nlp.temporal?.time_of_day_bucket ?? ''} source={nlp.temporal?.time_of_day_source ?? ''} weather={weather} /> : undefined}
+                  />
+                  <FieldRow label="Time range" value={f('incident_time_range')} onChange={(v) => set('incident_time_range', v)} suggested={s('incident_time_range')} onAcceptSuggestion={() => acceptSuggestion('incident_time_range')} placeholder="e.g. 10pm–midnight" provenance={prov('incident_time_range')} onMarkReviewed={() => markReviewed('incident_time_range')} />
+                  <FieldRow label="Day of week" value={f('day_of_week')} onChange={(v) => set('day_of_week', v)} type="select" options={['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']} suggested={s('day_of_week')} onAcceptSuggestion={() => acceptSuggestion('day_of_week')} provenance={prov('day_of_week')} onMarkReviewed={() => markReviewed('day_of_week')} />
+                </SectionPanel>
+
+                <SectionPanel title="Primary Location" fieldKeys={['city','neighbourhood','indoor_outdoor','public_private','deserted','destination_known','location_certainty','confidence_level']} fields={fields}>
+                  <FieldRow label="Primary case city" value={f('city')} onChange={(v) => set('city', v)} suggested={s('city')} onAcceptSuggestion={() => acceptSuggestion('city')} placeholder="Summary / fallback if stages differ" provenance={prov('city')} onMarkReviewed={() => markReviewed('city')} />
+                  <FieldRow label="Neighbourhood" value={f('neighbourhood')} onChange={(v) => set('neighbourhood', v)} suggested={s('neighbourhood')} onAcceptSuggestion={() => acceptSuggestion('neighbourhood')} provenance={prov('neighbourhood')} onMarkReviewed={() => markReviewed('neighbourhood')} />
+                  <FieldRow label="Indoor / outdoor" value={f('indoor_outdoor')} onChange={(v) => set('indoor_outdoor', v)} type="select" options={['indoor','outdoor','unclear']} suggested={s('indoor_outdoor')} onAcceptSuggestion={() => acceptSuggestion('indoor_outdoor')} provenance={prov('indoor_outdoor')} onMarkReviewed={() => markReviewed('indoor_outdoor')} />
+                  <FieldRow label="Public / private" value={f('public_private')} onChange={(v) => set('public_private', v)} type="select" options={['public','private','semi-private']} suggested={s('public_private')} onAcceptSuggestion={() => acceptSuggestion('public_private')} provenance={prov('public_private')} onMarkReviewed={() => markReviewed('public_private')} />
+                  <FieldRow label="Deserted" value={f('deserted')} onChange={(v) => set('deserted', v)} type="select" options={['deserted','not deserted','unclear']} provenance={prov('deserted')} onMarkReviewed={() => markReviewed('deserted')}
+                    badge={showNlpChips && nlp.environment?.area_character ? (
+                      <span title={`NLP area (from current narrative): ${nlp.environment.area_character}${nlp.environment.lighting ? ' · lighting: ' + nlp.environment.lighting : ''}`} style={{ flexShrink: 0, fontSize: 10.5, fontWeight: 600, padding: '1px 7px', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-2)', cursor: 'default', whiteSpace: 'nowrap' }}>
+                        {nlp.environment.area_character}{nlp.environment.lighting ? ` · ${nlp.environment.lighting}` : ''}
+                      </span>
+                    ) : undefined}
+                  />
+                  <FieldRow label="Destination known" value={f('destination_known')} onChange={(v) => set('destination_known', v)} type="yesno-extended" provenance={prov('destination_known')} onMarkReviewed={() => markReviewed('destination_known')} />
+                  <FieldRow label="Location certainty" value={f('location_certainty')} onChange={(v) => set('location_certainty', v)} type="select" options={['high','medium','low','unknown']} provenance={prov('location_certainty')} onMarkReviewed={() => markReviewed('location_certainty')} />
+                  <FieldRow label="Confidence level" value={f('confidence_level')} onChange={(v) => set('confidence_level', v)} type="select" options={['low','medium','high']} />
+                </SectionPanel>
 
                 {/* ── Location stages — each with its own city ──────────────────── */}
-                <div style={{ margin: '10px 0 4px', fontSize: 10, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-3)', borderTop: '1px solid var(--border)', paddingTop: 8 }}>
-                  Location stages
-                </div>
+                <SectionPanel title="Location Stages" fieldKeys={['initial_contact_location','initial_contact_city','initial_contact_city_confidence','incident_location_primary','incident_city','incident_city_confidence','incident_location_secondary','destination_city','destination_city_confidence']} fields={fields}>
 
                 <FieldRow label="Initial contact location" value={f('initial_contact_location')} onChange={(v) => set('initial_contact_location', v)} suggested={s('initial_contact_location')} onAcceptSuggestion={() => acceptSuggestion('initial_contact_location')} provenance={prov('initial_contact_location')} onMarkReviewed={() => markReviewed('initial_contact_location')}
                   badge={(() => {
@@ -1467,85 +1832,91 @@ export default function CodingScreen() {
                 <FieldRow label="Secondary / destination location" value={f('incident_location_secondary')} onChange={(v) => set('incident_location_secondary', v)} provenance={prov('incident_location_secondary')} onMarkReviewed={() => markReviewed('incident_location_secondary')} />
                 <FieldRow label="Destination city" value={f('destination_city')} onChange={(v) => set('destination_city', v)} provenance={prov('destination_city')} onMarkReviewed={() => markReviewed('destination_city')} />
                 <FieldRow label="Destination city — certainty" value={f('destination_city_confidence')} onChange={(v) => set('destination_city_confidence', v)} type="select" options={['known','probable','inferred','unknown']} provenance={prov('destination_city_confidence')} onMarkReviewed={() => markReviewed('destination_city_confidence')} />
-                <FieldRow label="Indoor / outdoor" value={f('indoor_outdoor')} onChange={(v) => set('indoor_outdoor', v)} type="select" options={['indoor','outdoor','unclear']} suggested={s('indoor_outdoor')} onAcceptSuggestion={() => acceptSuggestion('indoor_outdoor')} provenance={prov('indoor_outdoor')} onMarkReviewed={() => markReviewed('indoor_outdoor')} />
-                <FieldRow label="Public / private" value={f('public_private')} onChange={(v) => set('public_private', v)} type="select" options={['public','private','semi-private']} suggested={s('public_private')} onAcceptSuggestion={() => acceptSuggestion('public_private')} provenance={prov('public_private')} onMarkReviewed={() => markReviewed('public_private')} />
-                <FieldRow label="Deserted" value={f('deserted')} onChange={(v) => set('deserted', v)} type="select" options={['deserted','not deserted','unclear']} provenance={prov('deserted')} onMarkReviewed={() => markReviewed('deserted')}
-                  badge={showNlpChips && nlp.environment?.area_character ? (
-                    <span title={`NLP area (from current narrative): ${nlp.environment.area_character}${nlp.environment.lighting ? ' · lighting: ' + nlp.environment.lighting : ''}`} style={{ flexShrink: 0, fontSize: 10.5, fontWeight: 600, padding: '1px 7px', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-2)', cursor: 'default', whiteSpace: 'nowrap' }}>
-                      {nlp.environment.area_character}{nlp.environment.lighting ? ` · ${nlp.environment.lighting}` : ''}
-                    </span>
-                  ) : undefined}
-                />
-                <FieldRow label="Destination known" value={f('destination_known')} onChange={(v) => set('destination_known', v)} type="yesno-extended" provenance={prov('destination_known')} onMarkReviewed={() => markReviewed('destination_known')} />
-                <FieldRow label="Location certainty" value={f('location_certainty')} onChange={(v) => set('location_certainty', v)} type="select" options={['high','medium','low','unknown']} provenance={prov('location_certainty')} onMarkReviewed={() => markReviewed('location_certainty')} />
-                <FieldRow label="Confidence level" value={f('confidence_level')} onChange={(v) => set('confidence_level', v)} type="select" options={['low','medium','high']} />
+                </SectionPanel>
               </div>
             )}
 
             {activeTab === 'encounter' && (
               <div style={{ marginBottom: 12 }}>
-                <FieldRow label="Initial approach type" value={f('initial_approach_type')} onChange={(v) => set('initial_approach_type', v)} suggested={s('initial_approach_type')} onAcceptSuggestion={() => acceptSuggestion('initial_approach_type')} provenance={prov('initial_approach_type')} onMarkReviewed={() => markReviewed('initial_approach_type')} />
-                <FieldRow label="Negotiation present" value={f('negotiation_present')} onChange={(v) => set('negotiation_present', v)} type="yesno-extended" suggested={s('negotiation_present')} onAcceptSuggestion={() => acceptSuggestion('negotiation_present')} provenance={prov('negotiation_present')} onMarkReviewed={() => markReviewed('negotiation_present')} />
-                <FieldRow label="Service discussed" value={f('service_discussed')} onChange={(v) => set('service_discussed', v)} type="yesno" suggested={s('service_discussed')} onAcceptSuggestion={() => acceptSuggestion('service_discussed')} provenance={prov('service_discussed')} onMarkReviewed={() => markReviewed('service_discussed')} />
-                <FieldRow label="Payment discussed" value={f('payment_discussed')} onChange={(v) => set('payment_discussed', v)} type="yesno" suggested={s('payment_discussed')} onAcceptSuggestion={() => acceptSuggestion('payment_discussed')} provenance={prov('payment_discussed')} onMarkReviewed={() => markReviewed('payment_discussed')} />
-                <FieldRow label="Refusal present" value={f('refusal_present')} onChange={(v) => set('refusal_present', v)} type="yesno-extended" suggested={s('refusal_present')} onAcceptSuggestion={() => acceptSuggestion('refusal_present')} provenance={prov('refusal_present')} onMarkReviewed={() => markReviewed('refusal_present')} />
-                <FieldRow label="Pressure after refusal" value={f('pressure_after_refusal')} onChange={(v) => set('pressure_after_refusal', v)} type="yesno" suggested={s('pressure_after_refusal')} onAcceptSuggestion={() => acceptSuggestion('pressure_after_refusal')} provenance={prov('pressure_after_refusal')} onMarkReviewed={() => markReviewed('pressure_after_refusal')} />
-                <FieldRow label="Coercion present" value={f('coercion_present')} onChange={(v) => set('coercion_present', v)} type="yesno-extended" suggested={s('coercion_present')} onAcceptSuggestion={() => acceptSuggestion('coercion_present')} provenance={prov('coercion_present')} onMarkReviewed={() => markReviewed('coercion_present')} badge={showNlpChips ? <NlpBadge rank={nlp.coercion_rank ?? 3} evidence={nlp.coercion_evidence ?? []} fieldValue={f('coercion_present')} /> : undefined} />
-                <FieldRow label="Threats present" value={f('threats_present')} onChange={(v) => set('threats_present', v)} type="yesno" suggested={s('threats_present')} onAcceptSuggestion={() => acceptSuggestion('threats_present')} provenance={prov('threats_present')} onMarkReviewed={() => markReviewed('threats_present')} badge={showNlpChips ? <NlpBadge rank={nlp.weapon_rank ?? 3} evidence={nlp.weapon_evidence ?? []} fieldValue={f('threats_present')} /> : undefined} />
-                <FieldRow label="Verbal abuse" value={f('verbal_abuse')} onChange={(v) => set('verbal_abuse', v)} type="yesno" suggested={s('verbal_abuse')} onAcceptSuggestion={() => acceptSuggestion('verbal_abuse')} provenance={prov('verbal_abuse')} onMarkReviewed={() => markReviewed('verbal_abuse')} />
-                <FieldRow label="Physical force" value={f('physical_force')} onChange={(v) => set('physical_force', v)} type="yesno-extended" suggested={s('physical_force')} onAcceptSuggestion={() => acceptSuggestion('physical_force')} provenance={prov('physical_force')} onMarkReviewed={() => markReviewed('physical_force')} badge={showNlpChips ? <NlpBadge rank={nlp.physical_rank ?? 3} evidence={nlp.physical_evidence ?? []} fieldValue={f('physical_force')} /> : undefined} />
-                <FieldRow label="Sexual assault" value={f('sexual_assault')} onChange={(v) => set('sexual_assault', v)} type="yesno-extended" suggested={s('sexual_assault')} onAcceptSuggestion={() => acceptSuggestion('sexual_assault')} provenance={prov('sexual_assault')} onMarkReviewed={() => markReviewed('sexual_assault')} badge={showNlpChips ? <NlpBadge rank={nlp.sexual_rank ?? 3} evidence={nlp.sexual_evidence ?? []} fieldValue={f('sexual_assault')} /> : undefined} />
-                <FieldRow label="Robbery / theft" value={f('robbery_theft')} onChange={(v) => set('robbery_theft', v)} type="yesno" suggested={s('robbery_theft')} onAcceptSuggestion={() => acceptSuggestion('robbery_theft')} provenance={prov('robbery_theft')} onMarkReviewed={() => markReviewed('robbery_theft')} />
-                <FieldRow label="Stealthing / condom refusal" value={f('stealthing')} onChange={(v) => set('stealthing', v)} type="yesno" suggested={s('stealthing')} onAcceptSuggestion={() => acceptSuggestion('stealthing')} provenance={prov('stealthing')} onMarkReviewed={() => markReviewed('stealthing')} />
-                <FieldRow label="Exit type" value={f('exit_type')} onChange={(v) => set('exit_type', v)} type="select" options={['completed','escaped','abandoned','interrupted','unknown']} suggested={s('exit_type')} onAcceptSuggestion={() => acceptSuggestion('exit_type')} provenance={prov('exit_type')} onMarkReviewed={() => markReviewed('exit_type')} />
-                {/* ── Early escalation depth (new fields) ── */}
-                <div style={{ margin: '10px 0 4px', fontSize: 10, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-3)', borderTop: '1px solid var(--border)', paddingTop: 8 }}>
-                  Early Escalation Detail
-                </div>
-                <FieldRow label="Repeated pressure" value={f('repeated_pressure')} onChange={(v) => set('repeated_pressure', v)} type="yesno" provenance={prov('repeated_pressure')} onMarkReviewed={() => markReviewed('repeated_pressure')} />
-                <FieldRow label="Intimidation present" value={f('intimidation_present')} onChange={(v) => set('intimidation_present', v)} type="yesno" provenance={prov('intimidation_present')} onMarkReviewed={() => markReviewed('intimidation_present')} />
-                <FieldRow label="Abrupt tone change" value={f('abrupt_tone_change')} onChange={(v) => set('abrupt_tone_change', v)} type="yesno" provenance={prov('abrupt_tone_change')} onMarkReviewed={() => markReviewed('abrupt_tone_change')} />
-                <FieldRow label="Verbal abuse before violence" value={f('verbal_abuse_before_violence')} onChange={(v) => set('verbal_abuse_before_violence', v)} type="yesno" provenance={prov('verbal_abuse_before_violence')} onMarkReviewed={() => markReviewed('verbal_abuse_before_violence')} />
-                <FieldRow label="Escalation trigger" value={f('escalation_trigger')} onChange={(v) => set('escalation_trigger', v)} type="textarea" placeholder="What triggered escalation? (free text)" provenance={prov('escalation_trigger')} onMarkReviewed={() => markReviewed('escalation_trigger')} />
+                <SectionPanel title="Negotiation & Approach" fieldKeys={['initial_approach_type','negotiation_present','service_discussed','payment_discussed','refusal_present','pressure_after_refusal']} fields={fields}>
+                  <FieldRow label="Initial approach type" value={f('initial_approach_type')} onChange={(v) => set('initial_approach_type', v)} suggested={s('initial_approach_type')} onAcceptSuggestion={() => acceptSuggestion('initial_approach_type')} provenance={prov('initial_approach_type')} onMarkReviewed={() => markReviewed('initial_approach_type')} />
+                  <FieldRow label="Negotiation present" value={f('negotiation_present')} onChange={(v) => set('negotiation_present', v)} type="yesno-extended" suggested={s('negotiation_present')} onAcceptSuggestion={() => acceptSuggestion('negotiation_present')} provenance={prov('negotiation_present')} onMarkReviewed={() => markReviewed('negotiation_present')} />
+                  <FieldRow label="Service discussed" value={f('service_discussed')} onChange={(v) => set('service_discussed', v)} type="yesno" suggested={s('service_discussed')} onAcceptSuggestion={() => acceptSuggestion('service_discussed')} provenance={prov('service_discussed')} onMarkReviewed={() => markReviewed('service_discussed')} />
+                  <FieldRow label="Payment discussed" value={f('payment_discussed')} onChange={(v) => set('payment_discussed', v)} type="yesno" suggested={s('payment_discussed')} onAcceptSuggestion={() => acceptSuggestion('payment_discussed')} provenance={prov('payment_discussed')} onMarkReviewed={() => markReviewed('payment_discussed')} />
+                  <FieldRow label="Refusal present" value={f('refusal_present')} onChange={(v) => set('refusal_present', v)} type="yesno-extended" suggested={s('refusal_present')} onAcceptSuggestion={() => acceptSuggestion('refusal_present')} provenance={prov('refusal_present')} onMarkReviewed={() => markReviewed('refusal_present')} />
+                  <FieldRow label="Pressure after refusal" value={f('pressure_after_refusal')} onChange={(v) => set('pressure_after_refusal', v)} type="yesno" suggested={s('pressure_after_refusal')} onAcceptSuggestion={() => acceptSuggestion('pressure_after_refusal')} provenance={prov('pressure_after_refusal')} onMarkReviewed={() => markReviewed('pressure_after_refusal')} />
+                </SectionPanel>
+
+                <SectionPanel title="Violence Indicators" fieldKeys={['coercion_present','threats_present','verbal_abuse','physical_force','sexual_assault','robbery_theft','stealthing','exit_type']} fields={fields}>
+                  <FieldRow label="Coercion present" value={f('coercion_present')} onChange={(v) => set('coercion_present', v)} type="yesno-extended" suggested={s('coercion_present')} onAcceptSuggestion={() => acceptSuggestion('coercion_present')} provenance={prov('coercion_present')} onMarkReviewed={() => markReviewed('coercion_present')} badge={showNlpChips ? <NlpBadge rank={nlp.coercion_rank ?? 3} evidence={nlp.coercion_evidence ?? []} fieldValue={f('coercion_present')} /> : undefined} />
+                  <FieldRow label="Threats present" value={f('threats_present')} onChange={(v) => set('threats_present', v)} type="yesno" suggested={s('threats_present')} onAcceptSuggestion={() => acceptSuggestion('threats_present')} provenance={prov('threats_present')} onMarkReviewed={() => markReviewed('threats_present')} badge={showNlpChips ? <NlpBadge rank={nlp.weapon_rank ?? 3} evidence={nlp.weapon_evidence ?? []} fieldValue={f('threats_present')} /> : undefined} />
+                  <FieldRow label="Verbal abuse" value={f('verbal_abuse')} onChange={(v) => set('verbal_abuse', v)} type="yesno" suggested={s('verbal_abuse')} onAcceptSuggestion={() => acceptSuggestion('verbal_abuse')} provenance={prov('verbal_abuse')} onMarkReviewed={() => markReviewed('verbal_abuse')} />
+                  <FieldRow label="Physical force" value={f('physical_force')} onChange={(v) => set('physical_force', v)} type="yesno-extended" suggested={s('physical_force')} onAcceptSuggestion={() => acceptSuggestion('physical_force')} provenance={prov('physical_force')} onMarkReviewed={() => markReviewed('physical_force')} badge={showNlpChips ? <NlpBadge rank={nlp.physical_rank ?? 3} evidence={nlp.physical_evidence ?? []} fieldValue={f('physical_force')} /> : undefined} />
+                  <FieldRow label="Sexual assault" value={f('sexual_assault')} onChange={(v) => set('sexual_assault', v)} type="yesno-extended" suggested={s('sexual_assault')} onAcceptSuggestion={() => acceptSuggestion('sexual_assault')} provenance={prov('sexual_assault')} onMarkReviewed={() => markReviewed('sexual_assault')} badge={showNlpChips ? <NlpBadge rank={nlp.sexual_rank ?? 3} evidence={nlp.sexual_evidence ?? []} fieldValue={f('sexual_assault')} /> : undefined} />
+                  <FieldRow label="Robbery / theft" value={f('robbery_theft')} onChange={(v) => set('robbery_theft', v)} type="yesno" suggested={s('robbery_theft')} onAcceptSuggestion={() => acceptSuggestion('robbery_theft')} provenance={prov('robbery_theft')} onMarkReviewed={() => markReviewed('robbery_theft')} />
+                  <FieldRow label="Stealthing / condom refusal" value={f('stealthing')} onChange={(v) => set('stealthing', v)} type="yesno" suggested={s('stealthing')} onAcceptSuggestion={() => acceptSuggestion('stealthing')} provenance={prov('stealthing')} onMarkReviewed={() => markReviewed('stealthing')} />
+                  <FieldRow label="Exit type" value={f('exit_type')} onChange={(v) => set('exit_type', v)} type="select" options={['completed','escaped','abandoned','interrupted','unknown']} suggested={s('exit_type')} onAcceptSuggestion={() => acceptSuggestion('exit_type')} provenance={prov('exit_type')} onMarkReviewed={() => markReviewed('exit_type')} />
+                </SectionPanel>
+
+                <SectionPanel title="Early Escalation Detail" fieldKeys={['repeated_pressure','intimidation_present','abrupt_tone_change','verbal_abuse_before_violence','escalation_trigger']} fields={fields} defaultCollapsed>
+                  <FieldRow label="Repeated pressure" value={f('repeated_pressure')} onChange={(v) => set('repeated_pressure', v)} type="yesno" provenance={prov('repeated_pressure')} onMarkReviewed={() => markReviewed('repeated_pressure')} />
+                  <FieldRow label="Intimidation present" value={f('intimidation_present')} onChange={(v) => set('intimidation_present', v)} type="yesno" provenance={prov('intimidation_present')} onMarkReviewed={() => markReviewed('intimidation_present')} />
+                  <FieldRow label="Abrupt tone change" value={f('abrupt_tone_change')} onChange={(v) => set('abrupt_tone_change', v)} type="yesno" provenance={prov('abrupt_tone_change')} onMarkReviewed={() => markReviewed('abrupt_tone_change')} />
+                  <FieldRow label="Verbal abuse before violence" value={f('verbal_abuse_before_violence')} onChange={(v) => set('verbal_abuse_before_violence', v)} type="yesno" provenance={prov('verbal_abuse_before_violence')} onMarkReviewed={() => markReviewed('verbal_abuse_before_violence')} />
+                  <FieldRow label="Escalation trigger" value={f('escalation_trigger')} onChange={(v) => set('escalation_trigger', v)} type="textarea" placeholder="What triggered escalation? (free text)" provenance={prov('escalation_trigger')} onMarkReviewed={() => markReviewed('escalation_trigger')} />
+                </SectionPanel>
               </div>
             )}
 
             {activeTab === 'mobility' && (
               <div style={{ marginBottom: 12 }}>
-                <FieldRow label="Movement present" value={f('movement_present')} onChange={(v) => set('movement_present', v)} type="yesno-extended" suggested={s('movement_present')} onAcceptSuggestion={() => acceptSuggestion('movement_present')} provenance={prov('movement_present')} onMarkReviewed={() => markReviewed('movement_present')} badge={showNlpChips ? <NlpBadge rank={nlp.movement_rank ?? 3} evidence={nlp.movement_evidence ?? []} fieldValue={f('movement_present')} /> : undefined} />
-                <FieldRow label="Movement attempted" value={f('movement_attempted')} onChange={(v) => set('movement_attempted', v)} type="yesno" suggested={s('movement_attempted')} onAcceptSuggestion={() => acceptSuggestion('movement_attempted')} provenance={prov('movement_attempted')} onMarkReviewed={() => markReviewed('movement_attempted')} />
-                <FieldRow label="Movement completed" value={f('movement_completed')} onChange={(v) => set('movement_completed', v)} type="yesno" provenance={prov('movement_completed')} onMarkReviewed={() => markReviewed('movement_completed')} />
-                <FieldRow label="Mode of movement" value={f('mode_of_movement')} onChange={(v) => set('mode_of_movement', v)} suggested={s('mode_of_movement')} onAcceptSuggestion={() => acceptSuggestion('mode_of_movement')} provenance={prov('mode_of_movement')} onMarkReviewed={() => markReviewed('mode_of_movement')} />
-                <FieldRow label="Entered vehicle" value={f('entered_vehicle')} onChange={(v) => set('entered_vehicle', v)} type="yesno" suggested={s('entered_vehicle')} onAcceptSuggestion={() => acceptSuggestion('entered_vehicle')} provenance={prov('entered_vehicle')} onMarkReviewed={() => markReviewed('entered_vehicle')} />
-                <FieldRow label="Vehicle driver role" value={f('vehicle_driver_role')} onChange={(v) => set('vehicle_driver_role', v)} provenance={prov('vehicle_driver_role')} onMarkReviewed={() => markReviewed('vehicle_driver_role')} />
-                <FieldRow label="Who controlled movement" value={f('who_controlled_movement')} onChange={(v) => set('who_controlled_movement', v)} type="select" options={['offender','victim','shared','unclear']} provenance={prov('who_controlled_movement')} onMarkReviewed={() => markReviewed('who_controlled_movement')} />
-                <FieldRow label="Start location type" value={f('start_location_type')} onChange={(v) => set('start_location_type', v)} suggested={s('start_location_type')} onAcceptSuggestion={() => acceptSuggestion('start_location_type')} provenance={prov('start_location_type')} onMarkReviewed={() => markReviewed('start_location_type')} />
-                <FieldRow label="Destination location type" value={f('destination_location_type')} onChange={(v) => set('destination_location_type', v)} suggested={s('destination_location_type')} onAcceptSuggestion={() => acceptSuggestion('destination_location_type')} provenance={prov('destination_location_type')} onMarkReviewed={() => markReviewed('destination_location_type')} />
-                <FieldRow label="Public → private shift" value={f('public_to_private_shift')} onChange={(v) => set('public_to_private_shift', v)} type="yesno" suggested={s('public_to_private_shift')} onAcceptSuggestion={() => acceptSuggestion('public_to_private_shift')} provenance={prov('public_to_private_shift')} onMarkReviewed={() => markReviewed('public_to_private_shift')} />
-                <FieldRow label="Public → secluded shift" value={f('public_to_secluded_shift')} onChange={(v) => set('public_to_secluded_shift', v)} type="yesno" suggested={s('public_to_secluded_shift')} onAcceptSuggestion={() => acceptSuggestion('public_to_secluded_shift')} provenance={prov('public_to_secluded_shift')} onMarkReviewed={() => markReviewed('public_to_secluded_shift')} />
-                <FieldRow label="Cross neighbourhood" value={f('cross_neighbourhood')} onChange={(v) => set('cross_neighbourhood', v)} type="yesno" provenance={prov('cross_neighbourhood')} onMarkReviewed={() => markReviewed('cross_neighbourhood')} />
-                <FieldRow label="Cross municipality" value={f('cross_municipality')} onChange={(v) => set('cross_municipality', v)} type="yesno" provenance={prov('cross_municipality')} onMarkReviewed={() => markReviewed('cross_municipality')} />
-                <FieldRow label="Cross-city movement" value={f('cross_city_movement')} onChange={(v) => set('cross_city_movement', v)} type="select" options={['yes','no','unclear']} provenance={prov('cross_city_movement')} onMarkReviewed={() => markReviewed('cross_city_movement')} />
-                <FieldRow label="Offender movement control" value={f('offender_control_over_movement')} onChange={(v) => set('offender_control_over_movement', v)} type="select" options={['low','moderate','high','unclear']} provenance={prov('offender_control_over_movement')} onMarkReviewed={() => markReviewed('offender_control_over_movement')} />
-                <FieldRow label="Movement confidence" value={f('movement_confidence')} onChange={(v) => set('movement_confidence', v)} type="select" options={['high','medium','low','unclear']} provenance={prov('movement_confidence')} onMarkReviewed={() => markReviewed('movement_confidence')} />
-                <FieldRow label="Movement notes" value={f('movement_notes')} onChange={(v) => set('movement_notes', v)} type="textarea" placeholder="Analyst notes on movement coding confidence and sources" provenance={prov('movement_notes')} onMarkReviewed={() => markReviewed('movement_notes')} />
+                <SectionPanel title="Movement" fieldKeys={['movement_present','movement_attempted','movement_completed','mode_of_movement','entered_vehicle','vehicle_driver_role','who_controlled_movement']} fields={fields}>
+                  <FieldRow label="Movement present" value={f('movement_present')} onChange={(v) => set('movement_present', v)} type="yesno-extended" suggested={s('movement_present')} onAcceptSuggestion={() => acceptSuggestion('movement_present')} provenance={prov('movement_present')} onMarkReviewed={() => markReviewed('movement_present')} badge={showNlpChips ? <NlpBadge rank={nlp.movement_rank ?? 3} evidence={nlp.movement_evidence ?? []} fieldValue={f('movement_present')} /> : undefined} />
+                  <FieldRow label="Movement attempted" value={f('movement_attempted')} onChange={(v) => set('movement_attempted', v)} type="yesno" suggested={s('movement_attempted')} onAcceptSuggestion={() => acceptSuggestion('movement_attempted')} provenance={prov('movement_attempted')} onMarkReviewed={() => markReviewed('movement_attempted')} />
+                  <FieldRow label="Movement completed" value={f('movement_completed')} onChange={(v) => set('movement_completed', v)} type="yesno" provenance={prov('movement_completed')} onMarkReviewed={() => markReviewed('movement_completed')} />
+                  <FieldRow label="Mode of movement" value={f('mode_of_movement')} onChange={(v) => set('mode_of_movement', v)} suggested={s('mode_of_movement')} onAcceptSuggestion={() => acceptSuggestion('mode_of_movement')} provenance={prov('mode_of_movement')} onMarkReviewed={() => markReviewed('mode_of_movement')} />
+                  <FieldRow label="Entered vehicle" value={f('entered_vehicle')} onChange={(v) => set('entered_vehicle', v)} type="yesno" suggested={s('entered_vehicle')} onAcceptSuggestion={() => acceptSuggestion('entered_vehicle')} provenance={prov('entered_vehicle')} onMarkReviewed={() => markReviewed('entered_vehicle')} />
+                  <FieldRow label="Vehicle driver role" value={f('vehicle_driver_role')} onChange={(v) => set('vehicle_driver_role', v)} provenance={prov('vehicle_driver_role')} onMarkReviewed={() => markReviewed('vehicle_driver_role')} />
+                  <FieldRow label="Who controlled movement" value={f('who_controlled_movement')} onChange={(v) => set('who_controlled_movement', v)} type="select" options={['offender','victim','shared','unclear']} provenance={prov('who_controlled_movement')} onMarkReviewed={() => markReviewed('who_controlled_movement')} />
+                </SectionPanel>
+
+                <SectionPanel title="Geography" fieldKeys={['start_location_type','destination_location_type','public_to_private_shift','public_to_secluded_shift','cross_neighbourhood','cross_municipality','cross_city_movement','offender_control_over_movement']} fields={fields}>
+                  <FieldRow label="Start location type" value={f('start_location_type')} onChange={(v) => set('start_location_type', v)} suggested={s('start_location_type')} onAcceptSuggestion={() => acceptSuggestion('start_location_type')} provenance={prov('start_location_type')} onMarkReviewed={() => markReviewed('start_location_type')} />
+                  <FieldRow label="Destination location type" value={f('destination_location_type')} onChange={(v) => set('destination_location_type', v)} suggested={s('destination_location_type')} onAcceptSuggestion={() => acceptSuggestion('destination_location_type')} provenance={prov('destination_location_type')} onMarkReviewed={() => markReviewed('destination_location_type')} />
+                  <FieldRow label="Public → private shift" value={f('public_to_private_shift')} onChange={(v) => set('public_to_private_shift', v)} type="yesno" suggested={s('public_to_private_shift')} onAcceptSuggestion={() => acceptSuggestion('public_to_private_shift')} provenance={prov('public_to_private_shift')} onMarkReviewed={() => markReviewed('public_to_private_shift')} />
+                  <FieldRow label="Public → secluded shift" value={f('public_to_secluded_shift')} onChange={(v) => set('public_to_secluded_shift', v)} type="yesno" suggested={s('public_to_secluded_shift')} onAcceptSuggestion={() => acceptSuggestion('public_to_secluded_shift')} provenance={prov('public_to_secluded_shift')} onMarkReviewed={() => markReviewed('public_to_secluded_shift')} />
+                  <FieldRow label="Cross neighbourhood" value={f('cross_neighbourhood')} onChange={(v) => set('cross_neighbourhood', v)} type="yesno" provenance={prov('cross_neighbourhood')} onMarkReviewed={() => markReviewed('cross_neighbourhood')} />
+                  <FieldRow label="Cross municipality" value={f('cross_municipality')} onChange={(v) => set('cross_municipality', v)} type="yesno" provenance={prov('cross_municipality')} onMarkReviewed={() => markReviewed('cross_municipality')} />
+                  <FieldRow label="Cross-city movement" value={f('cross_city_movement')} onChange={(v) => set('cross_city_movement', v)} type="select" options={['yes','no','unclear']} provenance={prov('cross_city_movement')} onMarkReviewed={() => markReviewed('cross_city_movement')} />
+                  <FieldRow label="Offender movement control" value={f('offender_control_over_movement')} onChange={(v) => set('offender_control_over_movement', v)} type="select" options={['low','moderate','high','unclear']} provenance={prov('offender_control_over_movement')} onMarkReviewed={() => markReviewed('offender_control_over_movement')} />
+                </SectionPanel>
+
+                <SectionPanel title="Assessment" fieldKeys={['movement_confidence','movement_notes']} fields={fields} defaultCollapsed>
+                  <FieldRow label="Movement confidence" value={f('movement_confidence')} onChange={(v) => set('movement_confidence', v)} type="select" options={['high','medium','low','unclear']} provenance={prov('movement_confidence')} onMarkReviewed={() => markReviewed('movement_confidence')} />
+                  <FieldRow label="Movement notes" value={f('movement_notes')} onChange={(v) => set('movement_notes', v)} type="textarea" placeholder="Analyst notes on movement coding confidence and sources" provenance={prov('movement_notes')} onMarkReviewed={() => markReviewed('movement_notes')} />
+                </SectionPanel>
               </div>
             )}
 
             {activeTab === 'suspect' && (
               <div style={{ marginBottom: 12 }}>
-                <FieldRow label="Suspect count" value={f('suspect_count')} onChange={(v) => set('suspect_count', v)} suggested={s('suspect_count')} onAcceptSuggestion={() => acceptSuggestion('suspect_count')} provenance={prov('suspect_count')} onMarkReviewed={() => markReviewed('suspect_count')} />
-                <FieldRow label="Suspect gender" value={f('suspect_gender')} onChange={(v) => set('suspect_gender', v)} suggested={s('suspect_gender')} onAcceptSuggestion={() => acceptSuggestion('suspect_gender')} provenance={prov('suspect_gender')} onMarkReviewed={() => markReviewed('suspect_gender')} />
-                <FieldRow label="Suspect description" value={f('suspect_description_text')} onChange={(v) => set('suspect_description_text', v)} type="textarea" suggested={s('suspect_description_text')} onAcceptSuggestion={() => acceptSuggestion('suspect_description_text')} provenance={prov('suspect_description_text')} onMarkReviewed={() => markReviewed('suspect_description_text')} />
-                <FieldRow label="Race / ethnicity (as reported)" value={f('suspect_race_ethnicity')} onChange={(v) => set('suspect_race_ethnicity', v)} suggested={s('suspect_race_ethnicity')} onAcceptSuggestion={() => acceptSuggestion('suspect_race_ethnicity')} provenance={prov('suspect_race_ethnicity')} onMarkReviewed={() => markReviewed('suspect_race_ethnicity')} />
-                <FieldRow label="Age estimate" value={f('suspect_age_estimate')} onChange={(v) => set('suspect_age_estimate', v)} suggested={s('suspect_age_estimate')} onAcceptSuggestion={() => acceptSuggestion('suspect_age_estimate')} provenance={prov('suspect_age_estimate')} onMarkReviewed={() => markReviewed('suspect_age_estimate')} />
-                <FieldRow label="Vehicle present" value={f('vehicle_present')} onChange={(v) => set('vehicle_present', v)} type="yesno-extended" suggested={s('vehicle_present')} onAcceptSuggestion={() => acceptSuggestion('vehicle_present')} provenance={prov('vehicle_present')} onMarkReviewed={() => markReviewed('vehicle_present')} />
-                <FieldRow label="Vehicle make" value={f('vehicle_make')} onChange={(v) => set('vehicle_make', v)} suggested={s('vehicle_make')} onAcceptSuggestion={() => acceptSuggestion('vehicle_make')} provenance={prov('vehicle_make')} onMarkReviewed={() => markReviewed('vehicle_make')} />
-                <FieldRow label="Vehicle model" value={f('vehicle_model')} onChange={(v) => set('vehicle_model', v)} suggested={s('vehicle_model')} onAcceptSuggestion={() => acceptSuggestion('vehicle_model')} provenance={prov('vehicle_model')} onMarkReviewed={() => markReviewed('vehicle_model')} />
-                <FieldRow label="Vehicle colour" value={f('vehicle_colour')} onChange={(v) => set('vehicle_colour', v)} suggested={s('vehicle_colour')} onAcceptSuggestion={() => acceptSuggestion('vehicle_colour')} provenance={prov('vehicle_colour')} onMarkReviewed={() => markReviewed('vehicle_colour')} />
-                <FieldRow label="Plate (partial)" value={f('plate_partial')} onChange={(v) => set('plate_partial', v)} suggested={s('plate_partial')} onAcceptSuggestion={() => acceptSuggestion('plate_partial')} placeholder="e.g. JC3 37L" provenance={prov('plate_partial')} onMarkReviewed={() => markReviewed('plate_partial')} />
-                <FieldRow label="Repeat suspect flag" value={f('repeat_suspect_flag')} onChange={(v) => set('repeat_suspect_flag', v)} type="yesno" provenance={prov('repeat_suspect_flag')} onMarkReviewed={() => markReviewed('repeat_suspect_flag')} />
-                <FieldRow label="Repeat vehicle flag" value={f('repeat_vehicle_flag')} onChange={(v) => set('repeat_vehicle_flag', v)} type="yesno" provenance={prov('repeat_vehicle_flag')} onMarkReviewed={() => markReviewed('repeat_vehicle_flag')} />
+                <SectionPanel title="Suspect Description" fieldKeys={['suspect_count','suspect_gender','suspect_description_text','suspect_race_ethnicity','suspect_age_estimate']} fields={fields}>
+                  <FieldRow label="Suspect count" value={f('suspect_count')} onChange={(v) => set('suspect_count', v)} suggested={s('suspect_count')} onAcceptSuggestion={() => acceptSuggestion('suspect_count')} provenance={prov('suspect_count')} onMarkReviewed={() => markReviewed('suspect_count')} />
+                  <FieldRow label="Suspect gender" value={f('suspect_gender')} onChange={(v) => set('suspect_gender', v)} suggested={s('suspect_gender')} onAcceptSuggestion={() => acceptSuggestion('suspect_gender')} provenance={prov('suspect_gender')} onMarkReviewed={() => markReviewed('suspect_gender')} />
+                  <FieldRow label="Suspect description" value={f('suspect_description_text')} onChange={(v) => set('suspect_description_text', v)} type="textarea" suggested={s('suspect_description_text')} onAcceptSuggestion={() => acceptSuggestion('suspect_description_text')} provenance={prov('suspect_description_text')} onMarkReviewed={() => markReviewed('suspect_description_text')} />
+                  <FieldRow label="Race / ethnicity (as reported)" value={f('suspect_race_ethnicity')} onChange={(v) => set('suspect_race_ethnicity', v)} suggested={s('suspect_race_ethnicity')} onAcceptSuggestion={() => acceptSuggestion('suspect_race_ethnicity')} provenance={prov('suspect_race_ethnicity')} onMarkReviewed={() => markReviewed('suspect_race_ethnicity')} />
+                  <FieldRow label="Age estimate" value={f('suspect_age_estimate')} onChange={(v) => set('suspect_age_estimate', v)} suggested={s('suspect_age_estimate')} onAcceptSuggestion={() => acceptSuggestion('suspect_age_estimate')} provenance={prov('suspect_age_estimate')} onMarkReviewed={() => markReviewed('suspect_age_estimate')} />
+                </SectionPanel>
+
+                <SectionPanel title="Vehicle" fieldKeys={['vehicle_present','vehicle_make','vehicle_model','vehicle_colour','plate_partial','repeat_suspect_flag','repeat_vehicle_flag']} fields={fields}>
+                  <FieldRow label="Vehicle present" value={f('vehicle_present')} onChange={(v) => set('vehicle_present', v)} type="yesno-extended" suggested={s('vehicle_present')} onAcceptSuggestion={() => acceptSuggestion('vehicle_present')} provenance={prov('vehicle_present')} onMarkReviewed={() => markReviewed('vehicle_present')} />
+                  <FieldRow label="Vehicle make" value={f('vehicle_make')} onChange={(v) => set('vehicle_make', v)} suggested={s('vehicle_make')} onAcceptSuggestion={() => acceptSuggestion('vehicle_make')} provenance={prov('vehicle_make')} onMarkReviewed={() => markReviewed('vehicle_make')} />
+                  <FieldRow label="Vehicle model" value={f('vehicle_model')} onChange={(v) => set('vehicle_model', v)} suggested={s('vehicle_model')} onAcceptSuggestion={() => acceptSuggestion('vehicle_model')} provenance={prov('vehicle_model')} onMarkReviewed={() => markReviewed('vehicle_model')} />
+                  <FieldRow label="Vehicle colour" value={f('vehicle_colour')} onChange={(v) => set('vehicle_colour', v)} suggested={s('vehicle_colour')} onAcceptSuggestion={() => acceptSuggestion('vehicle_colour')} provenance={prov('vehicle_colour')} onMarkReviewed={() => markReviewed('vehicle_colour')} />
+                  <FieldRow label="Plate (partial)" value={f('plate_partial')} onChange={(v) => set('plate_partial', v)} suggested={s('plate_partial')} onAcceptSuggestion={() => acceptSuggestion('plate_partial')} placeholder="e.g. JC3 37L" provenance={prov('plate_partial')} onMarkReviewed={() => markReviewed('plate_partial')} />
+                  <FieldRow label="Repeat suspect flag" value={f('repeat_suspect_flag')} onChange={(v) => set('repeat_suspect_flag', v)} type="yesno" provenance={prov('repeat_suspect_flag')} onMarkReviewed={() => markReviewed('repeat_suspect_flag')} />
+                  <FieldRow label="Repeat vehicle flag" value={f('repeat_vehicle_flag')} onChange={(v) => set('repeat_vehicle_flag', v)} type="yesno" provenance={prov('repeat_vehicle_flag')} onMarkReviewed={() => markReviewed('repeat_vehicle_flag')} />
+                </SectionPanel>
               </div>
             )}
 
@@ -1553,6 +1924,7 @@ export default function CodingScreen() {
               <div style={{ marginBottom: 12 }}>
                 <NlpSignalsPanel nlp={nlp} onSetField={(field, value) => set(field as keyof Report, value)} reportId={report?.report_id} getFieldValue={(field) => f(field as keyof Report)} />
                 <EscalationArc esc={nlp.escalation ?? {}} />
+                <WeatherCard w={weather} />
                 <FieldRow label="Escalation point" value={f('escalation_point')} onChange={(v) => set('escalation_point', v)} type="select" options={['refusal ignored','threat made','physical force applied','sexual assault initiated','robbery occurred','victim escaped','other']} suggested={s('escalation_point')} onAcceptSuggestion={() => acceptSuggestion('escalation_point')} provenance={prov('escalation_point')} onMarkReviewed={() => markReviewed('escalation_point')} />
                 <FieldRow label="Early escalation score (1–5)" value={f('early_escalation_score')} onChange={(v) => set('early_escalation_score', v)} type="select" options={['1','2','3','4','5']} suggested={s('early_escalation_score')} onAcceptSuggestion={() => acceptSuggestion('early_escalation_score')} provenance={prov('early_escalation_score')} onMarkReviewed={() => markReviewed('early_escalation_score')}
                   badge={nlp.escalation?.score && nlp.escalation.score >= 3 ? (
@@ -1648,6 +2020,7 @@ export default function CodingScreen() {
             )}
 
             {activeTab === 'scoring' && <ScoringTab fields={fields} />}
+            {activeTab === 'summary' && <SummaryTab fields={fields} />}
           </div>
         </div>
       </div>

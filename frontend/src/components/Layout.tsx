@@ -1,6 +1,6 @@
 import { type ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
-import { FilePlus, Upload, LayoutList, BarChart2, Map } from 'lucide-react';
+import { FilePlus, Upload, LayoutList, BarChart2, Map, FlaskConical } from 'lucide-react';
 
 interface Props { children: ReactNode; }
 
@@ -53,6 +53,7 @@ export default function Layout({ children }: Props) {
           <NavItem to="/cases" icon={<LayoutList size={14} />} label="Cases" />
           <NavItem to="/analysis" icon={<BarChart2 size={14} />} label="Analysis" />
           <NavItem to="/map" icon={<Map size={14} />} label="Map" />
+          <NavItem to="/research" icon={<FlaskConical size={14} />} label="Research" />
         </nav>
 
         {/* Right tagline */}

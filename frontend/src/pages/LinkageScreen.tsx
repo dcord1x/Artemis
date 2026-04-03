@@ -200,17 +200,6 @@ const DOMAIN_COLORS: Record<string, string> = {
   target:  '#1D4ED8',
 };
 
-const FIELD_LABELS: Record<string, string> = {
-  physical_force: 'Physical force', sexual_assault: 'Sexual assault', coercion_present: 'Coercion',
-  stealthing: 'Stealthing', threats_present: 'Threats', pressure_after_refusal: 'Pressure after refusal',
-  offender_control_over_movement: 'Movement control', refusal_present: 'Refusal present',
-  robbery_theft: 'Robbery/theft', verbal_abuse: 'Verbal abuse', negotiation_present: 'Negotiation',
-  service_discussed: 'Service discussed', payment_discussed: 'Payment discussed',
-  movement_present: 'Movement present', entered_vehicle: 'Entered vehicle',
-  public_to_private_shift: 'Public→private', public_to_secluded_shift: 'Public→secluded',
-  cross_municipality: 'Cross municipality', cross_neighbourhood: 'Cross neighbourhood',
-  deserted: 'Deserted', repeat_suspect_flag: 'Repeat suspect', repeat_vehicle_flag: 'Repeat vehicle',
-};
 
 const DOMAIN_ORDER = ['control', 'sexual', 'style', 'escape', 'target'];
 
@@ -706,7 +695,7 @@ export default function LinkageScreen() {
         <DimStrip sim={similarity} />
 
         {/* ── Behavioral domain breakdown ── */}
-        <DomainPanel domainScores={similarity.domain_scores} />
+        {similarity.domain_scores && <DomainPanel domainScores={similarity.domain_scores} />}
 
         {/* ── Matched fields key ── */}
         {matchedFields.size > 0 && (
