@@ -70,4 +70,10 @@ export const api = {
   exportResearchTables: () => {
     window.open(BASE + '/export/research-tables', '_blank');
   },
+
+  visualizeParse: (text: string) =>
+    req<{ dep_html: string; ent_html: string }>('/nlp/visualize', {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+    }),
 };

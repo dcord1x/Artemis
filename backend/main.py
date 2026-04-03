@@ -310,6 +310,33 @@ async def parse_bulletin_endpoint(file: UploadFile = File(...)):
 
 from pydantic import BaseModel as PydanticBaseModel
 
+class VisualizeRequest(PydanticBaseModel):
+    text: str
+
+
+@app.post("/nlp/visualize")
+def visualize_parse(data: VisualizeRequest):
+    """
+    Run a text snippet through spaCy and return displaCy SVG/HTML for both
+    the dependency parse (dep) and named entity recognition (ent) views.
+    Used to verify SVO pattern matching and negation detection.
+    """
+    from spacy import displacy
+    from nlp_analysis import nlp_model
+
+    text = (data.text or "").strip()[:2000]  # truncate — long texts produce unusable SVGs
+    if not text:
+        raise HTTPException(status_code=400, detail="text must not be empty")
+    if nlp_model is None:
+        raise HTTPException(status_code=503, detail="spaCy model not loaded")
+
+    doc = nlp_model(text)
+    return {
+        "dep_html": displacy.render(doc, style="dep", page=False, minify=True),
+        "ent_html": displacy.render(doc, style="ent", page=False, minify=True),
+    }
+
+
 class BulkSaveRequest(PydanticBaseModel):
     incidents: list[dict]
     analyst_name: str = ""

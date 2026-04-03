@@ -7,6 +7,7 @@ import FieldRow from '../components/FieldRow';
 import TimelineStrip from '../components/TimelineStrip';
 import { useToast } from '../components/Toast';
 import SectionPanel from '../components/SectionPanel';
+import ParseViewer from '../components/ParseViewer';
 
 /**
  * Field-state-aware NLP badge.
@@ -1925,6 +1926,9 @@ export default function CodingScreen() {
                 <NlpSignalsPanel nlp={nlp} onSetField={(field, value) => set(field as keyof Report, value)} reportId={report?.report_id} getFieldValue={(field) => f(field as keyof Report)} />
                 <EscalationArc esc={nlp.escalation ?? {}} />
                 <WeatherCard w={weather} />
+                {!isNew && (
+                  <ParseViewer narrative={narrative} reportId={report?.report_id} />
+                )}
                 <FieldRow label="Escalation point" value={f('escalation_point')} onChange={(v) => set('escalation_point', v)} type="select" options={['refusal ignored','threat made','physical force applied','sexual assault initiated','robbery occurred','victim escaped','other']} suggested={s('escalation_point')} onAcceptSuggestion={() => acceptSuggestion('escalation_point')} provenance={prov('escalation_point')} onMarkReviewed={() => markReviewed('escalation_point')} />
                 <FieldRow label="Early escalation score (1–5)" value={f('early_escalation_score')} onChange={(v) => set('early_escalation_score', v)} type="select" options={['1','2','3','4','5']} suggested={s('early_escalation_score')} onAcceptSuggestion={() => acceptSuggestion('early_escalation_score')} provenance={prov('early_escalation_score')} onMarkReviewed={() => markReviewed('early_escalation_score')}
                   badge={nlp.escalation?.score && nlp.escalation.score >= 3 ? (
