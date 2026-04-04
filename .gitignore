@@ -22,6 +22,11 @@ frontend/.vite/
 # Claude Code local settings
 .claude/
 
+# Auto-updater runtime files (device-local, never commit)
+.last_requirements_hash
+.last_package_hash
+update.log
+
 # OS
 .DS_Store
 Thumbs.db

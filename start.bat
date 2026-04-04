@@ -1,17 +1,16 @@
 @echo off
-echo Starting Red Light Alert...
+echo Checking for updates...
+call "%~dp0update.bat"
+echo.
+echo Starting Artemis...
 echo.
 
-REM Start backend (must run from backend/ directory so imports resolve)
-start "RLA Backend" cmd /k "cd /d "%~dp0backend" && "..\backend_env\Scripts\python" -m uvicorn main:app --reload --port 8000"
+REM Open browser after backend has a moment to start
+start "" cmd /c "timeout /t 4 /nobreak >nul && start http://localhost:8000"
 
-REM Wait a moment then start frontend
-timeout /t 2 /nobreak >nul
-start "RLA Frontend" cmd /k "cd /d "%~dp0frontend" && npm run dev"
-
+REM Start backend in this window (blocking — close window to stop the app)
+cd /d "%~dp0backend"
+echo Running at http://localhost:8000
+echo Close this window to stop Artemis.
 echo.
-echo Backend: http://localhost:8000
-echo Frontend: http://localhost:5173
-echo.
-echo Both servers starting. Open http://localhost:5173 in your browser.
-pause
+"%~dp0backend_env\Scripts\python" -m uvicorn main:app --port 8000

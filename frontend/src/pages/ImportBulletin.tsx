@@ -62,6 +62,8 @@ function FlagChip({ val, label, color = 'var(--accent)' }: { val: string; label:
   );
 }
 
+const BASE = import.meta.env.VITE_API_BASE ?? '/api';
+
 export default function ImportBulletin() {
   const navigate = useNavigate();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -90,7 +92,7 @@ export default function ImportBulletin() {
       const form = new FormData();
       form.append('file', file);
       const isExcel = file.name.toLowerCase().endsWith('.xlsx');
-      const endpoint = isExcel ? '/api/parse-excel' : '/api/parse-bulletin';
+      const endpoint = isExcel ? `${BASE}/parse-excel` : `${BASE}/parse-bulletin`;
       const res = await fetch(endpoint, { method: 'POST', body: form });
       const data = await res.json();
       if (!res.ok) { setError(data.detail || 'Parse failed'); return; }
@@ -117,7 +119,7 @@ export default function ImportBulletin() {
     setSaving(true);
     localStorage.setItem('analyst_name', analystName);
     try {
-      const res = await fetch('/api/bulk-save', {
+      const res = await fetch(`${BASE}/bulk-save`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ incidents: toSave, analyst_name: analystName, source_organization: sourceOrg }),
