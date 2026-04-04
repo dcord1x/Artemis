@@ -137,8 +137,11 @@ export default function CaseList() {
     { key: 'threats_present', value: filterThreats,       clear: () => setFilterThreats('') },
   ].filter(f => f.value);
 
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   const load = async () => {
     setLoading(true);
+    setLoadError(null);
     const params: Record<string, string> = {};
     if (search)              params.search          = search;
     if (filterStatus)        params.coding_status   = filterStatus;
@@ -158,9 +161,15 @@ export default function CaseList() {
     if (filterNlpPattern)    params.nlp_pattern     = filterNlpPattern;
     if (filterSexualAssault) params.sexual_assault  = filterSexualAssault;
     if (filterThreats)       params.threats_present = filterThreats;
-    const data = await api.listReports(params);
-    setReports(data);
-    setLoading(false);
+    try {
+      const data = await api.listReports(params);
+      setReports(data);
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : 'Failed to connect to backend');
+      setReports([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { load(); }, [
@@ -347,6 +356,16 @@ export default function CaseList() {
         {loading ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 160, color: 'var(--text-3)', fontSize: 13 }}>
             Loading…
+          </div>
+        ) : loadError ? (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 220, gap: 12 }}>
+            <p style={{ color: 'var(--accent)', fontSize: 14, margin: 0 }}>Could not reach backend: {loadError}</p>
+            <button
+              onClick={load}
+              style={{ fontSize: 13, color: 'var(--accent)', background: 'none', border: '1px solid var(--accent)', borderRadius: 6, padding: '4px 14px', cursor: 'pointer' }}
+            >
+              Retry
+            </button>
           </div>
         ) : reports.length === 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 220, gap: 12 }}>
