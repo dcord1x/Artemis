@@ -76,7 +76,7 @@ export default function ImportBulletin() {
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [analystName, setAnalystName] = useState(() => localStorage.getItem('analyst_name') || '');
   const [sourceOrg, setSourceOrg] = useState('');
-  const [parseMethod, setParseMethod] = useState<'ai' | 'rules' | null>(null);
+  const [parseMethod, setParseMethod] = useState<'ai' | 'rules' | 'excel' | null>(null);
 
   const handleFile = async (file: File) => {
     if (!file) return;

@@ -15,7 +15,7 @@
 
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Download, RefreshCw, AlertTriangle, ArrowRight } from 'lucide-react';
+import { Download, RefreshCw, AlertTriangle } from 'lucide-react';
 import { api } from '../api';
 import type {
   ResearchAggregate,
@@ -102,9 +102,9 @@ function FreqBar({
 
 /** Two-column cross-tab card */
 function CrossTabCard({
-  label, data, total,
+  label, data,
 }: {
-  label: string; data: EnvCross; total: number;
+  label: string; data: EnvCross; total?: number;
 }) {
   const metrics: [string, number][] = [
     ['Physical force', data.physical_force],
