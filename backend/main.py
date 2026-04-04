@@ -308,6 +308,90 @@ async def parse_bulletin_endpoint(file: UploadFile = File(...)):
             raise HTTPException(400, str(e))
 
 
+@app.post("/parse-excel")
+async def parse_excel_endpoint(file: UploadFile = File(...)):
+    """
+    Parse an Excel dataset (same column layout as DTE DATASET for QGIS.xlsx)
+    into individual incident records for preview before bulk-save.
+    """
+    import tempfile
+    import openpyxl
+    from import_excel import (
+        parse_date, parse_time, parse_vehicle, parse_locations,
+        clean_city, extract_neighbourhood, parse_suspect_count, parse_gender,
+    )
+
+    content = await file.read()
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
+        tmp.write(content)
+        tmp_path = tmp.name
+
+    try:
+        wb = openpyxl.load_workbook(tmp_path, read_only=True, data_only=True)
+        ws = wb["All Incidents"] if "All Incidents" in wb.sheetnames else wb.active
+        rows = list(ws.iter_rows(values_only=True))
+    finally:
+        os.unlink(tmp_path)
+
+    data_rows = rows[1:]  # skip header row
+    incidents = []
+
+    for row in data_rows:
+        def _cell(idx):
+            return row[idx] if len(row) > idx else None
+
+        synopsis_raw      = _cell(9)
+        synopsis = str(synopsis_raw).strip() if synopsis_raw else ""
+        if not synopsis or synopsis.lower() == "none":
+            continue
+
+        incident_date_raw = _cell(0)
+        time_raw          = _cell(2)
+        date_reported_raw = _cell(3)
+        city_raw          = _cell(4)
+        location_raw      = _cell(5)
+        description_raw   = _cell(7)
+        vehicle_raw       = _cell(8)
+
+        description   = str(description_raw).strip() if description_raw else ""
+        vehicle_text  = str(vehicle_raw).strip()     if vehicle_raw     else ""
+        location_text = str(location_raw).strip()    if location_raw    else ""
+
+        veh  = parse_vehicle(vehicle_text)
+        locs = parse_locations(location_text, synopsis)
+
+        incidents.append({
+            "raw_narrative":              synopsis,
+            "entry_type":                 "incident",
+            "bulletin_date":              parse_date(date_reported_raw),
+            "source_organization":        "Red Light Alert",
+            "incident_date":              parse_date(incident_date_raw),
+            "date_reported":              parse_date(date_reported_raw),
+            "city":                       clean_city(city_raw),
+            "neighbourhood":              extract_neighbourhood(location_text),
+            "initial_contact_location":   locs["contact"],
+            "incident_location_primary":  locs["incident"],
+            # Violence fields intentionally blank — researcher codes these
+            "coercion_present": "", "threats_present": "", "physical_force": "",
+            "sexual_assault":   "", "robbery_theft":   "", "stealthing":     "",
+            "movement_present": "", "entered_vehicle":  "",
+            "suspect_count":              parse_suspect_count(description),
+            "suspect_gender":             parse_gender(description),
+            "suspect_description_text":   description,
+            "suspect_race_ethnicity": "", "suspect_age_estimate": "", "suspect_name": "",
+            "vehicle_present":  veh.get("vehicle_present", ""),
+            "vehicle_make":     veh.get("vehicle_make",    ""),
+            "vehicle_model":    veh.get("vehicle_model",   ""),
+            "vehicle_colour":   veh.get("vehicle_colour",  ""),
+            "plate_partial":    veh.get("plate_partial",   ""),
+            "summary_analytic": "",
+            "flags": [],
+        })
+
+    return {"incidents": incidents, "total": len(incidents), "method": "excel"}
+
+
 from pydantic import BaseModel as PydanticBaseModel
 
 class VisualizeRequest(PydanticBaseModel):

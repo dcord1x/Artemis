@@ -89,7 +89,9 @@ export default function ImportBulletin() {
     try {
       const form = new FormData();
       form.append('file', file);
-      const res = await fetch('/api/parse-bulletin', { method: 'POST', body: form });
+      const isExcel = file.name.toLowerCase().endsWith('.xlsx');
+      const endpoint = isExcel ? '/api/parse-excel' : '/api/parse-bulletin';
+      const res = await fetch(endpoint, { method: 'POST', body: form });
       const data = await res.json();
       if (!res.ok) { setError(data.detail || 'Parse failed'); return; }
       setIncidents(data.incidents || []);
@@ -160,6 +162,12 @@ export default function ImportBulletin() {
             fontSize: 11.5, padding: '2px 10px', borderRadius: 20, fontWeight: 500,
             color: 'var(--blue)', background: 'var(--blue-pale)', border: '1px solid var(--blue-border)',
           }}>⚙ Rule-based — review fields carefully</span>
+        )}
+        {parseMethod === 'excel' && (
+          <span style={{
+            fontSize: 11.5, padding: '2px 10px', borderRadius: 20, fontWeight: 500,
+            color: 'var(--green)', background: 'var(--green-pale)', border: '1px solid var(--green-border)',
+          }}>⊞ Excel import — violence fields left blank for coding</span>
         )}
 
         <div style={{ display: 'flex', gap: 8, marginLeft: 'auto', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -246,19 +254,19 @@ export default function ImportBulletin() {
             </div>
             <div style={{ textAlign: 'center' }}>
               <p style={{ fontSize: 15, color: 'var(--text-1)', margin: '0 0 6px', fontFamily: 'Lora, serif' }}>
-                Drop a Red Light Alert bulletin PDF here
+                Drop a bulletin PDF or your Excel dataset here
               </p>
               <p style={{ fontSize: 13, color: 'var(--text-3)', margin: '0 0 4px' }}>
-                or click to browse — the tool will split it into individual reports
+                PDF — split into individual reports &nbsp;·&nbsp; Excel (.xlsx) — bulk import rows
               </p>
               <p style={{ fontSize: 12, color: 'var(--border-mid)', margin: 0 }}>
-                Works without AI · Add API key for smarter extraction
+                PDF works without AI · Add API key for smarter extraction
               </p>
             </div>
             <input
               ref={fileRef}
               type="file"
-              accept=".pdf,.txt"
+              accept=".pdf,.txt,.xlsx"
               style={{ display: 'none' }}
               onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
             />
@@ -269,8 +277,8 @@ export default function ImportBulletin() {
         {parsing && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, height: 240 }}>
             <Loader2 size={28} style={{ color: 'var(--accent)', animation: 'spin 1s linear infinite' }} />
-            <p style={{ fontSize: 14, color: 'var(--text-2)', margin: 0, fontFamily: 'Lora, serif' }}>Parsing bulletin…</p>
-            <p style={{ fontSize: 12, color: 'var(--text-3)', margin: 0 }}>Splitting the bulletin into individual incidents</p>
+            <p style={{ fontSize: 14, color: 'var(--text-2)', margin: 0, fontFamily: 'Lora, serif' }}>Parsing file…</p>
+            <p style={{ fontSize: 12, color: 'var(--text-3)', margin: 0 }}>Extracting individual incidents</p>
           </div>
         )}
 
@@ -485,12 +493,12 @@ export default function ImportBulletin() {
                 (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-3)';
               }}
             >
-              <Upload size={14} /> Upload another bulletin
+              <Upload size={14} /> Upload another file
             </button>
             <input
               ref={fileRef}
               type="file"
-              accept=".pdf,.txt"
+              accept=".pdf,.txt,.xlsx"
               style={{ display: 'none' }}
               onChange={(e) => { if (e.target.files?.[0]) { setIncidents([]); handleFile(e.target.files[0]); } }}
             />
