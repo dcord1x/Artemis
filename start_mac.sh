@@ -35,7 +35,7 @@ if git -C "$DIR" fetch origin master --quiet 2>>"$LOG"; then
     if [ "$LOCAL" != "$REMOTE" ]; then
         echo "[$(date)] Update available: ${LOCAL:0:7} -> ${REMOTE:0:7}" >> "$LOG"
 
-        git -C "$DIR" stash --quiet 2>>"$LOG"
+        git -C "$DIR" reset --hard HEAD --quiet 2>>"$LOG"
 
         if git -C "$DIR" pull origin master --quiet 2>>"$LOG"; then
             echo "[$(date)] Code updated successfully" >> "$LOG"
@@ -82,8 +82,7 @@ if git -C "$DIR" fetch origin master --quiet 2>>"$LOG"; then
             cd "$DIR"
 
         else
-            echo "[$(date)] git pull failed - restoring stash" >> "$LOG"
-            git -C "$DIR" stash pop --quiet 2>>"$LOG"
+            echo "[$(date)] git pull failed" >> "$LOG"
         fi
     else
         echo "[$(date)] Already up to date (${LOCAL:0:7})" >> "$LOG"
