@@ -8,6 +8,7 @@ import TimelineStrip from '../components/TimelineStrip';
 import { useToast } from '../components/Toast';
 import SectionPanel from '../components/SectionPanel';
 import ParseViewer from '../components/ParseViewer';
+import GisMapModal from '../components/GisMapModal';
 
 /**
  * Field-state-aware NLP badge.
@@ -1000,6 +1001,7 @@ export default function CodingScreen() {
   const [saving, setSaving] = useState(false);
   const [loadingAI, setLoadingAI] = useState(false);
   const [activeTab, setActiveTab] = useState<Section>('basics');
+  const [showGisMap, setShowGisMap] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [savedAgoText, setSavedAgoText] = useState('');
   const [caseList, setCaseList] = useState<string[]>([]);
@@ -1945,6 +1947,26 @@ export default function CodingScreen() {
 
             {activeTab === 'gis' && (
               <div style={{ marginBottom: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
+                  <button
+                    onClick={() => setShowGisMap(true)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      padding: '5px 12px', borderRadius: 6,
+                      border: '1px solid var(--border)',
+                      background: 'var(--surface-2)',
+                      color: 'var(--text-1)', fontSize: 12, fontFamily: 'DM Sans, sans-serif',
+                      cursor: 'pointer', fontWeight: 500,
+                    }}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/>
+                      <line x1="9" y1="3" x2="9" y2="18"/>
+                      <line x1="15" y1="6" x2="15" y2="21"/>
+                    </svg>
+                    Open Map
+                  </button>
+                </div>
                 {([
                   {
                     heading: 'INITIAL CONTACT POINT',
@@ -2049,6 +2071,10 @@ export default function CodingScreen() {
             ))}
           </div>
         </div>
+      )}
+
+      {showGisMap && (
+        <GisMapModal fields={fields} onClose={() => setShowGisMap(false)} />
       )}
     </div>
   );

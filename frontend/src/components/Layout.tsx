@@ -38,7 +38,7 @@ export default function Layout({ children }: Props) {
               letterSpacing: '-0.01em',
               lineHeight: 1.1,
             }}>
-              Red Light Alert
+              Artemis
             </div>
             <div style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.04em' }}>
               harm report workspace
