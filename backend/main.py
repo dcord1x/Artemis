@@ -257,6 +257,33 @@ def analyze_report(report_id: str, db: Session = Depends(get_db)):
     return {"ok": True, "ai_suggestions": r.ai_suggestions}
 
 
+# ── Batch NLP re-run ─────────────────────────────────────────────────────────
+
+@app.post("/reports/batch-analyze")
+def batch_analyze(db: Session = Depends(get_db)):
+    """
+    Run spaCy NLP analysis on every report that has no nlp data yet.
+    Skips reports that already have ai_suggestions["nlp"] populated.
+    Returns a count of reports processed.
+    """
+    from nlp_analysis import analyze_narrative
+    reports = db.query(Report).all()
+    processed = 0
+    for r in reports:
+        existing = r.ai_suggestions or {}
+        if existing.get("nlp"):
+            continue  # already has NLP data
+        if not r.raw_narrative or not r.raw_narrative.strip():
+            continue
+        result = analyze_narrative(r.raw_narrative)
+        existing.update(result)
+        r.ai_suggestions = existing
+        r.updated_at = datetime.utcnow()
+        processed += 1
+    db.commit()
+    return {"ok": True, "processed": processed}
+
+
 # ── Bulletin import ───────────────────────────────────────────────────────────
 
 @app.post("/parse-bulletin")

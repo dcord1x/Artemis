@@ -38,10 +38,10 @@ export default function Layout({ children }: Props) {
               letterSpacing: '-0.01em',
               lineHeight: 1.1,
             }}>
-              Artemis
+              VIA
             </div>
             <div style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.04em' }}>
-              harm report workspace
+              Violence, Interaction, and Analysis
             </div>
           </div>
         </div>

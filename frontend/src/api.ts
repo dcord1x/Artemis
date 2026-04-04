@@ -57,6 +57,9 @@ export const api = {
   analyzeReport: (reportId: string) =>
     req<{ ok: boolean; ai_suggestions: Record<string, any> }>(`/reports/${reportId}/analyze`, { method: 'POST' }),
 
+  batchAnalyze: () =>
+    req<{ ok: boolean; processed: number }>('/reports/batch-analyze', { method: 'POST' }),
+
   // ── Research / pattern analysis ─────────────────────────────────────────
 
   getResearchAggregate: () => req<ResearchAggregate>('/research/aggregate'),

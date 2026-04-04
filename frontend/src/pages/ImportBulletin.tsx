@@ -75,7 +75,7 @@ export default function ImportBulletin() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [analystName, setAnalystName] = useState(() => localStorage.getItem('analyst_name') || '');
-  const [sourceOrg, setSourceOrg] = useState('WISH Drop-In Centre Society');
+  const [sourceOrg, setSourceOrg] = useState('');
   const [parseMethod, setParseMethod] = useState<'ai' | 'rules' | null>(null);
 
   const handleFile = async (file: File) => {

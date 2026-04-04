@@ -287,6 +287,8 @@ def run():
 
     saved = 0
     skipped = 0
+    coord_ok = 0
+    coord_fail = 0
 
     for i, row in enumerate(data_rows, 1):
         incident_date_raw = row[0]
@@ -313,13 +315,19 @@ def run():
 
         lat_initial = lon_initial = None
         if coords_raw and str(coords_raw).strip() not in ("None", ""):
-            parts = str(coords_raw).strip().split(",")
+            raw_str = str(coords_raw).strip().strip("()")
+            parts = raw_str.split(",")
             if len(parts) == 2:
                 try:
                     lat_initial = float(parts[0].strip())
                     lon_initial = float(parts[1].strip())
+                    coord_ok += 1
                 except ValueError:
-                    pass
+                    print(f"  [row {i}] Could not parse coordinates: {coords_raw!r}")
+                    coord_fail += 1
+            else:
+                print(f"  [row {i}] Unexpected coordinate format (not 2 parts): {coords_raw!r}")
+                coord_fail += 1
 
         # NLP analysis — stores ranked hints in ai_suggestions, leaves coded fields blank
         nlp_result = analyze_narrative(synopsis)
@@ -460,6 +468,7 @@ def run():
     db.commit()
     db.close()
     print(f"Done. Imported {saved} records, skipped {skipped} empty rows.")
+    print(f"Coordinates: {coord_ok} parsed OK, {coord_fail} failed/unexpected format.")
 
 
 if __name__ == "__main__":

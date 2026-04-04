@@ -1013,6 +1013,7 @@ export default function CodingScreen() {
   const [showCleaned, setShowCleaned] = useState(false);
   const [nlp, setNlp] = useState<Record<string, any>>({});
   const [analyzingNlp, setAnalyzingNlp] = useState(false);
+  const [nlpError, setNlpError] = useState<string | null>(null);
   const [weather, setWeather] = useState<Record<string, any>>({});
   const [provenance, setProvenance] = useState<Record<string, string>>({});
   const [analystSummary, setAnalystSummary] = useState('');
@@ -1189,12 +1190,19 @@ export default function CodingScreen() {
   const handleNlpAnalyze = async () => {
     if (!report) return;
     setAnalyzingNlp(true);
+    setNlpError(null);
     try {
       const result = await api.analyzeReport(report.report_id);
       if (result.ai_suggestions?.nlp) setNlp(result.ai_suggestions.nlp);
       if (result.ai_suggestions?.flags) setFlags(result.ai_suggestions.flags);
       if (result.ai_suggestions?.weather) setWeather(result.ai_suggestions.weather);
-    } finally { setAnalyzingNlp(false); }
+      const err = result.ai_suggestions?.error || result.ai_suggestions?.nlp?.error;
+      if (err) setNlpError(String(err));
+    } catch (e: any) {
+      setNlpError(e?.message || 'NLP analysis failed — check backend logs');
+    } finally {
+      setAnalyzingNlp(false);
+    }
   };
 
   const addTag = () => {
@@ -1374,6 +1382,17 @@ export default function CodingScreen() {
               <ScanSearch size={13} style={{ color: 'var(--blue)' }} />
               {analyzingNlp ? 'Analysing…' : 'NLP Analyze'}
             </button>
+          )}
+          {nlpError && (
+            <span style={{
+              fontSize: 11.5, color: 'var(--red, #c0392b)',
+              background: 'var(--red-pale, #fdecea)',
+              border: '1px solid var(--red, #c0392b)',
+              borderRadius: 4, padding: '2px 7px',
+              maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }} title={nlpError}>
+              NLP error: {nlpError}
+            </span>
           )}
 
           {!isNew && report && (

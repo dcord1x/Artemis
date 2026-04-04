@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Search, SlidersHorizontal, Trash2, FileText, Download, X } from 'lucide-react';
+import { Search, SlidersHorizontal, Trash2, FileText, Download, X, BrainCircuit } from 'lucide-react';
 import { api } from '../api';
 import type { Report } from '../types';
 
@@ -101,6 +101,10 @@ export default function CaseList() {
   const [searchParams] = useSearchParams();
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
+  const [sortColumn, setSortColumn] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [batchAnalyzing, setBatchAnalyzing] = useState(false);
+  const [batchResult, setBatchResult] = useState<string | null>(null);
 
   // Standard filters — initialised from URL params (set by Analysis drilldown links)
   const [search,          setSearch]          = useState(() => searchParams.get('search') || '');
@@ -179,6 +183,58 @@ export default function CaseList() {
     filterNlpWeapon, filterNlpEscalation, filterNlpPattern,
     filterSexualAssault, filterThreats,
   ]);
+
+  const handleBatchAnalyze = async () => {
+    setBatchAnalyzing(true);
+    setBatchResult(null);
+    try {
+      const result = await api.batchAnalyze();
+      setBatchResult(`NLP run on ${result.processed} case${result.processed !== 1 ? 's' : ''}`);
+      load(); // refresh list so NLP dots update
+    } catch (e: any) {
+      setBatchResult(e?.message || 'Batch NLP failed');
+    } finally {
+      setBatchAnalyzing(false);
+    }
+  };
+
+  const handleSort = (col: string) => {
+    if (sortColumn === col) {
+      setSortDirection(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(col);
+      setSortDirection('asc');
+    }
+  };
+
+  const sortedReports = useMemo(() => {
+    if (!sortColumn) return reports;
+    return [...reports].sort((a, b) => {
+      const getSortVal = (r: Report): string | number => {
+        switch (sortColumn) {
+          case 'report_id':       return r.report_id ?? '';
+          case 'incident_date':   return r.incident_date ?? r.date_received?.slice(0, 10) ?? '';
+          case 'day_of_week':     return r.day_of_week ?? '';
+          case 'city':            return r.city ?? '';
+          case 'raw_narrative':   return r.raw_narrative ?? '';
+          case 'vehicle':         return [r.vehicle_colour, r.vehicle_make, r.vehicle_model].filter(Boolean).join(' ');
+          case 'coercion_present':  return r.coercion_present === 'yes' ? 2 : r.coercion_present === 'no' ? 1 : 0;
+          case 'movement_present':  return r.movement_present === 'yes' ? 2 : r.movement_present === 'no' ? 1 : 0;
+          case 'physical_force':    return r.physical_force === 'yes' ? 2 : r.physical_force === 'no' ? 1 : 0;
+          case 'sexual_assault':    return r.sexual_assault === 'yes' ? 2 : r.sexual_assault === 'no' ? 1 : 0;
+          case 'escalation':      return (r.ai_suggestions as any)?.nlp?.escalation?.score ?? -1;
+          case 'coding_status':   return r.coding_status ?? '';
+          default:                return '';
+        }
+      };
+      const av = getSortVal(a);
+      const bv = getSortVal(b);
+      const cmp = typeof av === 'number' && typeof bv === 'number'
+        ? av - bv
+        : String(av).localeCompare(String(bv));
+      return sortDirection === 'asc' ? cmp : -cmp;
+    });
+  }, [reports, sortColumn, sortDirection]);
 
   const handleDelete = async (e: React.MouseEvent, reportId: string) => {
     e.stopPropagation();
@@ -297,6 +353,21 @@ export default function CaseList() {
           {reports.length} record{reports.length !== 1 ? 's' : ''}
         </span>
 
+        <button
+          className="btn-ghost"
+          onClick={handleBatchAnalyze}
+          disabled={batchAnalyzing}
+          title="Run NLP analysis on all cases that don't have it yet"
+          style={{ fontSize: 12.5 }}
+        >
+          <BrainCircuit size={13} style={{ color: 'var(--blue)' }} />
+          {batchAnalyzing ? 'Running NLP…' : 'NLP All'}
+        </button>
+        {batchResult && (
+          <span style={{ fontSize: 11.5, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
+            {batchResult}
+          </span>
+        )}
         <button className="btn-ghost" onClick={() => api.exportCsv()} style={{ fontSize: 12.5 }}>
           <Download size={13} /> CSV
         </button>
@@ -383,32 +454,44 @@ export default function CaseList() {
             <thead>
               <tr style={{ background: 'var(--surface)', borderBottom: '1.5px solid var(--border)', position: 'sticky', top: 0, zIndex: 1 }}>
                 {[
-                  { h: 'ID',       title: '', align: 'left' },
-                  { h: 'Date',     title: 'Incident date', align: 'left' },
-                  { h: 'Day',      title: 'Day of week', align: 'left' },
-                  { h: 'City',     title: 'City', align: 'left' },
-                  { h: 'Narrative', title: '', align: 'left' },
-                  { h: 'Vehicle',  title: 'Vehicle details', align: 'left' },
-                  { h: 'C',        title: 'Coercion — filled dot=coded yes; faint=NLP rank 1; dashed=NLP rank 2', align: 'center' },
-                  { h: 'M',        title: 'Movement present', align: 'center' },
-                  { h: 'F',        title: 'Physical force', align: 'center' },
-                  { h: 'SA',       title: 'Sexual assault', align: 'center' },
-                  { h: 'Esc',      title: 'Escalation score (NLP)', align: 'center' },
-                  { h: 'Status',   title: '', align: 'left' },
-                  { h: '',         title: '', align: 'right' },
-                ].map(({ h, title, align }, i) => (
-                  <th key={i} style={{
-                    padding: '9px 10px', textAlign: align as any,
-                    fontSize: 10.5, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase',
-                    color: 'var(--text-3)', fontFamily: 'DM Sans, sans-serif', whiteSpace: 'nowrap',
-                  }} title={title}>
-                    {h}
+                  { h: 'ID',        title: '',                 align: 'left',   col: 'report_id' },
+                  { h: 'Date',      title: 'Incident date',    align: 'left',   col: 'incident_date' },
+                  { h: 'Day',       title: 'Day of week',      align: 'left',   col: 'day_of_week' },
+                  { h: 'City',      title: 'City',             align: 'left',   col: 'city' },
+                  { h: 'Narrative', title: '',                 align: 'left',   col: 'raw_narrative' },
+                  { h: 'Vehicle',   title: 'Vehicle details',  align: 'left',   col: 'vehicle' },
+                  { h: 'C',         title: 'Coercion — filled dot=coded yes; faint=NLP rank 1; dashed=NLP rank 2', align: 'center', col: 'coercion_present' },
+                  { h: 'M',         title: 'Movement present', align: 'center', col: 'movement_present' },
+                  { h: 'F',         title: 'Physical force',   align: 'center', col: 'physical_force' },
+                  { h: 'SA',        title: 'Sexual assault',   align: 'center', col: 'sexual_assault' },
+                  { h: 'Esc',       title: 'Escalation score (NLP)', align: 'center', col: 'escalation' },
+                  { h: 'Status',    title: '',                 align: 'left',   col: 'coding_status' },
+                  { h: '',          title: '',                 align: 'right',  col: null },
+                ].map(({ h, title, align, col }, i) => (
+                  <th
+                    key={i}
+                    onClick={col ? () => handleSort(col) : undefined}
+                    style={{
+                      padding: '9px 10px', textAlign: align as any,
+                      fontSize: 10.5, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase',
+                      color: col && sortColumn === col ? 'var(--text-1)' : 'var(--text-3)',
+                      fontFamily: 'DM Sans, sans-serif', whiteSpace: 'nowrap',
+                      cursor: col ? 'pointer' : 'default',
+                      userSelect: 'none',
+                    }}
+                    title={title}
+                  >
+                    {h}{col && (
+                      <span style={{ marginLeft: 4, opacity: sortColumn === col ? 1 : 0.35 }}>
+                        {sortColumn === col ? (sortDirection === 'asc' ? '▲' : '▼') : '⇅'}
+                      </span>
+                    )}
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {reports.map((r, i) => {
+              {sortedReports.map((r, i) => {
                 const sc = STATUS_COLORS[r.coding_status] || STATUS_COLORS.uncoded;
                 const nlp = (r.ai_suggestions as any)?.nlp ?? {};
                 const escScore: number = nlp.escalation?.score ?? 0;
