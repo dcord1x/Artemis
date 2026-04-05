@@ -155,10 +155,14 @@ export default function Analysis() {
   const navigate = useNavigate();
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = () => {
     setLoading(true);
-    api.getStats().then((s) => { setStats(s); setLoading(false); });
+    setLoadError(null);
+    api.getStats()
+      .then((s) => { setStats(s); setLoading(false); })
+      .catch(() => { setLoading(false); setLoadError('Could not load stats — is the backend running?'); });
   };
 
   useEffect(() => { load(); }, []);
@@ -166,6 +170,12 @@ export default function Analysis() {
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-3)', fontSize: 14 }}>
       Loading…
+    </div>
+  );
+  if (loadError) return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-3)', fontSize: 14, flexDirection: 'column', gap: 8 }}>
+      <span>{loadError}</span>
+      <button className="btn-ghost" onClick={load} style={{ fontSize: 12.5 }}>Retry</button>
     </div>
   );
   if (!stats) return null;
@@ -204,6 +214,15 @@ export default function Analysis() {
             {loading ? 'Refreshing…' : 'Refresh'}
           </button>
         </div>
+
+        {/* NLP unavailable warning */}
+        {stats.nlp_available === false && (
+          <div style={{ background: 'var(--amber-pale, #fffbeb)', border: '1px solid var(--amber, #f59e0b)', borderRadius: 6, padding: '10px 16px', marginBottom: 16, fontSize: 13, color: 'var(--text-2)' }}>
+            <strong>spaCy NLP model not loaded</strong> — NLP signal counts are 0. To fix: stop the server, run{' '}
+            <code style={{ background: 'var(--surface-2)', padding: '1px 5px', borderRadius: 3 }}>backend_env\Scripts\python.exe -m spacy download en_core_web_sm</code>
+            {', '}then restart and re-run the Excel import (or click <strong>NLP All</strong> on the Cases page).
+          </div>
+        )}
 
         {/* Summary cards */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 16, marginBottom: 24 }}>

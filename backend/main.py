@@ -301,13 +301,15 @@ def batch_analyze(db: Session = Depends(get_db)):
     Skips reports that already have ai_suggestions["nlp"] populated.
     Returns a count of reports processed.
     """
-    from nlp_analysis import analyze_narrative
+    from nlp_analysis import analyze_narrative, _nlp as _spacy_model
     reports = db.query(Report).all()
     processed = 0
     for r in reports:
         existing = r.ai_suggestions or {}
-        if existing.get("nlp"):
-            continue  # already has NLP data
+        # Skip only if a real NLP analysis was completed (coercion_rank is set).
+        # Records that only have date_certainty (from a failed spaCy run) are re-analyzed.
+        if existing.get("nlp", {}).get("coercion_rank") is not None:
+            continue
         if not r.raw_narrative or not r.raw_narrative.strip():
             continue
         result = analyze_narrative(r.raw_narrative)
@@ -316,7 +318,7 @@ def batch_analyze(db: Session = Depends(get_db)):
         r.updated_at = datetime.utcnow()
         processed += 1
     db.commit()
-    return {"ok": True, "processed": processed}
+    return {"ok": True, "processed": processed, "nlp_available": _spacy_model is not None}
 
 
 # ── Bulletin import ───────────────────────────────────────────────────────────
@@ -870,6 +872,7 @@ def save_linkage(data: LinkageUpdate, db: Session = Depends(get_db)):
 
 @app.get("/stats")
 def get_stats(db: Session = Depends(get_db)):
+    from nlp_analysis import _nlp as _spacy_model
     reports = db.query(Report).all()
     total = len(reports)
 
@@ -986,6 +989,7 @@ def get_stats(db: Session = Depends(get_db)):
         "year_breakdown": [{"year": y, "count": c} for y, c in sorted(year_counts.items())],
         "neighbourhoods": [{"name": n, "count": c} for n, c in neighbourhood_counts.most_common(10)],
         "cities": [{"name": c, "count": n} for c, n in city_counts.most_common(15)],
+        "nlp_available": _spacy_model is not None,
         "map_points": [
             {
                 "report_id": r.report_id,

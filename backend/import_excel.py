@@ -398,7 +398,7 @@ def run():
                     explicit_bucket = "night"
             except ValueError:
                 explicit_bucket = ""
-            if "nlp" in nlp_result:
+            if "nlp" in nlp_result and nlp_result["nlp"].get("temporal") is not None:
                 nlp_result["nlp"]["temporal"]["time_of_day_bucket"] = explicit_bucket
                 nlp_result["nlp"]["temporal"]["time_of_day_source"] = "explicit_time"
 

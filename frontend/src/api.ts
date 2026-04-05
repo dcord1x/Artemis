@@ -58,7 +58,7 @@ export const api = {
     req<{ ok: boolean; ai_suggestions: Record<string, any> }>(`/reports/${reportId}/analyze`, { method: 'POST' }),
 
   batchAnalyze: () =>
-    req<{ ok: boolean; processed: number }>('/reports/batch-analyze', { method: 'POST' }),
+    req<{ ok: boolean; processed: number; nlp_available: boolean }>('/reports/batch-analyze', { method: 'POST' }),
 
   // ── Research / pattern analysis ─────────────────────────────────────────
 

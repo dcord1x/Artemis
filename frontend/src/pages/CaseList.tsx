@@ -189,7 +189,13 @@ export default function CaseList() {
     setBatchResult(null);
     try {
       const result = await api.batchAnalyze();
-      setBatchResult(`NLP run on ${result.processed} case${result.processed !== 1 ? 's' : ''}`);
+      if (result.nlp_available === false) {
+        setBatchResult('NLP unavailable — install spaCy model (en_core_web_sm)');
+      } else if (result.processed === 0) {
+        setBatchResult('All cases already analyzed');
+      } else {
+        setBatchResult(`NLP run on ${result.processed} case${result.processed !== 1 ? 's' : ''}`);
+      }
       load(); // refresh list so NLP dots update
     } catch (e: any) {
       setBatchResult(e?.message || 'Batch NLP failed');

@@ -228,6 +228,7 @@ export interface NlpViolenceCategory {
 export interface Stats {
   total: number;
   coded: number;
+  nlp_available: boolean;
   coercion: { count: number; pct: number };
   movement: { count: number; pct: number };
   physical_force: { count: number; pct: number };
