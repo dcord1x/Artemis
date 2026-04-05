@@ -478,9 +478,19 @@ class BulkSaveRequest(PydanticBaseModel):
 @app.post("/check-duplicates")
 def check_duplicates(items: list[DupCheckItem], db: Session = Depends(get_db)):
     """Check a list of parsed incidents against existing reports before import."""
+    from similarity import word_jaccard
+
+    # Pre-load candidates grouped by date for the fuzzy pass — avoids N×all-reports queries
+    all_dates = {item.incident_date.strip() for item in items if item.incident_date.strip()}
+    candidates_by_date: dict[str, list] = {}
+    for d in all_dates:
+        candidates_by_date[d] = db.query(Report).filter(Report.incident_date == d).all()
+    # Also a no-date bucket for items whose date is blank
+    candidates_no_date: list = []  # populated lazily below
+
     results = []
     for item in items:
-        # Exact match via narrative hash
+        # 1. Exact match via narrative hash
         if item.raw_narrative.strip():
             h = _narrative_hash(item.raw_narrative)
             exact = db.query(Report).filter(Report.narrative_hash == h).first()
@@ -488,7 +498,34 @@ def check_duplicates(items: list[DupCheckItem], db: Session = Depends(get_db)):
                 results.append({"index": item.index, "status": "exact", "matched_report_id": exact.report_id})
                 continue
 
-        # Possible match: same incident_date AND city (both non-empty)
+        # 2. Fuzzy narrative match — handles PDF vs Excel text format differences.
+        #    Uses word Jaccard overlap (stopwords removed) on same-date candidates.
+        #    Threshold 0.70: high enough to avoid false positives, low enough to
+        #    survive minor rephrasing between PDF extraction and Excel synopsis.
+        if item.raw_narrative.strip():
+            date = item.incident_date.strip()
+            if date:
+                pool = candidates_by_date.get(date, [])
+            else:
+                # Lazy-load all reports as fallback pool (blank date)
+                if not candidates_no_date:
+                    candidates_no_date.extend(db.query(Report).all())
+                pool = candidates_no_date
+
+            best_match = None
+            best_score = 0.0
+            for c in pool:
+                if not c.raw_narrative:
+                    continue
+                score, _ = word_jaccard(item.raw_narrative, c.raw_narrative)
+                if score > best_score:
+                    best_score = score
+                    best_match = c
+            if best_match and best_score >= 0.70:
+                results.append({"index": item.index, "status": "possible", "matched_report_id": best_match.report_id})
+                continue
+
+        # 3. Possible match: same incident_date AND city (both non-empty)
         date = item.incident_date.strip()
         city = item.city.strip()
         if date and city:

@@ -16,6 +16,25 @@ All Python source files live in `backend/`. The entry point is `main.py`; run wi
 
 Also mounts the pre-built React bundle from `frontend/dist/` at `/` so a single Python process serves everything in production.
 
+### Duplicate Detection
+
+`main.py` exports two mechanisms used during bulk import:
+
+**`_narrative_hash(raw: str) → str`** (internal helper)
+Normalizes the narrative text — collapses all whitespace to single spaces, strips, lowercases — then returns a SHA-256 hex digest. Stored in `Report.narrative_hash` on every save.
+
+**`POST /check-duplicates`**
+Called by `ImportBulletin.tsx` before the analyst commits a bulk import. For each item in the submitted list it runs three checks in order (first match wins):
+
+1. **Exact match** — computes the narrative hash and queries `Report.narrative_hash`. Trivial formatting differences (extra spaces, line breaks) are ignored; any content change produces a different hash.
+2. **Fuzzy narrative match** — uses word Jaccard overlap (stopwords removed, via `similarity.word_jaccard`) against existing reports sharing the same `incident_date`. A score ≥ 0.70 is flagged as `"possible"`. This step catches the same incident appearing in different text formats — e.g. PDF column extraction vs Excel synopsis cell — which produce different hashes but share most meaningful words.
+3. **Date + city fallback** — if no fuzzy match, checks whether any existing report shares the same `incident_date` AND `city` (case-insensitive). Catches re-submitted reports that were lightly edited.
+
+Returns `status: "exact" | "possible" | "new"` per item plus the `matched_report_id` for non-new results. The UI surfaces this before save so the analyst can decide whether to skip or override.
+
+**`POST /bulk-save`**
+Repeats the exact-hash check for safety at save time and silently skips any incident whose narrative already exists, returning a `skipped` array in the response.
+
 ---
 
 ## models.py — Data Model

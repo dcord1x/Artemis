@@ -67,8 +67,52 @@ Base URL: `http://localhost:8000` (all routes are prefixed with `/api/` when ser
 |---|---|---|
 | `POST` | `/parse-bulletin` | Upload PDF/text bulletin; returns parsed field values |
 | `POST` | `/parse-excel` | Upload Excel file; returns array of parsed incident rows |
-| `POST` | `/check-duplicates` | Check if narratives match existing records (hash-based) |
-| `POST` | `/bulk-save` | Save an array of parsed incidents in one call |
+| `POST` | `/check-duplicates` | Check a list of parsed incidents against existing records before import (see below) |
+| `POST` | `/bulk-save` | Save an array of parsed incidents; silently skips exact duplicates |
+
+### POST /check-duplicates — Detail
+
+Accepts an array of `DupCheckItem` objects and returns a status for each before the analyst commits a bulk import.
+
+**Request body:**
+```json
+[
+  {
+    "index": 0,
+    "raw_narrative": "string",
+    "incident_date": "YYYY-MM-DD",
+    "city": "string"
+  }
+]
+```
+
+**Response:**
+```json
+{
+  "results": [
+    { "index": 0, "status": "exact",    "matched_report_id": "RLA-..." },
+    { "index": 1, "status": "possible", "matched_report_id": "RLA-..." },
+    { "index": 2, "status": "new" }
+  ]
+}
+```
+
+**Status values:**
+
+| Status | How it is determined |
+|---|---|
+| `exact` | SHA-256 hash of the normalized narrative matches an existing `narrative_hash` — the text is identical |
+| `possible` | Fuzzy narrative similarity ≥ 0.70 (word Jaccard, stopwords removed) against same-date candidates **or** same `incident_date` AND `city` (case-insensitive) as an existing report |
+| `new` | No match found; safe to import |
+
+**Match checks run in order (first match wins):**
+1. **Exact hash** — SHA-256 of whitespace-normalized, lowercased narrative.
+2. **Fuzzy narrative** — word Jaccard overlap ≥ 0.70 against existing reports with the same `incident_date` (or all reports if date is blank). Catches the same incident represented in different text formats, e.g. PDF extraction vs Excel synopsis column.
+3. **Date + city fallback** — same `incident_date` AND `city` (case-insensitive). Catches lightly edited re-submissions when fuzzy text similarity is below threshold.
+
+**Hash algorithm:** narrative is whitespace-normalized (`\s+` → single space, trimmed, lowercased) then SHA-256 encoded. This means trivial formatting differences (extra spaces, line breaks) are ignored, but any content change produces a different hash.
+
+**`/bulk-save` behavior:** also runs the exact-hash check for each incident and silently skips any that already exist, returning `skipped: [report_id, ...]` in the response.
 
 ---
 
