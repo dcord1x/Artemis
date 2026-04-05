@@ -523,11 +523,15 @@ def check_duplicates(items: list[DupCheckItem], db: Session = Depends(get_db)):
         #    Excel synopsis (short) contained within a full PDF bulletin entry (long)
         #    still scores high even though Jaccard alone would be dragged down by the
         #    extra header/label words in the bulletin.  Threshold 0.45.
+        #    Pool: same-date candidates first; fall back to ALL records when pool is
+        #    empty (PDF parser may have stored the date differently than Excel parser).
         if item.raw_narrative.strip():
             date = item.incident_date.strip()
-            if date:
-                pool = candidates_by_date.get(date, [])
-            else:
+            pool = candidates_by_date.get(date, []) if date else []
+            if not pool:
+                # Date filter produced nothing — scan everything so a date-format
+                # mismatch between PDF-stored records and Excel-parsed dates doesn't
+                # cause us to miss real duplicates.
                 if not candidates_no_date:
                     candidates_no_date.extend(db.query(Report).all())
                 pool = candidates_no_date
