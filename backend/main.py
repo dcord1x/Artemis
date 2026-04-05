@@ -497,6 +497,16 @@ class BulkSaveRequest(PydanticBaseModel):
     source_organization: str = ""
 
 
+def _matched_info(report) -> dict:
+    """Return a brief preview of a matched DB record for the duplicate review modal."""
+    narrative = report.raw_narrative or ""
+    return {
+        "incident_date": report.incident_date or "",
+        "city": report.city or "",
+        "narrative_preview": narrative[:120].strip(),
+    }
+
+
 @app.post("/check-duplicates")
 def check_duplicates(items: list[DupCheckItem], db: Session = Depends(get_db)):
     """Check a list of parsed incidents against existing reports before import."""
@@ -516,7 +526,11 @@ def check_duplicates(items: list[DupCheckItem], db: Session = Depends(get_db)):
             h = _narrative_hash(item.raw_narrative)
             exact = db.query(Report).filter(Report.narrative_hash == h).first()
             if exact:
-                results.append({"index": item.index, "status": "exact", "matched_report_id": exact.report_id})
+                results.append({
+                    "index": item.index, "status": "exact",
+                    "matched_report_id": exact.report_id,
+                    "matched_info": _matched_info(exact),
+                })
                 continue
 
         # 2. Fuzzy narrative match — uses max(Jaccard, overlap-coefficient) so that an
@@ -529,9 +543,6 @@ def check_duplicates(items: list[DupCheckItem], db: Session = Depends(get_db)):
             date = item.incident_date.strip()
             pool = candidates_by_date.get(date, []) if date else []
             if not pool:
-                # Date filter produced nothing — scan everything so a date-format
-                # mismatch between PDF-stored records and Excel-parsed dates doesn't
-                # cause us to miss real duplicates.
                 if not candidates_no_date:
                     candidates_no_date.extend(db.query(Report).all())
                 pool = candidates_no_date
@@ -545,9 +556,12 @@ def check_duplicates(items: list[DupCheckItem], db: Session = Depends(get_db)):
                 if score > best_score:
                     best_score = score
                     best_match = c
-            print(f"[dup-check] idx={item.index} date={date!r} pool={len(pool)} best_score={best_score:.3f} best_id={best_match.report_id if best_match else None}")
             if best_match and best_score >= 0.45:
-                results.append({"index": item.index, "status": "possible", "matched_report_id": best_match.report_id})
+                results.append({
+                    "index": item.index, "status": "possible",
+                    "matched_report_id": best_match.report_id,
+                    "matched_info": _matched_info(best_match),
+                })
                 continue
 
         # 3. Possible match: same incident_date AND city (both non-empty)
@@ -559,7 +573,11 @@ def check_duplicates(items: list[DupCheckItem], db: Session = Depends(get_db)):
                 Report.city.ilike(city),
             ).first()
             if possible:
-                results.append({"index": item.index, "status": "possible", "matched_report_id": possible.report_id})
+                results.append({
+                    "index": item.index, "status": "possible",
+                    "matched_report_id": possible.report_id,
+                    "matched_info": _matched_info(possible),
+                })
                 continue
 
         results.append({"index": item.index, "status": "new"})

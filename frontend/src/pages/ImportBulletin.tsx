@@ -1,6 +1,8 @@
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Upload, FileText, Check, AlertTriangle, ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
+import DupReviewModal from '../components/DupReviewModal';
+import type { DupEntry } from '../components/DupReviewModal';
 
 interface ParsedIncident {
   raw_narrative: string;
@@ -73,7 +75,9 @@ export default function ImportBulletin() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [dupWarning, setDupWarning] = useState<{ count: number; ids: string[] } | null>(null);
-  const [dupStatus, setDupStatus] = useState<Record<number, { status: string; matchedId: string }>>({});
+  const [dupStatus, setDupStatus] = useState<Record<number, DupEntry>>({});
+  const [dupReviewOpen, setDupReviewOpen] = useState(false);
+  const [dupDecisions, setDupDecisions] = useState<Record<number, boolean>>({});
 
   const [incidents, setIncidents] = useState<ParsedIncident[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -118,13 +122,17 @@ export default function ImportBulletin() {
         })
           .then((r) => r.json())
           .then((dup) => {
-            const map: Record<number, { status: string; matchedId: string }> = {};
+            const map: Record<number, DupEntry> = {};
             for (const r of dup.results || []) {
-              if (r.status !== 'new') map[r.index] = { status: r.status, matchedId: r.matched_report_id };
+              if (r.status !== 'new') map[r.index] = {
+                status: r.status,
+                matchedId: r.matched_report_id,
+                matchedInfo: r.matched_info,
+              };
             }
             setDupStatus(map);
           })
-          .catch(() => {/* non-critical, ignore */});
+          .catch((e) => console.warn('[check-duplicates]', e));
       }
     } catch (e: any) {
       setError(e.message || 'Network error');
@@ -140,12 +148,9 @@ export default function ImportBulletin() {
     if (file) handleFile(file);
   };
 
-  const handleSave = async () => {
-    const toSave = incidents.filter((_, i) => selected.has(i));
-    if (!toSave.length) return;
+  const doSave = async (toSave: ParsedIncident[]) => {
     setSaving(true);
     setDupWarning(null);
-    localStorage.setItem('analyst_name', analystName);
     try {
       const res = await fetch(`${BASE}/bulk-save`, {
         method: 'POST',
@@ -157,6 +162,32 @@ export default function ImportBulletin() {
       if (data.skipped > 0) setDupWarning({ count: data.skipped, ids: data.skipped_report_ids });
       if (data.saved > 0) navigate('/cases');
     } finally { setSaving(false); }
+  };
+
+  const handleSave = async () => {
+    if (!selected.size) return;
+    localStorage.setItem('analyst_name', analystName);
+    const flaggedIndices = Array.from(selected).filter(i => dupStatus[i]);
+    if (flaggedIndices.length > 0) {
+      const initial: Record<number, boolean> = {};
+      flaggedIndices.forEach(i => { initial[i] = false; });
+      setDupDecisions(initial);
+      setDupReviewOpen(true);
+      return;
+    }
+    await doSave(incidents.filter((_, i) => selected.has(i)));
+  };
+
+  const handleConfirmSave = async () => {
+    setDupReviewOpen(false);
+    const toSave = incidents.filter((_, i) => {
+      if (!selected.has(i)) return false;
+      const dup = dupStatus[i];
+      if (!dup) return true;
+      if (dup.status === 'exact') return false;
+      return dupDecisions[i] === true;
+    });
+    if (toSave.length) await doSave(toSave);
   };
 
   const toggleSelect = (i: number) => {
@@ -568,6 +599,18 @@ export default function ImportBulletin() {
       <style>{`
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       `}</style>
+
+      {dupReviewOpen && (
+        <DupReviewModal
+          incidents={incidents}
+          dupStatus={dupStatus}
+          flaggedIndices={Array.from(selected).filter(i => dupStatus[i]).sort((a, b) => a - b)}
+          decisions={dupDecisions}
+          onToggle={i => setDupDecisions(prev => ({ ...prev, [i]: !prev[i] }))}
+          onConfirm={handleConfirmSave}
+          onCancel={() => setDupReviewOpen(false)}
+        />
+      )}
     </div>
   );
 }
