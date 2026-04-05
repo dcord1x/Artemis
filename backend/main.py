@@ -282,10 +282,9 @@ def analyze_report(report_id: str, db: Session = Depends(get_db)):
         result["nlp"]["_source_report_id"] = report_id
         result["nlp"]["_analyzed_at"] = datetime.utcnow().isoformat()
 
-    # Merge into existing ai_suggestions, preserving any other keys
-    existing = r.ai_suggestions or {}
-    existing.update(result)
-    r.ai_suggestions = existing
+    # Merge into existing ai_suggestions, preserving any other keys.
+    # Use a new dict so SQLAlchemy detects the JSON column as changed.
+    r.ai_suggestions = {**(r.ai_suggestions or {}), **result}
     r.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(r)
@@ -313,8 +312,8 @@ def batch_analyze(db: Session = Depends(get_db)):
         if not r.raw_narrative or not r.raw_narrative.strip():
             continue
         result = analyze_narrative(r.raw_narrative)
-        existing.update(result)
-        r.ai_suggestions = existing
+        # Use a new dict so SQLAlchemy detects the JSON column as changed.
+        r.ai_suggestions = {**existing, **result}
         r.updated_at = datetime.utcnow()
         processed += 1
     db.commit()
