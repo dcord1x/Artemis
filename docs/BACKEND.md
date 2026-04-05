@@ -27,7 +27,7 @@ Normalizes the narrative text — collapses all whitespace to single spaces, str
 Called by `ImportBulletin.tsx` before the analyst commits a bulk import. For each item in the submitted list it runs three checks in order (first match wins):
 
 1. **Exact match** — computes the narrative hash and queries `Report.narrative_hash`. Trivial formatting differences (extra spaces, line breaks) are ignored; any content change produces a different hash.
-2. **Fuzzy narrative match** — uses word Jaccard overlap (stopwords removed, via `similarity.word_jaccard`) against existing reports sharing the same `incident_date`. A score ≥ 0.70 is flagged as `"possible"`. This step catches the same incident appearing in different text formats — e.g. PDF column extraction vs Excel synopsis cell — which produce different hashes but share most meaningful words.
+2. **Fuzzy narrative match** — uses `max(Jaccard, overlap-coefficient)` via `_narrative_similarity()` in `main.py` against existing reports sharing the same `incident_date`. Threshold ≥ 0.45. The overlap coefficient (`|A∩B| / min(|A|,|B|)`) is key: an Excel synopsis (short) that is topically contained within a full PDF bulletin entry (long with headers/labels) scores high on overlap even when Jaccard alone is dragged down by the extra bulletin words.
 3. **Date + city fallback** — if no fuzzy match, checks whether any existing report shares the same `incident_date` AND `city` (case-insensitive). Catches re-submitted reports that were lightly edited.
 
 Returns `status: "exact" | "possible" | "new"` per item plus the `matched_report_id` for non-new results. The UI surfaces this before save so the analyst can decide whether to skip or override.

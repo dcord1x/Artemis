@@ -102,12 +102,12 @@ Accepts an array of `DupCheckItem` objects and returns a status for each before 
 | Status | How it is determined |
 |---|---|
 | `exact` | SHA-256 hash of the normalized narrative matches an existing `narrative_hash` — the text is identical |
-| `possible` | Fuzzy narrative similarity ≥ 0.70 (word Jaccard, stopwords removed) against same-date candidates **or** same `incident_date` AND `city` (case-insensitive) as an existing report |
+| `possible` | Fuzzy narrative similarity ≥ 0.45 (max of Jaccard and overlap-coefficient, stopwords removed) against same-date candidates **or** same `incident_date` AND `city` (case-insensitive) as an existing report |
 | `new` | No match found; safe to import |
 
 **Match checks run in order (first match wins):**
 1. **Exact hash** — SHA-256 of whitespace-normalized, lowercased narrative.
-2. **Fuzzy narrative** — word Jaccard overlap ≥ 0.70 against existing reports with the same `incident_date` (or all reports if date is blank). Catches the same incident represented in different text formats, e.g. PDF extraction vs Excel synopsis column.
+2. **Fuzzy narrative** — `max(Jaccard, overlap-coefficient)` ≥ 0.45 against existing reports with the same `incident_date` (or all reports if date is blank). The overlap coefficient (`|A∩B| / min(|A|,|B|)`) handles the PDF-vs-Excel case where the synopsis is topically a subset of a longer bulletin entry; Jaccard alone would be dragged down by the extra header/label words in the bulletin.
 3. **Date + city fallback** — same `incident_date` AND `city` (case-insensitive). Catches lightly edited re-submissions when fuzzy text similarity is below threshold.
 
 **Hash algorithm:** narrative is whitespace-normalized (`\s+` → single space, trimmed, lowercased) then SHA-256 encoded. This means trivial formatting differences (extra spaces, line breaks) are ignored, but any content change produces a different hash.

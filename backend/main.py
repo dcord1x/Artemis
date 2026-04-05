@@ -18,12 +18,34 @@ from models import Report, CaseLinkage, init_db, get_db
 from schemas import ReportCreate, ReportUpdate, ReportOut, SuggestRequest
 from ai import get_ai_suggestions, parse_bulletin
 from parser import parse_bulletin_rules
-from similarity import compute_similarity
+from similarity import compute_similarity, STOPWORDS
 
 
 def _narrative_hash(raw: str) -> str:
     normalized = re.sub(r'\s+', ' ', raw.strip()).lower()
     return hashlib.sha256(normalized.encode('utf-8')).hexdigest()
+
+
+def _narrative_similarity(text_a: str, text_b: str) -> float:
+    """
+    Returns the higher of Jaccard and overlap-coefficient similarity.
+
+    Overlap coefficient = |A ∩ B| / min(|A|, |B|).
+
+    This handles the common cross-format case where one text (e.g. an Excel
+    synopsis cell) is topically a subset of the other (e.g. a full PDF bulletin
+    entry that includes headers, dates, labels, and the same synopsis text).
+    In that case Jaccard is dragged down by the extra bulletin words, but the
+    overlap coefficient stays high because the smaller set is mostly covered.
+    """
+    wa = {w.lower() for w in text_a.split() if len(w) > 2 and w.lower() not in STOPWORDS}
+    wb = {w.lower() for w in text_b.split() if len(w) > 2 and w.lower() not in STOPWORDS}
+    if not wa or not wb:
+        return 0.0
+    inter = len(wa & wb)
+    jaccard = inter / len(wa | wb)
+    overlap = inter / min(len(wa), len(wb))
+    return max(jaccard, overlap)
 
 
 app = FastAPI(title="Red Light Alert API")
@@ -478,15 +500,14 @@ class BulkSaveRequest(PydanticBaseModel):
 @app.post("/check-duplicates")
 def check_duplicates(items: list[DupCheckItem], db: Session = Depends(get_db)):
     """Check a list of parsed incidents against existing reports before import."""
-    from similarity import word_jaccard
 
     # Pre-load candidates grouped by date for the fuzzy pass — avoids N×all-reports queries
     all_dates = {item.incident_date.strip() for item in items if item.incident_date.strip()}
     candidates_by_date: dict[str, list] = {}
     for d in all_dates:
         candidates_by_date[d] = db.query(Report).filter(Report.incident_date == d).all()
-    # Also a no-date bucket for items whose date is blank
-    candidates_no_date: list = []  # populated lazily below
+    # Lazy no-date bucket
+    candidates_no_date: list = []
 
     results = []
     for item in items:
@@ -498,16 +519,15 @@ def check_duplicates(items: list[DupCheckItem], db: Session = Depends(get_db)):
                 results.append({"index": item.index, "status": "exact", "matched_report_id": exact.report_id})
                 continue
 
-        # 2. Fuzzy narrative match — handles PDF vs Excel text format differences.
-        #    Uses word Jaccard overlap (stopwords removed) on same-date candidates.
-        #    Threshold 0.70: high enough to avoid false positives, low enough to
-        #    survive minor rephrasing between PDF extraction and Excel synopsis.
+        # 2. Fuzzy narrative match — uses max(Jaccard, overlap-coefficient) so that an
+        #    Excel synopsis (short) contained within a full PDF bulletin entry (long)
+        #    still scores high even though Jaccard alone would be dragged down by the
+        #    extra header/label words in the bulletin.  Threshold 0.45.
         if item.raw_narrative.strip():
             date = item.incident_date.strip()
             if date:
                 pool = candidates_by_date.get(date, [])
             else:
-                # Lazy-load all reports as fallback pool (blank date)
                 if not candidates_no_date:
                     candidates_no_date.extend(db.query(Report).all())
                 pool = candidates_no_date
@@ -517,11 +537,11 @@ def check_duplicates(items: list[DupCheckItem], db: Session = Depends(get_db)):
             for c in pool:
                 if not c.raw_narrative:
                     continue
-                score, _ = word_jaccard(item.raw_narrative, c.raw_narrative)
+                score = _narrative_similarity(item.raw_narrative, c.raw_narrative)
                 if score > best_score:
                     best_score = score
                     best_match = c
-            if best_match and best_score >= 0.70:
+            if best_match and best_score >= 0.45:
                 results.append({"index": item.index, "status": "possible", "matched_report_id": best_match.report_id})
                 continue
 
