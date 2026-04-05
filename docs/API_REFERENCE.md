@@ -90,12 +90,20 @@ Accepts an array of `DupCheckItem` objects and returns a status for each before 
 ```json
 {
   "results": [
-    { "index": 0, "status": "exact",    "matched_report_id": "RLA-..." },
-    { "index": 1, "status": "possible", "matched_report_id": "RLA-..." },
+    {
+      "index": 0, "status": "exact", "matched_report_id": "RLA-...",
+      "matched_info": { "incident_date": "2020-02-08", "city": "Vancouver", "narrative_preview": "Worker was picked up on foot…" }
+    },
+    {
+      "index": 1, "status": "possible", "matched_report_id": "RLA-...",
+      "matched_info": { "incident_date": "2019-12-15", "city": "Surrey", "narrative_preview": "…" }
+    },
     { "index": 2, "status": "new" }
   ]
 }
 ```
+
+`matched_info` is included for all non-`new` results and contains the first 120 characters of the matched record's narrative plus its date and city. Used by `DupReviewModal` to show side-by-side previews without a second API call.
 
 **Status values:**
 
@@ -112,7 +120,7 @@ Accepts an array of `DupCheckItem` objects and returns a status for each before 
 
 **Hash algorithm:** narrative is whitespace-normalized (`\s+` → single space, trimmed, lowercased) then SHA-256 encoded. This means trivial formatting differences (extra spaces, line breaks) are ignored, but any content change produces a different hash.
 
-**`/bulk-save` behavior:** also runs the exact-hash check for each incident and silently skips any that already exist, returning `skipped: [report_id, ...]` in the response.
+**`/bulk-save` behavior:** also runs the exact-hash check for each incident and silently skips any that already exist, returning `skipped: [report_id, ...]` in the response. "Possible" duplicates that the analyst approved in `DupReviewModal` are sent here and saved normally (no hash collision, so they pass through).
 
 ---
 

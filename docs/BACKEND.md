@@ -23,17 +23,23 @@ Also mounts the pre-built React bundle from `frontend/dist/` at `/` so a single 
 **`_narrative_hash(raw: str) → str`** (internal helper)
 Normalizes the narrative text — collapses all whitespace to single spaces, strips, lowercases — then returns a SHA-256 hex digest. Stored in `Report.narrative_hash` on every save.
 
+**`_narrative_similarity(text_a, text_b) → float`** (internal helper)
+Returns `max(Jaccard, overlap-coefficient)` on meaningful words (3+ chars, stopwords removed). The overlap coefficient (`|A∩B| / min(|A|,|B|)`) handles cross-format matching where one text is a topical subset of the other (e.g. an Excel synopsis cell vs a full PDF bulletin entry with headers/labels).
+
+**`_matched_info(report) → dict`** (internal helper)
+Extracts `{incident_date, city, narrative_preview}` from a matched DB record. The preview is the first 120 chars of `raw_narrative`. Included in the check-duplicates response so the frontend can show side-by-side comparisons in `DupReviewModal` without a second API call.
+
 **`POST /check-duplicates`**
-Called by `ImportBulletin.tsx` before the analyst commits a bulk import. For each item in the submitted list it runs three checks in order (first match wins):
+Called by `ImportBulletin.tsx` after parse. For each item it runs three checks in order (first match wins):
 
-1. **Exact match** — computes the narrative hash and queries `Report.narrative_hash`. Trivial formatting differences (extra spaces, line breaks) are ignored; any content change produces a different hash.
-2. **Fuzzy narrative match** — uses `max(Jaccard, overlap-coefficient)` via `_narrative_similarity()` in `main.py` against existing reports sharing the same `incident_date`. Threshold ≥ 0.45. The overlap coefficient (`|A∩B| / min(|A|,|B|)`) is key: an Excel synopsis (short) that is topically contained within a full PDF bulletin entry (long with headers/labels) scores high on overlap even when Jaccard alone is dragged down by the extra bulletin words.
-3. **Date + city fallback** — if no fuzzy match, checks whether any existing report shares the same `incident_date` AND `city` (case-insensitive). Catches re-submitted reports that were lightly edited.
+1. **Exact match** — SHA-256 hash query against `Report.narrative_hash`.
+2. **Fuzzy narrative match** — `_narrative_similarity()` ≥ 0.45 against same-date candidates. Falls back to scanning all records when no records exist for that date (handles PDF-vs-Excel date format differences).
+3. **Date + city fallback** — exact `incident_date` AND case-insensitive `city` match.
 
-Returns `status: "exact" | "possible" | "new"` per item plus the `matched_report_id` for non-new results. The UI surfaces this before save so the analyst can decide whether to skip or override.
+Returns `status: "exact" | "possible" | "new"` per item, `matched_report_id`, and `matched_info` for non-new results. Results are surfaced as badges on import cards; when Save is clicked the frontend's `DupReviewModal` intercepts and lets the analyst approve or skip each flagged item before the actual save call.
 
 **`POST /bulk-save`**
-Repeats the exact-hash check for safety at save time and silently skips any incident whose narrative already exists, returning a `skipped` array in the response.
+Repeats the exact-hash check for safety at save time and silently skips any incident whose narrative already exists. "Possible" duplicates approved by the analyst in `DupReviewModal` are sent here and saved normally (no hash collision). Returns `{saved, report_ids, skipped, skipped_report_ids}`.
 
 ---
 

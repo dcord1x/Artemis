@@ -45,7 +45,8 @@ Interactive Leaflet map:
 PDF or Excel upload interface:
 - Choose AI parse (Claude) or rules-based parse
 - Review extracted fields before saving
-- Duplicate detection runs automatically before save
+- Duplicate detection runs automatically in the background after parse; exact matches (red badge) and possible matches (amber badge) are shown on each card
+- When Save is clicked, if any selected incident is flagged, the **DupReviewModal** opens for analyst review before any data is written
 - Supports bulk save of multiple incidents from one file
 
 ### SimilarCasesPage.tsx
@@ -83,6 +84,15 @@ Collapsible group of `FieldRow` components. Shows a progress bar (fields filled 
 
 ### TimelineStrip.tsx
 Visual strip showing the provenance state of all fields in a section at a glance. Color bands: grey (unset), yellow (ai_suggested), blue (analyst_filled), green (reviewed).
+
+### DupReviewModal.tsx
+Pre-save duplicate review modal. Opens when the analyst clicks Save and one or more selected incidents are flagged as duplicates. For each flagged item it shows:
+- Incoming vs matched record narrative previews (side by side, 120-char snippets)
+- Status badge: **Exact duplicate** (red, always skipped — backend blocks these) or **Possible duplicate** (amber)
+- Per-item decision toggle: **Skip** (default) or **Import anyway** (analyst override)
+- Footer summary counts and a "Confirm Import" button that sends only approved items to `/bulk-save`
+
+Escape key and clicking the backdrop close the modal without saving.
 
 ### GisMapModal.tsx
 Inline Leaflet map modal for geocoding a single address. Shows the geocoded point and lets analyst accept or adjust coordinates before saving.
