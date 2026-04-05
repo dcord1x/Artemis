@@ -371,6 +371,7 @@ async def parse_excel_endpoint(file: UploadFile = File(...)):
         wb = openpyxl.load_workbook(tmp_path, read_only=True, data_only=True)
         ws = wb["All Incidents"] if "All Incidents" in wb.sheetnames else wb.active
         rows = list(ws.iter_rows(values_only=True))
+        wb.close()
     finally:
         os.unlink(tmp_path)
 
