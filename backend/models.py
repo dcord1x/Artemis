@@ -163,6 +163,7 @@ class Report(Base):
     audit_log = Column(JSON, default=list)
     ai_suggestions = Column(JSON, default=dict)
     tags = Column(JSON, default=list)
+    narrative_hash = Column(String(64), nullable=True, index=True)
 
 
 class CaseLinkage(Base):
@@ -228,6 +229,8 @@ def init_db():
         ("destination_city", "VARCHAR DEFAULT ''"),
         ("destination_city_confidence", "VARCHAR DEFAULT ''"),
         ("cross_city_movement", "VARCHAR DEFAULT ''"),
+        # Deduplication
+        ("narrative_hash", "VARCHAR(64) DEFAULT NULL"),
     ]
     with engine.connect() as conn:
         for col_name, col_def in _new_columns:

@@ -72,6 +72,8 @@ export default function ImportBulletin() {
   const [parsing, setParsing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [dupWarning, setDupWarning] = useState<{ count: number; ids: string[] } | null>(null);
+  const [dupStatus, setDupStatus] = useState<Record<number, { status: string; matchedId: string }>>({});
 
   const [incidents, setIncidents] = useState<ParsedIncident[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -87,6 +89,7 @@ export default function ImportBulletin() {
     setIncidents([]);
     setSelected(new Set());
     setParseMethod(null);
+    setDupStatus({});
 
     try {
       const form = new FormData();
@@ -96,9 +99,33 @@ export default function ImportBulletin() {
       const res = await fetch(endpoint, { method: 'POST', body: form });
       const data = await res.json();
       if (!res.ok) { setError(data.detail || 'Parse failed'); return; }
-      setIncidents(data.incidents || []);
+      const parsed: any[] = data.incidents || [];
+      setIncidents(parsed);
       setParseMethod(data.method || null);
-      setSelected(new Set(data.incidents.map((_: any, i: number) => i)));
+      setSelected(new Set(parsed.map((_: any, i: number) => i)));
+
+      // Check each incident for duplicates in the background
+      if (parsed.length > 0) {
+        fetch(`${BASE}/check-duplicates`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(parsed.map((inc: any, i: number) => ({
+            index: i,
+            raw_narrative: inc.raw_narrative || '',
+            incident_date: inc.incident_date || '',
+            city: inc.city || '',
+          }))),
+        })
+          .then((r) => r.json())
+          .then((dup) => {
+            const map: Record<number, { status: string; matchedId: string }> = {};
+            for (const r of dup.results || []) {
+              if (r.status !== 'new') map[r.index] = { status: r.status, matchedId: r.matched_report_id };
+            }
+            setDupStatus(map);
+          })
+          .catch(() => {/* non-critical, ignore */});
+      }
     } catch (e: any) {
       setError(e.message || 'Network error');
     } finally {
@@ -117,6 +144,7 @@ export default function ImportBulletin() {
     const toSave = incidents.filter((_, i) => selected.has(i));
     if (!toSave.length) return;
     setSaving(true);
+    setDupWarning(null);
     localStorage.setItem('analyst_name', analystName);
     try {
       const res = await fetch(`${BASE}/bulk-save`, {
@@ -126,7 +154,8 @@ export default function ImportBulletin() {
       });
       const data = await res.json();
       if (!res.ok) { setError(data.detail || 'Save failed'); return; }
-      navigate('/cases');
+      if (data.skipped > 0) setDupWarning({ count: data.skipped, ids: data.skipped_report_ids });
+      if (data.saved > 0) navigate('/cases');
     } finally { setSaving(false); }
   };
 
@@ -229,6 +258,20 @@ export default function ImportBulletin() {
             {error}
           </div>
         )}
+        {dupWarning && (
+          <div style={{
+            display: 'flex', alignItems: 'flex-start', gap: 10,
+            padding: '12px 16px', borderRadius: 8, marginBottom: 16,
+            background: 'var(--amber-pale)', border: '1px solid var(--amber-border)',
+            color: 'var(--amber)', fontSize: 13,
+          }}>
+            <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: 1 }} />
+            <div>
+              <strong>{dupWarning.count} duplicate{dupWarning.count !== 1 ? 's' : ''} skipped</strong>
+              {' — already in the database as '}{dupWarning.ids.join(', ')}.
+            </div>
+          </div>
+        )}
 
         {/* Drop zone */}
         {incidents.length === 0 && !parsing && (
@@ -298,6 +341,7 @@ export default function ImportBulletin() {
               const style = ENTRY_STYLE[inc.entry_type] || ENTRY_STYLE.incident;
               const isSelected = selected.has(i);
               const isExpanded = expanded.has(i);
+              const dup = dupStatus[i];
 
               return (
                 <div
@@ -328,6 +372,19 @@ export default function ImportBulletin() {
                     }}>
                       {style.label}
                     </span>
+
+                    {dup && (
+                      <span title={`Matched: ${dup.matchedId}`} style={{
+                        display: 'flex', alignItems: 'center', gap: 4,
+                        padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 500, whiteSpace: 'nowrap',
+                        color: dup.status === 'exact' ? 'var(--accent)' : 'var(--amber)',
+                        background: dup.status === 'exact' ? 'var(--accent-pale)' : 'var(--amber-pale)',
+                        border: `1px solid ${dup.status === 'exact' ? 'var(--accent-border)' : 'var(--amber-border)'}`,
+                      }}>
+                        <AlertTriangle size={10} />
+                        {dup.status === 'exact' ? 'Duplicate' : 'Possible duplicate'}
+                      </span>
+                    )}
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, flexWrap: 'wrap' }}>
                       {inc.incident_date && (

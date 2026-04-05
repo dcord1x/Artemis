@@ -6,8 +6,10 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text as sql_text
 from typing import Optional
 import csv
+import hashlib
 import io
 import json
+import re
 import uuid
 import os
 from datetime import datetime
@@ -17,6 +19,12 @@ from schemas import ReportCreate, ReportUpdate, ReportOut, SuggestRequest
 from ai import get_ai_suggestions, parse_bulletin
 from parser import parse_bulletin_rules
 from similarity import compute_similarity
+
+
+def _narrative_hash(raw: str) -> str:
+    normalized = re.sub(r'\s+', ' ', raw.strip()).lower()
+    return hashlib.sha256(normalized.encode('utf-8')).hexdigest()
+
 
 app = FastAPI(title="Red Light Alert API")
 
@@ -139,8 +147,13 @@ def list_reports(
 
 @app.post("/reports", response_model=ReportOut)
 def create_report(data: ReportCreate, db: Session = Depends(get_db)):
+    h = _narrative_hash(data.raw_narrative)
+    existing = db.query(Report).filter(Report.narrative_hash == h).first()
+    if existing:
+        raise HTTPException(status_code=409,
+            detail=f"Duplicate narrative — already stored as {existing.report_id}")
     report_id = f"RLA-{datetime.utcnow().strftime('%Y%m%d')}-{str(uuid.uuid4())[:6].upper()}"
-    report = Report(report_id=report_id, **data.model_dump())
+    report = Report(report_id=report_id, narrative_hash=h, **data.model_dump())
     report.audit_log = [{"ts": datetime.utcnow().isoformat(), "action": "created", "by": data.analyst_name or "system"}]
     db.add(report)
     db.commit()
@@ -448,24 +461,69 @@ def visualize_parse(data: VisualizeRequest):
     }
 
 
+class DupCheckItem(PydanticBaseModel):
+    index: int
+    raw_narrative: str = ""
+    incident_date: str = ""
+    city: str = ""
+
+
 class BulkSaveRequest(PydanticBaseModel):
     incidents: list[dict]
     analyst_name: str = ""
     source_organization: str = ""
 
 
+@app.post("/check-duplicates")
+def check_duplicates(items: list[DupCheckItem], db: Session = Depends(get_db)):
+    """Check a list of parsed incidents against existing reports before import."""
+    results = []
+    for item in items:
+        # Exact match via narrative hash
+        if item.raw_narrative.strip():
+            h = _narrative_hash(item.raw_narrative)
+            exact = db.query(Report).filter(Report.narrative_hash == h).first()
+            if exact:
+                results.append({"index": item.index, "status": "exact", "matched_report_id": exact.report_id})
+                continue
+
+        # Possible match: same incident_date AND city (both non-empty)
+        date = item.incident_date.strip()
+        city = item.city.strip()
+        if date and city:
+            possible = db.query(Report).filter(
+                Report.incident_date == date,
+                Report.city.ilike(city),
+            ).first()
+            if possible:
+                results.append({"index": item.index, "status": "possible", "matched_report_id": possible.report_id})
+                continue
+
+        results.append({"index": item.index, "status": "new"})
+
+    return {"results": results}
+
+
 @app.post("/bulk-save")
 def bulk_save(data: BulkSaveRequest, db: Session = Depends(get_db)):
     """Save a list of pre-parsed incidents as draft reports."""
     saved = []
+    skipped = []
     for inc in data.incidents:
-        report_id = f"RLA-{datetime.utcnow().strftime('%Y%m%d')}-{str(uuid.uuid4())[:6].upper()}"
         raw = inc.get("raw_narrative", "")
         if not raw.strip():
             continue
 
+        h = _narrative_hash(raw)
+        existing = db.query(Report).filter(Report.narrative_hash == h).first()
+        if existing:
+            skipped.append(existing.report_id)
+            continue
+
+        report_id = f"RLA-{datetime.utcnow().strftime('%Y%m%d')}-{str(uuid.uuid4())[:6].upper()}"
         report = Report(
             report_id=report_id,
+            narrative_hash=h,
             raw_narrative=raw,
             source_organization=inc.get("source_organization") or data.source_organization,
             analyst_name=data.analyst_name,
@@ -515,7 +573,7 @@ def bulk_save(data: BulkSaveRequest, db: Session = Depends(get_db)):
         saved.append(report_id)
 
     db.commit()
-    return {"saved": len(saved), "report_ids": saved}
+    return {"saved": len(saved), "report_ids": saved, "skipped": len(skipped), "skipped_report_ids": skipped}
 
 
 # ── Export ────────────────────────────────────────────────────────────────────
