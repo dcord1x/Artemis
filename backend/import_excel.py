@@ -20,7 +20,13 @@ from sqlalchemy.orm import Session
 
 sys.path.insert(0, os.path.dirname(__file__))
 from models import Report, init_db, SessionLocal
-from nlp_analysis import analyze_narrative, extract_locations_from_synopsis
+try:
+    from nlp_analysis import analyze_narrative, extract_locations_from_synopsis
+    _NLP_AVAILABLE = True
+except Exception:
+    _NLP_AVAILABLE = False
+    def analyze_narrative(text): return {}
+    def extract_locations_from_synopsis(text): return {}
 
 EXCEL_PATH = os.path.join(os.path.dirname(__file__), "..", "DTE DATASET for QGIS.xlsx")
 SOURCE_ORG = "Red Light Alert"
