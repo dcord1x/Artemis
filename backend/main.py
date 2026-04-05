@@ -541,6 +541,7 @@ def check_duplicates(items: list[DupCheckItem], db: Session = Depends(get_db)):
                 if score > best_score:
                     best_score = score
                     best_match = c
+            print(f"[dup-check] idx={item.index} date={date!r} pool={len(pool)} best_score={best_score:.3f} best_id={best_match.report_id if best_match else None}")
             if best_match and best_score >= 0.45:
                 results.append({"index": item.index, "status": "possible", "matched_report_id": best_match.report_id})
                 continue
