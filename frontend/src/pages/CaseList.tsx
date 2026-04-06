@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Search, SlidersHorizontal, Trash2, FileText, Download, X, BrainCircuit } from 'lucide-react';
+import { Search, SlidersHorizontal, Trash2, FileText, Download, X, BrainCircuit, CheckSquare } from 'lucide-react';
 import { api } from '../api';
 import type { Report } from '../types';
 
@@ -105,6 +105,7 @@ export default function CaseList() {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [batchAnalyzing, setBatchAnalyzing] = useState(false);
   const [batchResult, setBatchResult] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   // Standard filters — initialised from URL params (set by Analysis drilldown links)
   const [search,          setSearch]          = useState(() => searchParams.get('search') || '');
@@ -246,7 +247,44 @@ export default function CaseList() {
     e.stopPropagation();
     if (!confirm('Delete this report? This cannot be undone.')) return;
     await api.deleteReport(reportId);
+    setSelected(prev => { const n = new Set(prev); n.delete(reportId); return n; });
     load();
+  };
+
+  const handleDeleteSelected = async () => {
+    const ids = Array.from(selected);
+    if (!confirm(`Delete ${ids.length} selected report${ids.length !== 1 ? 's' : ''}? This cannot be undone.`)) return;
+    await api.deleteReports(ids);
+    setSelected(new Set());
+    load();
+  };
+
+  const handleDeleteAll = async () => {
+    const count = sortedReports.length;
+    if (!confirm(`Delete ALL ${count} visible report${count !== 1 ? 's' : ''}? This cannot be undone.`)) return;
+    await api.deleteReports(sortedReports.map(r => r.report_id));
+    setSelected(new Set());
+    load();
+  };
+
+  const allVisibleSelected = sortedReports.length > 0 && sortedReports.every(r => selected.has(r.report_id));
+
+  const toggleSelectAll = () => {
+    if (allVisibleSelected) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(sortedReports.map(r => r.report_id)));
+    }
+  };
+
+  const toggleSelect = (e: React.MouseEvent, reportId: string) => {
+    e.stopPropagation();
+    setSelected(prev => {
+      const n = new Set(prev);
+      if (n.has(reportId)) n.delete(reportId);
+      else n.add(reportId);
+      return n;
+    });
   };
 
   return (
@@ -380,6 +418,16 @@ export default function CaseList() {
         <button className="btn-ghost" onClick={() => api.exportGeoJson()} style={{ fontSize: 12.5 }}>
           <Download size={13} /> GeoJSON
         </button>
+        {reports.length > 0 && (
+          <button
+            className="btn-ghost"
+            onClick={handleDeleteAll}
+            style={{ fontSize: 12.5, color: 'var(--accent)' }}
+            title="Delete all currently visible reports"
+          >
+            <Trash2 size={13} /> Delete All
+          </button>
+        )}
       </div>
 
       {/* Active NLP filter chips — shown when navigating from Analysis */}
@@ -428,6 +476,41 @@ export default function CaseList() {
         </div>
       )}
 
+      {/* Bulk selection action bar */}
+      {selected.size > 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12,
+          padding: '7px 20px',
+          background: 'var(--blue-pale)',
+          borderBottom: '1px solid var(--blue-border)',
+          flexShrink: 0,
+        }}>
+          <CheckSquare size={14} style={{ color: 'var(--blue)' }} />
+          <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--blue)' }}>
+            {selected.size} selected
+          </span>
+          <button
+            onClick={handleDeleteSelected}
+            style={{
+              fontSize: 12.5, display: 'flex', alignItems: 'center', gap: 5,
+              padding: '3px 10px', borderRadius: 5, border: '1px solid var(--accent)',
+              background: 'none', color: 'var(--accent)', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif',
+            }}
+          >
+            <Trash2 size={12} /> Delete Selected
+          </button>
+          <button
+            onClick={() => setSelected(new Set())}
+            style={{
+              fontSize: 12, background: 'none', border: 'none', cursor: 'pointer',
+              color: 'var(--text-3)', fontFamily: 'DM Sans, sans-serif', textDecoration: 'underline',
+            }}
+          >
+            Clear selection
+          </button>
+        </div>
+      )}
+
       {/* Table */}
       <div style={{ flex: 1, overflow: 'auto' }}>
         {loading ? (
@@ -459,6 +542,15 @@ export default function CaseList() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
             <thead>
               <tr style={{ background: 'var(--surface)', borderBottom: '1.5px solid var(--border)', position: 'sticky', top: 0, zIndex: 1 }}>
+                <th style={{ padding: '9px 10px', width: 32 }}>
+                  <input
+                    type="checkbox"
+                    checked={allVisibleSelected}
+                    onChange={toggleSelectAll}
+                    title="Select / deselect all visible"
+                    style={{ cursor: 'pointer', accentColor: 'var(--blue)' }}
+                  />
+                </th>
                 {[
                   { h: 'ID',        title: '',                 align: 'left',   col: 'report_id' },
                   { h: 'Date',      title: 'Incident date',    align: 'left',   col: 'incident_date' },
@@ -510,13 +602,25 @@ export default function CaseList() {
                     onClick={() => navigate(`/code/${r.report_id}`)}
                     style={{
                       cursor: 'pointer',
-                      background: i % 2 === 0 ? 'var(--surface)' : 'var(--bg)',
+                      background: selected.has(r.report_id)
+                        ? 'var(--blue-pale)'
+                        : i % 2 === 0 ? 'var(--surface)' : 'var(--bg)',
                       borderBottom: '1px solid var(--border)',
                       transition: 'background 0.1s',
                     }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--accent-pale)')}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = i % 2 === 0 ? 'var(--surface)' : 'var(--bg)')}
+                    onMouseEnter={(e) => { if (!selected.has(r.report_id)) e.currentTarget.style.background = 'var(--accent-pale)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = selected.has(r.report_id) ? 'var(--blue-pale)' : i % 2 === 0 ? 'var(--surface)' : 'var(--bg)'; }}
                   >
+                    {/* Checkbox */}
+                    <td style={{ padding: '8px 10px', width: 32 }} onClick={(e) => toggleSelect(e, r.report_id)}>
+                      <input
+                        type="checkbox"
+                        checked={selected.has(r.report_id)}
+                        onChange={() => {}}
+                        style={{ cursor: 'pointer', accentColor: 'var(--blue)' }}
+                      />
+                    </td>
+
                     {/* ID */}
                     <td style={{ padding: '8px 10px', color: 'var(--text-3)', fontFamily: 'monospace', fontSize: 11, whiteSpace: 'nowrap' }}>{r.report_id}</td>
 

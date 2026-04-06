@@ -4,7 +4,8 @@ from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from sqlalchemy import text as sql_text
-from typing import Optional
+from typing import Optional, List
+from pydantic import BaseModel
 import csv
 import hashlib
 import io
@@ -228,6 +229,19 @@ def delete_report(report_id: str, db: Session = Depends(get_db)):
     db.delete(r)
     db.commit()
     return {"ok": True}
+
+
+class BulkDeleteRequest(BaseModel):
+    report_ids: List[str]
+
+
+@app.post("/reports/bulk-delete")
+def bulk_delete_reports(data: BulkDeleteRequest, db: Session = Depends(get_db)):
+    if not data.report_ids:
+        return {"ok": True, "deleted": 0}
+    deleted = db.query(Report).filter(Report.report_id.in_(data.report_ids)).delete(synchronize_session=False)
+    db.commit()
+    return {"ok": True, "deleted": deleted}
 
 
 # ── AI suggestions ────────────────────────────────────────────────────────────

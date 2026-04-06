@@ -32,6 +32,9 @@ export const api = {
   deleteReport: (reportId: string) =>
     req<{ ok: boolean }>(`/reports/${reportId}`, { method: 'DELETE' }),
 
+  deleteReports: (reportIds: string[]) =>
+    req<{ ok: boolean; deleted: number }>('/reports/bulk-delete', { method: 'POST', body: JSON.stringify({ report_ids: reportIds }) }),
+
   suggest: (narrative: string) =>
     req<Record<string, any>>('/suggest', { method: 'POST', body: JSON.stringify({ narrative }) }),
 
