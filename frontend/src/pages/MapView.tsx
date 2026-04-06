@@ -35,18 +35,6 @@ function dashedLine(color: string, opacity: number): google.maps.PolylineOptions
   };
 }
 
-function LegendItem({ color, label, dashed }: { color: string; label: string; dashed?: boolean }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-      {dashed ? (
-        <div style={{ width: 18, height: 0, borderTop: `2px dashed ${color}` }} />
-      ) : (
-        <div style={{ width: 10, height: 10, borderRadius: '50%', background: color, flexShrink: 0 }} />
-      )}
-      <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{label}</span>
-    </div>
-  );
-}
 
 export default function MapView() {
   const { isLoaded } = useJsApiLoader({
@@ -57,7 +45,9 @@ export default function MapView() {
 
   const [stats, setStats] = useState<Stats | null>(null);
   const [showMovement, setShowMovement] = useState(true);
-  const [filterCoercion, setFilterCoercion] = useState('');
+  const [showInitial, setShowInitial] = useState(true);
+  const [showIncident, setShowIncident] = useState(true);
+  const [showDestination, setShowDestination] = useState(true);
   const [openWindow, setOpenWindow] = useState<InfoWindowKey | null>(null);
   const [map, setMap] = useState<google.maps.Map | null>(null);
   const searchBoxRef = useRef<google.maps.places.SearchBox | null>(null);
@@ -66,25 +56,24 @@ export default function MapView() {
   useEffect(() => { api.getStats().then(setStats); }, []);
 
   const points = stats?.map_points ?? [];
-  const filtered = filterCoercion ? points.filter((p) => p.coercion === filterCoercion) : points;
   const hasAny = points.some((p) => p.lat_initial || p.lat_incident);
 
   const onMapLoad = useCallback((mapInstance: google.maps.Map) => {
     setMap(mapInstance);
   }, []);
 
-  // Fit bounds whenever filtered points change
+  // Fit bounds to all points on load
   useEffect(() => {
-    if (!map || !isLoaded || filtered.length === 0) return;
+    if (!map || !isLoaded || points.length === 0) return;
     const bounds = new google.maps.LatLngBounds();
     let hasCoords = false;
-    filtered.forEach((p) => {
+    points.forEach((p) => {
       if (p.lat_initial && p.lon_initial) { bounds.extend({ lat: p.lat_initial, lng: p.lon_initial }); hasCoords = true; }
       if (p.lat_incident && p.lon_incident) { bounds.extend({ lat: p.lat_incident, lng: p.lon_incident }); hasCoords = true; }
       if (p.lat_destination && p.lon_destination) { bounds.extend({ lat: p.lat_destination, lng: p.lon_destination }); hasCoords = true; }
     });
     if (hasCoords) map.fitBounds(bounds, 40);
-  }, [map, filtered, isLoaded]);
+  }, [map, points, isLoaded]);
 
   const openStreetView = (lat: number, lng: number) => {
     if (!map) return;
@@ -166,23 +155,25 @@ export default function MapView() {
             Map Controls
           </h3>
 
-          <label className="section-label" style={{ display: 'block', marginBottom: 6 }}>
-            Filter by coercion
-          </label>
-          <select
-            value={filterCoercion}
-            onChange={(e) => setFilterCoercion(e.target.value)}
-            style={{
-              width: '100%', padding: '6px 10px', borderRadius: 6,
-              border: '1px solid var(--border)', background: 'var(--bg)',
-              fontSize: 13, fontFamily: 'DM Sans, sans-serif',
-              color: 'var(--text-1)', outline: 'none', cursor: 'pointer',
-            }}
-          >
-            <option value="">All cases</option>
-            <option value="yes">Coercion: yes</option>
-            <option value="no">Coercion: no</option>
-          </select>
+          <span className="section-label" style={{ display: 'block', marginBottom: 8 }}>Show point types</span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {([
+              { key: 'initial', label: 'Initial contact', color: '#9B1D1D', checked: showInitial, set: setShowInitial },
+              { key: 'incident', label: 'Incident location', color: '#B45309', checked: showIncident, set: setShowIncident },
+              { key: 'destination', label: 'Destination', color: '#3730A3', checked: showDestination, set: setShowDestination },
+            ] as const).map(({ key, label, color, checked, set }) => (
+              <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: 'var(--text-2)' }}>
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={(e) => set(e.target.checked)}
+                  style={{ accentColor: color, width: 14, height: 14 }}
+                />
+                <div style={{ width: 9, height: 9, borderRadius: '50%', background: color, flexShrink: 0 }} />
+                {label}
+              </label>
+            ))}
+          </div>
         </div>
 
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: 'var(--text-2)' }}>
@@ -195,16 +186,8 @@ export default function MapView() {
           Show movement lines
         </label>
 
-        <div style={{ borderTop: '1px solid var(--border)', paddingTop: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <span className="section-label">Legend</span>
-          <LegendItem color="#9B1D1D" label="Initial contact" />
-          <LegendItem color="#B45309" label="Incident location" />
-          <LegendItem color="#3730A3" label="Destination" />
-          <LegendItem color="#9A9188" label="Movement line" dashed />
-        </div>
-
         <div style={{ marginTop: 'auto', fontSize: 12, color: 'var(--text-3)' }}>
-          {filtered.length} point{filtered.length !== 1 ? 's' : ''} shown
+          {points.length} report{points.length !== 1 ? 's' : ''} plotted
         </div>
       </div>
 
@@ -267,9 +250,9 @@ export default function MapView() {
             zoomControl: true,
           }}
         >
-          {filtered.map((p) => (
+          {points.map((p) => (
             <React.Fragment key={p.report_id}>
-              {p.lat_initial && p.lon_initial && (
+              {showInitial && p.lat_initial && p.lon_initial && (
                 <>
                   <Marker
                     position={{ lat: p.lat_initial, lng: p.lon_initial }}
@@ -281,7 +264,7 @@ export default function MapView() {
                 </>
               )}
 
-              {p.lat_incident && p.lon_incident && (
+              {showIncident && p.lat_incident && p.lon_incident && (
                 <>
                   <Marker
                     position={{ lat: p.lat_incident, lng: p.lon_incident }}
@@ -293,7 +276,7 @@ export default function MapView() {
                 </>
               )}
 
-              {p.lat_destination && p.lon_destination && (
+              {showDestination && p.lat_destination && p.lon_destination && (
                 <>
                   <Marker
                     position={{ lat: p.lat_destination, lng: p.lon_destination }}
