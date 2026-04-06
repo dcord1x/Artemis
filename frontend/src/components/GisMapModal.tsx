@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { GoogleMap, useJsApiLoader, Marker, InfoWindow } from '@react-google-maps/api';
 import type { Report } from '../types';
 
@@ -206,7 +206,7 @@ export default function GisMapModal({ fields, onClose }: GisMapModalProps) {
                 const notes = fields[p.notesKey] as string | undefined;
 
                 return (
-                  <div key={p.heading}>
+                  <React.Fragment key={p.heading}>
                     <Marker
                       position={{ lat, lng: lon }}
                       icon={makeCircleIcon(p.color)}
@@ -271,7 +271,7 @@ export default function GisMapModal({ fields, onClose }: GisMapModalProps) {
                         </div>
                       </InfoWindow>
                     )}
-                  </div>
+                  </React.Fragment>
                 );
               })}
             </GoogleMap>

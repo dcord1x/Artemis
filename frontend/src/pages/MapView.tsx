@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { GoogleMap, useJsApiLoader, Marker, InfoWindow, Polyline, StandaloneSearchBox } from '@react-google-maps/api';
 import { api } from '../api';
 import type { Stats, MapPoint } from '../types';
@@ -268,7 +268,7 @@ export default function MapView() {
           }}
         >
           {filtered.map((p) => (
-            <div key={p.report_id}>
+            <React.Fragment key={p.report_id}>
               {p.lat_initial && p.lon_initial && (
                 <>
                   <Marker
@@ -321,7 +321,7 @@ export default function MapView() {
                   )}
                 </>
               )}
-            </div>
+            </React.Fragment>
           ))}
         </GoogleMap>
       </div>
