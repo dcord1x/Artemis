@@ -2,6 +2,7 @@
 setlocal EnableDelayedExpansion
 
 set "DIR=%~dp0"
+set "GITDIR=%DIR:~0,-1%"
 set "LOG=%DIR%update.log"
 set "PY=%DIR%backend_env\Scripts\python.exe"
 
@@ -13,15 +14,15 @@ if exist "%LOG%" (
 echo [%date% %time%] Update check started >> "%LOG%"
 
 REM ── 1. Fetch latest refs ──────────────────────────────────────────────────
-git -C "%DIR%" fetch origin master --quiet 2>>"%LOG%"
+git -C "%GITDIR%" fetch origin master --quiet 2>>"%LOG%"
 if errorlevel 1 (
     echo [%date% %time%] git fetch failed - skipping update >> "%LOG%"
     goto :done
 )
 
 REM ── 2. Compare local HEAD vs origin/master ────────────────────────────────
-for /f %%i in ('git -C "%DIR%" rev-parse HEAD 2^>nul') do set "LOCAL=%%i"
-for /f %%i in ('git -C "%DIR%" rev-parse origin/master 2^>nul') do set "REMOTE=%%i"
+for /f %%i in ('git -C "%GITDIR%" rev-parse HEAD 2^>nul') do set "LOCAL=%%i"
+for /f %%i in ('git -C "%GITDIR%" rev-parse origin/master 2^>nul') do set "REMOTE=%%i"
 
 REM ── 2b. Check if .env changed (rebuild needed even without git update) ──────
 set "ENV_FILE=%DIR%frontend\.env"
@@ -58,11 +59,11 @@ if "%LOCAL%"=="%REMOTE%" (
 echo [%date% %time%] Update available %LOCAL:~0,7% to %REMOTE:~0,7% >> "%LOG%"
 
 REM ── 3. Stash any local edits, then pull ───────────────────────────────────
-git -C "%DIR%" stash --quiet 2>>"%LOG%"
-git -C "%DIR%" pull origin master --quiet 2>>"%LOG%"
+git -C "%GITDIR%" stash --quiet 2>>"%LOG%"
+git -C "%GITDIR%" pull origin master --quiet 2>>"%LOG%"
 if errorlevel 1 (
     echo [%date% %time%] git pull failed - restoring stash >> "%LOG%"
-    git -C "%DIR%" stash pop --quiet 2>>"%LOG%"
+    git -C "%GITDIR%" stash pop --quiet 2>>"%LOG%"
     goto :done
 )
 echo [%date% %time%] Code updated successfully >> "%LOG%"
