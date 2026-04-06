@@ -39,7 +39,7 @@ Both scripts start the FastAPI backend on **port 8000** and open the React front
 | Layer | Technology |
 |---|---|
 | Frontend | React 18 + TypeScript, Vite, Tailwind CSS 4 |
-| Mapping | React-Leaflet + Nominatim geocoding |
+| Mapping | Google Maps JavaScript API (Street View, Places Autocomplete) |
 | Backend | FastAPI (Python 3), SQLAlchemy 2 |
 | Database | SQLite (`redlight.db`) |
 | AI | Anthropic Claude (`claude-3-5-haiku`) |

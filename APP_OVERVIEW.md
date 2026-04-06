@@ -30,7 +30,7 @@ The workflow is:
 1. **Import** a raw narrative (paste, or bulk import from PDF/bulletin)
 2. **Code** it — fill ~80 structured fields covering incident basics, encounter sequence, mobility, suspect description, GIS locations
 3. **Use AI assistance** — an LLM (Claude) suggests field values; a spaCy NLP pipeline flags violence signals independently
-4. **Map it** — geocoded locations appear on an interactive Leaflet map with movement trajectories
+4. **Map it** — geocoded locations appear on an interactive Google Maps view with movement trajectories and Street View
 5. **Analyze patterns** — an analysis dashboard shows prevalence statistics across the whole dataset
 6. **Link cases** — a similarity engine compares any two cases and scores how likely they share an offender
 
@@ -80,14 +80,14 @@ The frontend is a **pre-built static bundle** served directly by the FastAPI bac
 | Routing | React Router v6 |
 | Styling | CSS custom properties (no UI library) |
 | Icons | Lucide React |
-| Mapping | React-Leaflet / Leaflet.js |
+| Mapping | Google Maps JavaScript API (`@react-google-maps/api`) |
 | Backend framework | FastAPI (Python) |
 | ORM | SQLAlchemy 2 |
 | Database | SQLite (`redlight.db`) |
 | AI field suggestions | Anthropic Claude API (`claude-3-5-haiku`) |
 | NLP violence detection | spaCy `en_core_web_sm` |
 | Weather data | Open-Meteo archive API (free, no key) |
-| Geocoding (map search) | Nominatim / OpenStreetMap |
+| Geocoding (map search) | Google Places Autocomplete |
 
 ---
 
@@ -258,12 +258,14 @@ Aggregate view across all coded cases:
 - All stat cards are clickable — click to navigate to CaseList filtered to matching cases
 
 #### `MapView.tsx` — GIS map
-Interactive Leaflet map showing:
-- Color-coded circle markers for each geocoded case (red = coercion, amber = movement only, gray = no signal)
-- Polylines connecting the three location stages (initial contact → incident → destination) — showing movement trajectories
-- Click popup showing case details and link to CodingScreen
-- Address search bar (uses Nominatim/OpenStreetMap geocoding)
-- Filters: coding status, coercion, movement, city, date range
+Interactive Google Maps view showing:
+- Color-coded circle markers: red (initial contact), orange (incident), indigo (destination)
+- Dashed polylines connecting the three location stages (initial contact → incident → destination)
+- Click marker → InfoWindow with report ID, city, point type, coercion warning, "Open report" and "Street View" buttons
+- **Street View** — built-in pegman drag control, or "Street View" button per marker jumps directly to that coordinate
+- Address search via Google Places Autocomplete
+- Filter by coercion; toggle movement lines
+- Requires `VITE_GOOGLE_MAPS_API_KEY` in `frontend/.env`
 
 #### `ImportBulletin.tsx` — Bulk import
 Upload a PDF bulletin or Excel file. The backend parses it into individual incidents using either Claude (AI parse) or rules-based extraction. Analyst reviews the parsed fields before saving.
@@ -508,6 +510,6 @@ Red Light Alert/
 ## Key Design Principles
 
 - **Human-led, auditable** — AI never writes to fields without analyst confirmation. Every field carries a provenance tag. An audit log tracks all changes.
-- **Privacy-conscious** — all data stays local (SQLite file). No cloud sync. The only outbound calls are to the Anthropic API (narratives), Open-Meteo (dates/cities, no narrative), and Nominatim (address strings).
+- **Privacy-conscious** — all data stays local (SQLite file). No cloud sync. The only outbound calls are to the Anthropic API (narratives), Open-Meteo (dates/cities, no narrative), and Google Maps API (map tiles, address search, Street View — no narrative data).
 - **Research-grade** — the similarity algorithm is grounded in published criminological research. NLP signals are ranked and explained, not just flagged. Linkage verdicts are logged with analyst name and timestamp.
 - **Resilient schema** — the database auto-migrates on startup. New columns are added safely without data loss, making it safe to update the app while preserving existing case data.

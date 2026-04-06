@@ -23,8 +23,35 @@ REM ── 2. Compare local HEAD vs origin/master ──────────
 for /f %%i in ('git -C "%DIR%" rev-parse HEAD 2^>nul') do set "LOCAL=%%i"
 for /f %%i in ('git -C "%DIR%" rev-parse origin/master 2^>nul') do set "REMOTE=%%i"
 
+REM ── 2b. Check if .env changed (rebuild needed even without git update) ──────
+set "ENV_FILE=%DIR%frontend\.env"
+set "ENV_HASH_FILE=%DIR%.last_env_hash"
+set "NEW_ENV_HASH="
+if exist "%ENV_FILE%" (
+    for /f "skip=1 tokens=*" %%h in ('certutil -hashfile "%ENV_FILE%" MD5 2^>nul') do (
+        if not defined NEW_ENV_HASH set "NEW_ENV_HASH=%%h"
+    )
+    set "NEW_ENV_HASH=%NEW_ENV_HASH: =%"
+)
+set "OLD_ENV_HASH="
+if exist "%ENV_HASH_FILE%" set /p OLD_ENV_HASH=<"%ENV_HASH_FILE%"
+
 if "%LOCAL%"=="%REMOTE%" (
-    echo [%date% %time%] Already up to date ^(%LOCAL:~0,7%^) >> "%LOG%"
+    if "%NEW_ENV_HASH%"=="%OLD_ENV_HASH%" (
+        echo [%date% %time%] Already up to date ^(%LOCAL:~0,7%^) >> "%LOG%"
+        goto :done
+    )
+    echo [%date% %time%] .env changed - rebuilding frontend >> "%LOG%"
+    pushd "%DIR%frontend"
+    npm run build --silent 2>>"%LOG%"
+    if errorlevel 1 (
+        echo [%date% %time%] Frontend build failed >> "%LOG%"
+        popd
+    ) else (
+        popd
+        echo %NEW_ENV_HASH%> "%ENV_HASH_FILE%"
+        echo [%date% %time%] Frontend rebuilt with new .env >> "%LOG%"
+    )
     goto :done
 )
 
@@ -115,6 +142,7 @@ if errorlevel 1 (
     popd
 ) else (
     popd
+    echo %NEW_ENV_HASH%> "%ENV_HASH_FILE%"
     echo [%date% %time%] Frontend built successfully >> "%LOG%"
 )
 

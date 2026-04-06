@@ -34,12 +34,14 @@ Statistics dashboard:
 - All stat cards and bars are clickable → navigates to CaseList with matching filters
 
 ### MapView.tsx
-Interactive Leaflet map:
-- Color-coded case markers by severity / coding status
-- Movement polylines (initial contact → incident → destination)
-- Address search via Nominatim
-- Filters by city and coding status
-- Click marker to open case details
+Interactive Google Maps view:
+- Color-coded circle markers: red (initial contact), orange (incident), indigo (destination)
+- Dashed movement polylines (initial contact → incident → destination)
+- Address search via Google Places Autocomplete
+- Filter by coercion flag; toggle movement lines
+- Click marker → InfoWindow with report ID, city, type, coercion warning
+- **Street View** — drag the pegman onto any road, or click "Street View" in a marker popup to jump directly to that coordinate in Street View
+- Requires `VITE_GOOGLE_MAPS_API_KEY` in `frontend/.env` (Maps JavaScript API + Places API must be enabled)
 
 ### ImportBulletin.tsx
 PDF or Excel upload interface:
@@ -95,7 +97,7 @@ Pre-save duplicate review modal. Opens when the analyst clicks Save and one or m
 Escape key and clicking the backdrop close the modal without saving.
 
 ### GisMapModal.tsx
-Inline Leaflet map modal for geocoding a single address. Shows the geocoded point and lets analyst accept or adjust coordinates before saving.
+Inline Google Maps modal for reviewing geocoded coordinates on a single report. Shows all three point types (initial contact, incident, destination) as markers. Click a marker to open an InfoWindow with full address metadata (raw, normalized, precision, source, confidence, analyst notes, lat/lon). Includes a "Street View" button per point.
 
 ### ParseViewer.tsx
 Displays the raw output of a bulletin parse (AI or rules-based) as a reviewable table before bulk-save. Highlights fields that are missing or low-confidence.
