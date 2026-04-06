@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { GoogleMap, useJsApiLoader, Marker, InfoWindow, Polyline, StandaloneSearchBox } from '@react-google-maps/api';
+import { GoogleMap, useJsApiLoader, Marker, InfoWindow, Polyline, Autocomplete } from '@react-google-maps/api';
 import { api } from '../api';
 import type { Stats, MapPoint } from '../types';
 import { useNavigate } from 'react-router-dom';
@@ -51,7 +51,7 @@ export default function MapView() {
   const [openWindow, setOpenWindow] = useState<InfoWindowKey | null>(null);
   const [map, setMap] = useState<google.maps.Map | null>(null);
   const hasFitRef = useRef(false);
-  const searchBoxRef = useRef<google.maps.places.SearchBox | null>(null);
+  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => { api.getStats().then(setStats); }, []);
@@ -83,11 +83,9 @@ export default function MapView() {
     sv.setVisible(true);
   };
 
-  const onPlacesChanged = () => {
-    if (!searchBoxRef.current || !map) return;
-    const places = searchBoxRef.current.getPlaces();
-    if (!places || places.length === 0) return;
-    const place = places[0];
+  const onPlaceChanged = () => {
+    if (!autocompleteRef.current || !map) return;
+    const place = autocompleteRef.current.getPlace();
     if (place.geometry?.viewport) {
       map.fitBounds(place.geometry.viewport);
     } else if (place.geometry?.location) {
@@ -219,11 +217,11 @@ export default function MapView() {
         {/* Search box */}
         <div style={{
           position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)',
-          zIndex: 5, display: 'flex', gap: 6, alignItems: 'center',
+          zIndex: 5,
         }}>
-          <StandaloneSearchBox
-            onLoad={(ref) => { searchBoxRef.current = ref; }}
-            onPlacesChanged={onPlacesChanged}
+          <Autocomplete
+            onLoad={(ref) => { autocompleteRef.current = ref; }}
+            onPlaceChanged={onPlaceChanged}
           >
             <input
               placeholder="Search address or city…"
@@ -235,7 +233,7 @@ export default function MapView() {
                 boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
               }}
             />
-          </StandaloneSearchBox>
+          </Autocomplete>
         </div>
 
         <GoogleMap
