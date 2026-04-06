@@ -50,6 +50,7 @@ export default function MapView() {
   const [showDestination, setShowDestination] = useState(true);
   const [openWindow, setOpenWindow] = useState<InfoWindowKey | null>(null);
   const [map, setMap] = useState<google.maps.Map | null>(null);
+  const hasFitRef = useRef(false);
   const searchBoxRef = useRef<google.maps.places.SearchBox | null>(null);
   const navigate = useNavigate();
 
@@ -62,9 +63,9 @@ export default function MapView() {
     setMap(mapInstance);
   }, []);
 
-  // Fit bounds to all points on load
+  // Fit bounds once when points first load — never again
   useEffect(() => {
-    if (!map || !isLoaded || points.length === 0) return;
+    if (!map || !isLoaded || points.length === 0 || hasFitRef.current) return;
     const bounds = new google.maps.LatLngBounds();
     let hasCoords = false;
     points.forEach((p) => {
@@ -72,7 +73,7 @@ export default function MapView() {
       if (p.lat_incident && p.lon_incident) { bounds.extend({ lat: p.lat_incident, lng: p.lon_incident }); hasCoords = true; }
       if (p.lat_destination && p.lon_destination) { bounds.extend({ lat: p.lat_destination, lng: p.lon_destination }); hasCoords = true; }
     });
-    if (hasCoords) map.fitBounds(bounds, 40);
+    if (hasCoords) { map.fitBounds(bounds, 40); hasFitRef.current = true; }
   }, [map, points, isLoaded]);
 
   const openStreetView = (lat: number, lng: number) => {
@@ -239,7 +240,7 @@ export default function MapView() {
 
         <GoogleMap
           mapContainerStyle={{ height: '100%', width: '100%' }}
-          center={{ lat: 43.65, lng: -79.38 }}
+          center={{ lat: 49.28, lng: -123.12 }}
           zoom={12}
           onLoad={onMapLoad}
           onClick={() => setOpenWindow(null)}
