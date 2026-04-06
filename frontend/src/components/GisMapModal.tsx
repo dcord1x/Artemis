@@ -1,7 +1,9 @@
-import { useEffect, useRef } from 'react';
-import { MapContainer, TileLayer, CircleMarker, useMap } from 'react-leaflet';
-import 'leaflet/dist/leaflet.css';
+import { useEffect, useState, useCallback } from 'react';
+import { GoogleMap, useJsApiLoader, Marker, InfoWindow } from '@react-google-maps/api';
 import type { Report } from '../types';
+
+const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string;
+const LIBRARIES: ['places'] = ['places'];
 
 interface GisMapModalProps {
   fields: Partial<Report>;
@@ -47,110 +49,37 @@ const POINT_CONFIG = [
   },
 ];
 
-function FitBounds({ coords }: { coords: [number, number][] }) {
-  const map = useMap();
-  useEffect(() => {
-    if (coords.length === 1) {
-      map.setView(coords[0], 13);
-    } else if (coords.length > 1) {
-      map.fitBounds(coords, { padding: [50, 50] });
-    }
-  }, [coords, map]);
-  return null;
-}
-
-function HoverMarker({
-  lat,
-  lon,
-  color,
-  heading,
-  fields,
-  pointConfig,
-}: {
-  lat: number;
-  lon: number;
-  color: string;
-  heading: string;
-  fields: Partial<Report>;
-  pointConfig: (typeof POINT_CONFIG)[number];
-}) {
-  const markerRef = useRef<L.CircleMarker | null>(null);
-
-  const raw = fields[pointConfig.rawKey] as string | undefined;
-  const norm = fields[pointConfig.normKey] as string | undefined;
-  const prec = fields[pointConfig.precKey] as string | undefined;
-  const src = fields[pointConfig.srcKey] as string | undefined;
-  const conf = fields[pointConfig.confKey] as string | undefined;
-  const notes = fields[pointConfig.notesKey] as string | undefined;
-
-  const popupContent = `
-    <div style="font-family: DM Sans, sans-serif; min-width: 220px; max-width: 280px;">
-      <div style="font-size: 10px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: ${color}; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid #e5e5e5;">
-        ${heading}
-      </div>
-      ${raw ? `<div style="margin-bottom: 5px;"><span style="font-size: 10px; color: #888; display: block;">Raw address</span><span style="font-size: 12px; color: #222;">${raw}</span></div>` : ''}
-      ${norm ? `<div style="margin-bottom: 5px;"><span style="font-size: 10px; color: #888; display: block;">Normalized address</span><span style="font-size: 12px; color: #222;">${norm}</span></div>` : ''}
-      ${prec || src || conf ? `
-        <div style="display: flex; gap: 12px; margin-bottom: 5px; flex-wrap: wrap;">
-          ${prec ? `<div><span style="font-size: 10px; color: #888; display: block;">Precision</span><span style="font-size: 12px; color: #222;">${prec}</span></div>` : ''}
-          ${src ? `<div><span style="font-size: 10px; color: #888; display: block;">Source</span><span style="font-size: 12px; color: #222;">${src}</span></div>` : ''}
-          ${conf ? `<div><span style="font-size: 10px; color: #888; display: block;">Confidence</span><span style="font-size: 12px; color: #222;">${conf}</span></div>` : ''}
-        </div>` : ''}
-      ${notes ? `<div style="margin-bottom: 5px;"><span style="font-size: 10px; color: #888; display: block;">Analyst notes</span><span style="font-size: 12px; color: #222; font-style: italic;">${notes}</span></div>` : ''}
-      <div style="margin-top: 6px; padding-top: 6px; border-top: 1px solid #e5e5e5; display: flex; gap: 16px;">
-        <div><span style="font-size: 10px; color: #888; display: block;">Lat</span><span style="font-size: 11px; color: #444; font-family: monospace;">${lat.toFixed(6)}</span></div>
-        <div><span style="font-size: 10px; color: #888; display: block;">Lon</span><span style="font-size: 11px; color: #444; font-family: monospace;">${lon.toFixed(6)}</span></div>
-      </div>
-    </div>
-  `;
-
-  return (
-    <CircleMarker
-      ref={markerRef}
-      center={[lat, lon]}
-      radius={9}
-      pathOptions={{ color, fillColor: color, fillOpacity: 0.85, weight: 2 }}
-      eventHandlers={{
-        mouseover: (e) => {
-          e.target.openPopup();
-        },
-        mouseout: (e) => {
-          e.target.closePopup();
-        },
-      }}
-    >
-      {/* Leaflet popup via bindPopup after mount */}
-      <_BindPopup content={popupContent} markerRef={markerRef} />
-    </CircleMarker>
-  );
-}
-
-function _BindPopup({
-  content,
-  markerRef,
-}: {
-  content: string;
-  markerRef: React.RefObject<L.CircleMarker | null>;
-}) {
-  useEffect(() => {
-    if (markerRef.current) {
-      markerRef.current.bindPopup(content, { closeButton: false, autoPan: false });
-    }
-  }, [content, markerRef]);
-  return null;
+function makeCircleIcon(color: string): google.maps.Symbol {
+  return {
+    path: google.maps.SymbolPath.CIRCLE,
+    fillColor: color,
+    fillOpacity: 0.85,
+    strokeColor: color,
+    strokeWeight: 2,
+    scale: 9,
+  };
 }
 
 export default function GisMapModal({ fields, onClose }: GisMapModalProps) {
+  const { isLoaded } = useJsApiLoader({
+    id: 'google-map-script',
+    googleMapsApiKey: GOOGLE_MAPS_API_KEY,
+    libraries: LIBRARIES,
+  });
+
+  const [map, setMap] = useState<google.maps.Map | null>(null);
+  const [openHeading, setOpenHeading] = useState<string | null>(null);
+
   const validPoints = POINT_CONFIG.filter((p) => {
     const lat = fields[p.latKey] as number | null | undefined;
     const lon = fields[p.lonKey] as number | null | undefined;
     return lat != null && lon != null && lat !== 0 && lon !== 0;
   });
 
-  const coords: [number, number][] = validPoints.map((p) => [
-    fields[p.latKey] as number,
-    fields[p.lonKey] as number,
-  ]);
+  const coords = validPoints.map((p) => ({
+    lat: fields[p.latKey] as number,
+    lng: fields[p.lonKey] as number,
+  }));
 
   // Close on Escape
   useEffect(() => {
@@ -158,6 +87,30 @@ export default function GisMapModal({ fields, onClose }: GisMapModalProps) {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [onClose]);
+
+  const onMapLoad = useCallback((mapInstance: google.maps.Map) => {
+    setMap(mapInstance);
+  }, []);
+
+  // Fit bounds after map loads
+  useEffect(() => {
+    if (!map || !isLoaded || coords.length === 0) return;
+    if (coords.length === 1) {
+      map.setCenter(coords[0]);
+      map.setZoom(13);
+    } else {
+      const bounds = new google.maps.LatLngBounds();
+      coords.forEach((c) => bounds.extend(c));
+      map.fitBounds(bounds, 50);
+    }
+  }, [map, isLoaded, coords.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const openStreetView = (lat: number, lng: number) => {
+    if (!map) return;
+    const sv = map.getStreetView();
+    sv.setPosition({ lat, lng });
+    sv.setVisible(true);
+  };
 
   return (
     <div
@@ -221,37 +174,107 @@ export default function GisMapModal({ fields, onClose }: GisMapModalProps) {
 
         {/* Map body */}
         <div style={{ flex: 1, position: 'relative' }}>
-          {validPoints.length === 0 ? (
+          {!isLoaded || validPoints.length === 0 ? (
             <div style={{
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               height: '100%', color: 'var(--text-3)', fontSize: 13,
             }}>
-              No coordinates entered yet — fill in lat/lon fields to see points on the map.
+              {!isLoaded ? 'Loading map…' : 'No coordinates entered yet — fill in lat/lon fields to see points on the map.'}
             </div>
           ) : (
-            <MapContainer
-              center={coords[0] ?? [20, 0]}
+            <GoogleMap
+              mapContainerStyle={{ width: '100%', height: '100%' }}
+              center={coords[0] ?? { lat: 20, lng: 0 }}
               zoom={5}
-              style={{ width: '100%', height: '100%' }}
-              zoomControl={true}
+              onLoad={onMapLoad}
+              onClick={() => setOpenHeading(null)}
+              options={{
+                streetViewControl: true,
+                mapTypeControl: false,
+                fullscreenControl: false,
+                zoomControl: true,
+              }}
             >
-              <TileLayer
-                url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>'
-              />
-              <FitBounds coords={coords} />
-              {validPoints.map((p) => (
-                <HoverMarker
-                  key={p.heading}
-                  lat={fields[p.latKey] as number}
-                  lon={fields[p.lonKey] as number}
-                  color={p.color}
-                  heading={p.heading}
-                  fields={fields}
-                  pointConfig={p}
-                />
-              ))}
-            </MapContainer>
+              {validPoints.map((p) => {
+                const lat = fields[p.latKey] as number;
+                const lon = fields[p.lonKey] as number;
+                const raw = fields[p.rawKey] as string | undefined;
+                const norm = fields[p.normKey] as string | undefined;
+                const prec = fields[p.precKey] as string | undefined;
+                const src = fields[p.srcKey] as string | undefined;
+                const conf = fields[p.confKey] as string | undefined;
+                const notes = fields[p.notesKey] as string | undefined;
+
+                return (
+                  <div key={p.heading}>
+                    <Marker
+                      position={{ lat, lng: lon }}
+                      icon={makeCircleIcon(p.color)}
+                      onClick={() => setOpenHeading(openHeading === p.heading ? null : p.heading)}
+                    />
+                    {openHeading === p.heading && (
+                      <InfoWindow
+                        position={{ lat, lng: lon }}
+                        onCloseClick={() => setOpenHeading(null)}
+                      >
+                        <div style={{ fontFamily: 'DM Sans, sans-serif', minWidth: 220, maxWidth: 280 }}>
+                          <div style={{
+                            fontSize: 10, fontWeight: 700, letterSpacing: '0.07em',
+                            textTransform: 'uppercase', color: p.color,
+                            marginBottom: 8, paddingBottom: 6, borderBottom: '1px solid #e5e5e5',
+                          }}>
+                            {p.heading}
+                          </div>
+                          {raw && (
+                            <div style={{ marginBottom: 5 }}>
+                              <span style={{ fontSize: 10, color: '#888', display: 'block' }}>Raw address</span>
+                              <span style={{ fontSize: 12, color: '#222' }}>{raw}</span>
+                            </div>
+                          )}
+                          {norm && (
+                            <div style={{ marginBottom: 5 }}>
+                              <span style={{ fontSize: 10, color: '#888', display: 'block' }}>Normalized address</span>
+                              <span style={{ fontSize: 12, color: '#222' }}>{norm}</span>
+                            </div>
+                          )}
+                          {(prec || src || conf) && (
+                            <div style={{ display: 'flex', gap: 12, marginBottom: 5, flexWrap: 'wrap' }}>
+                              {prec && <div><span style={{ fontSize: 10, color: '#888', display: 'block' }}>Precision</span><span style={{ fontSize: 12, color: '#222' }}>{prec}</span></div>}
+                              {src && <div><span style={{ fontSize: 10, color: '#888', display: 'block' }}>Source</span><span style={{ fontSize: 12, color: '#222' }}>{src}</span></div>}
+                              {conf && <div><span style={{ fontSize: 10, color: '#888', display: 'block' }}>Confidence</span><span style={{ fontSize: 12, color: '#222' }}>{conf}</span></div>}
+                            </div>
+                          )}
+                          {notes && (
+                            <div style={{ marginBottom: 5 }}>
+                              <span style={{ fontSize: 10, color: '#888', display: 'block' }}>Analyst notes</span>
+                              <span style={{ fontSize: 12, color: '#222', fontStyle: 'italic' }}>{notes}</span>
+                            </div>
+                          )}
+                          <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid #e5e5e5', display: 'flex', gap: 16, alignItems: 'center', justifyContent: 'space-between' }}>
+                            <div style={{ display: 'flex', gap: 16 }}>
+                              <div>
+                                <span style={{ fontSize: 10, color: '#888', display: 'block' }}>Lat</span>
+                                <span style={{ fontSize: 11, color: '#444', fontFamily: 'monospace' }}>{lat.toFixed(6)}</span>
+                              </div>
+                              <div>
+                                <span style={{ fontSize: 10, color: '#888', display: 'block' }}>Lon</span>
+                                <span style={{ fontSize: 11, color: '#444', fontFamily: 'monospace' }}>{lon.toFixed(6)}</span>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => { setOpenHeading(null); openStreetView(lat, lon); }}
+                              style={{ fontSize: 11, color: '#1a73e8', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline', fontFamily: 'DM Sans, sans-serif', whiteSpace: 'nowrap' }}
+                            >
+                              Street View
+                            </button>
+                          </div>
+                        </div>
+                      </InfoWindow>
+                    )}
+                  </div>
+                );
+              })}
+            </GoogleMap>
           )}
         </div>
       </div>

@@ -1,94 +1,38 @@
-import { useEffect, useState, useRef } from 'react';
-import { MapContainer, TileLayer, CircleMarker, Polyline, Popup, useMap } from 'react-leaflet';
-import 'leaflet/dist/leaflet.css';
+import { useEffect, useState, useRef, useCallback } from 'react';
+import { GoogleMap, useJsApiLoader, Marker, InfoWindow, Polyline, StandaloneSearchBox } from '@react-google-maps/api';
 import { api } from '../api';
 import type { Stats, MapPoint } from '../types';
 import { useNavigate } from 'react-router-dom';
 
-function FitBounds({ points }: { points: MapPoint[] }) {
-  const map = useMap();
-  useEffect(() => {
-    const coords = points.flatMap((p) => {
-      const pts: [number, number][] = [];
-      if (p.lat_initial && p.lon_initial) pts.push([p.lat_initial, p.lon_initial]);
-      if (p.lat_incident && p.lon_incident) pts.push([p.lat_incident, p.lon_incident]);
-      if (p.lat_destination && p.lon_destination) pts.push([p.lat_destination, p.lon_destination]);
-      return pts;
-    });
-    if (coords.length > 0) map.fitBounds(coords, { padding: [40, 40] });
-  }, [points, map]);
-  return null;
+const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string;
+const LIBRARIES: ['places'] = ['places'];
+
+type InfoWindowKey = { reportId: string; type: 'initial' | 'incident' | 'destination' };
+
+function makeCircleIcon(color: string, scale: number): google.maps.Symbol {
+  return {
+    path: google.maps.SymbolPath.CIRCLE,
+    fillColor: color,
+    fillOpacity: 1,
+    strokeColor: '#fff',
+    strokeWeight: 1.5,
+    scale,
+  };
 }
 
-function SearchControl() {
-  const map = useMap();
-  const [query, setQuery] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const search = async () => {
-    const q = query.trim();
-    if (!q) return;
-    setLoading(true);
-    setError('');
-    try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=1`,
-        { headers: { 'Accept-Language': 'en' } }
-      );
-      const data = await res.json();
-      if (data.length === 0) {
-        setError('Location not found');
-      } else {
-        map.setView([parseFloat(data[0].lat), parseFloat(data[0].lon)], 13);
-      }
-    } catch {
-      setError('Search failed');
-    } finally {
-      setLoading(false);
-    }
+function dashedLine(color: string, opacity: number): google.maps.PolylineOptions {
+  return {
+    strokeColor: color,
+    strokeOpacity: 0,
+    strokeWeight: 2,
+    icons: [
+      {
+        icon: { path: 'M 0,-1 0,1', strokeOpacity: opacity, strokeWeight: 2, strokeColor: color, scale: 3 },
+        offset: '0',
+        repeat: '8px',
+      },
+    ],
   };
-
-  return (
-    <div style={{
-      position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)',
-      zIndex: 1000, display: 'flex', gap: 6, alignItems: 'center',
-    }}>
-      <input
-        ref={inputRef}
-        value={query}
-        onChange={(e) => { setQuery(e.target.value); setError(''); }}
-        onKeyDown={(e) => e.key === 'Enter' && search()}
-        placeholder="Search address or city…"
-        style={{
-          width: 240, padding: '7px 12px', borderRadius: 8,
-          border: '1px solid var(--border)', background: 'var(--surface)',
-          fontSize: 13, fontFamily: 'DM Sans, sans-serif',
-          color: 'var(--text-1)', outline: 'none',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
-        }}
-      />
-      <button
-        onClick={search}
-        disabled={loading}
-        style={{
-          padding: '7px 14px', borderRadius: 8, border: 'none',
-          background: 'var(--accent)', color: '#fff', fontSize: 13,
-          fontFamily: 'DM Sans, sans-serif', cursor: 'pointer',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
-          opacity: loading ? 0.6 : 1,
-        }}
-      >
-        {loading ? '…' : 'Go'}
-      </button>
-      {error && (
-        <span style={{ fontSize: 12, color: '#9B1D1D', background: 'var(--surface)', padding: '4px 8px', borderRadius: 6 }}>
-          {error}
-        </span>
-      )}
-    </div>
-  );
 }
 
 function LegendItem({ color, label, dashed }: { color: string; label: string; dashed?: boolean }) {
@@ -105,9 +49,18 @@ function LegendItem({ color, label, dashed }: { color: string; label: string; da
 }
 
 export default function MapView() {
+  const { isLoaded } = useJsApiLoader({
+    id: 'google-map-script',
+    googleMapsApiKey: GOOGLE_MAPS_API_KEY,
+    libraries: LIBRARIES,
+  });
+
   const [stats, setStats] = useState<Stats | null>(null);
   const [showMovement, setShowMovement] = useState(true);
   const [filterCoercion, setFilterCoercion] = useState('');
+  const [openWindow, setOpenWindow] = useState<InfoWindowKey | null>(null);
+  const [map, setMap] = useState<google.maps.Map | null>(null);
+  const searchBoxRef = useRef<google.maps.places.SearchBox | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => { api.getStats().then(setStats); }, []);
@@ -115,6 +68,82 @@ export default function MapView() {
   const points = stats?.map_points ?? [];
   const filtered = filterCoercion ? points.filter((p) => p.coercion === filterCoercion) : points;
   const hasAny = points.some((p) => p.lat_initial || p.lat_incident);
+
+  const onMapLoad = useCallback((mapInstance: google.maps.Map) => {
+    setMap(mapInstance);
+  }, []);
+
+  // Fit bounds whenever filtered points change
+  useEffect(() => {
+    if (!map || !isLoaded || filtered.length === 0) return;
+    const bounds = new google.maps.LatLngBounds();
+    let hasCoords = false;
+    filtered.forEach((p) => {
+      if (p.lat_initial && p.lon_initial) { bounds.extend({ lat: p.lat_initial, lng: p.lon_initial }); hasCoords = true; }
+      if (p.lat_incident && p.lon_incident) { bounds.extend({ lat: p.lat_incident, lng: p.lon_incident }); hasCoords = true; }
+      if (p.lat_destination && p.lon_destination) { bounds.extend({ lat: p.lat_destination, lng: p.lon_destination }); hasCoords = true; }
+    });
+    if (hasCoords) map.fitBounds(bounds, 40);
+  }, [map, filtered, isLoaded]);
+
+  const openStreetView = (lat: number, lng: number) => {
+    if (!map) return;
+    const sv = map.getStreetView();
+    sv.setPosition({ lat, lng });
+    sv.setVisible(true);
+  };
+
+  const onPlacesChanged = () => {
+    if (!searchBoxRef.current || !map) return;
+    const places = searchBoxRef.current.getPlaces();
+    if (!places || places.length === 0) return;
+    const place = places[0];
+    if (place.geometry?.viewport) {
+      map.fitBounds(place.geometry.viewport);
+    } else if (place.geometry?.location) {
+      map.setCenter(place.geometry.location);
+      map.setZoom(13);
+    }
+  };
+
+  const renderInfoWindow = (p: MapPoint, lat: number, lon: number, label: string, showCoercion: boolean) => (
+    <InfoWindow
+      position={{ lat, lng: lon }}
+      onCloseClick={() => setOpenWindow(null)}
+    >
+      <div style={{ fontFamily: 'DM Sans, sans-serif', fontSize: 12, minWidth: 160 }}>
+        <div style={{ fontWeight: 600, marginBottom: 4 }}>{p.report_id}</div>
+        {p.city && <div style={{ color: '#666', marginBottom: 2 }}>{p.city}</div>}
+        <div style={{ color: '#999', fontSize: 11 }}>{label}</div>
+        {showCoercion && p.coercion === 'yes' && (
+          <div style={{ color: '#9B1D1D', fontWeight: 500, marginTop: 4 }}>⚠ Coercion reported</div>
+        )}
+        <div style={{ display: 'flex', gap: 8, marginTop: 8, paddingTop: 6, borderTop: '1px solid #e5e5e5', alignItems: 'center' }}>
+          <button
+            onClick={() => navigate(`/code/${p.report_id}`)}
+            style={{ fontSize: 11, color: '#9B1D1D', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline', fontFamily: 'DM Sans, sans-serif' }}
+          >
+            Open report
+          </button>
+          <span style={{ color: '#ddd' }}>|</span>
+          <button
+            onClick={() => { setOpenWindow(null); openStreetView(lat, lon); }}
+            style={{ fontSize: 11, color: '#1a73e8', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline', fontFamily: 'DM Sans, sans-serif' }}
+          >
+            Street View
+          </button>
+        </div>
+      </div>
+    </InfoWindow>
+  );
+
+  if (!isLoaded) {
+    return (
+      <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center' }}>
+        <span style={{ color: 'var(--text-3)', fontSize: 14 }}>Loading map…</span>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: 'flex', height: '100%' }}>
@@ -203,91 +232,98 @@ export default function MapView() {
           </div>
         )}
 
-        <MapContainer
-          center={[43.65, -79.38]}
+        {/* Search box */}
+        <div style={{
+          position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)',
+          zIndex: 5, display: 'flex', gap: 6, alignItems: 'center',
+        }}>
+          <StandaloneSearchBox
+            onLoad={(ref) => { searchBoxRef.current = ref; }}
+            onPlacesChanged={onPlacesChanged}
+          >
+            <input
+              placeholder="Search address or city…"
+              style={{
+                width: 280, padding: '7px 12px', borderRadius: 8,
+                border: '1px solid var(--border)', background: 'var(--surface)',
+                fontSize: 13, fontFamily: 'DM Sans, sans-serif',
+                color: 'var(--text-1)', outline: 'none',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+              }}
+            />
+          </StandaloneSearchBox>
+        </div>
+
+        <GoogleMap
+          mapContainerStyle={{ height: '100%', width: '100%' }}
+          center={{ lat: 43.65, lng: -79.38 }}
           zoom={12}
-          style={{ height: '100%', width: '100%' }}
+          onLoad={onMapLoad}
+          onClick={() => setOpenWindow(null)}
+          options={{
+            streetViewControl: true,
+            mapTypeControl: false,
+            fullscreenControl: true,
+            zoomControl: true,
+          }}
         >
-          <SearchControl />
-          <TileLayer
-            url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-            attribution='&copy; <a href="https://carto.com/">CARTO</a>'
-          />
-
-          {filtered.length > 0 && <FitBounds points={filtered} />}
-
           {filtered.map((p) => (
             <div key={p.report_id}>
               {p.lat_initial && p.lon_initial && (
-                <CircleMarker
-                  center={[p.lat_initial, p.lon_initial]}
-                  radius={7}
-                  pathOptions={{ color: '#fff', fillColor: '#9B1D1D', fillOpacity: 0.9, weight: 1.5 }}
-                  eventHandlers={{ click: () => navigate(`/code/${p.report_id}`) }}
-                >
-                  <Popup>
-                    <div style={{ fontFamily: 'DM Sans, sans-serif', fontSize: 12 }}>
-                      <div style={{ fontWeight: 600, marginBottom: 4 }}>{p.report_id}</div>
-                      <div style={{ color: '#666' }}>{p.city}</div>
-                      <div style={{ color: '#999', fontSize: 11 }}>Initial contact</div>
-                      {p.coercion === 'yes' && <div style={{ color: '#9B1D1D', fontWeight: 500, marginTop: 4 }}>⚠ Coercion reported</div>}
-                    </div>
-                  </Popup>
-                </CircleMarker>
+                <>
+                  <Marker
+                    position={{ lat: p.lat_initial, lng: p.lon_initial }}
+                    icon={makeCircleIcon('#9B1D1D', 7)}
+                    onClick={() => setOpenWindow({ reportId: p.report_id, type: 'initial' })}
+                  />
+                  {openWindow?.reportId === p.report_id && openWindow.type === 'initial' &&
+                    renderInfoWindow(p, p.lat_initial, p.lon_initial, 'Initial contact', true)}
+                </>
               )}
 
               {p.lat_incident && p.lon_incident && (
-                <CircleMarker
-                  center={[p.lat_incident, p.lon_incident]}
-                  radius={7}
-                  pathOptions={{ color: '#fff', fillColor: '#B45309', fillOpacity: 0.9, weight: 1.5 }}
-                  eventHandlers={{ click: () => navigate(`/code/${p.report_id}`) }}
-                >
-                  <Popup>
-                    <div style={{ fontFamily: 'DM Sans, sans-serif', fontSize: 12 }}>
-                      <div style={{ fontWeight: 600, marginBottom: 4 }}>{p.report_id}</div>
-                      <div style={{ color: '#666' }}>{p.city}</div>
-                      <div style={{ color: '#999', fontSize: 11 }}>Incident location</div>
-                    </div>
-                  </Popup>
-                </CircleMarker>
+                <>
+                  <Marker
+                    position={{ lat: p.lat_incident, lng: p.lon_incident }}
+                    icon={makeCircleIcon('#B45309', 7)}
+                    onClick={() => setOpenWindow({ reportId: p.report_id, type: 'incident' })}
+                  />
+                  {openWindow?.reportId === p.report_id && openWindow.type === 'incident' &&
+                    renderInfoWindow(p, p.lat_incident, p.lon_incident, 'Incident location', false)}
+                </>
               )}
 
               {p.lat_destination && p.lon_destination && (
-                <CircleMarker
-                  center={[p.lat_destination, p.lon_destination]}
-                  radius={6}
-                  pathOptions={{ color: '#fff', fillColor: '#3730A3', fillOpacity: 0.85, weight: 1.5 }}
-                  eventHandlers={{ click: () => navigate(`/code/${p.report_id}`) }}
-                >
-                  <Popup>
-                    <div style={{ fontFamily: 'DM Sans, sans-serif', fontSize: 12 }}>
-                      <div style={{ fontWeight: 600, marginBottom: 4 }}>{p.report_id}</div>
-                      <div style={{ color: '#999', fontSize: 11 }}>Destination</div>
-                    </div>
-                  </Popup>
-                </CircleMarker>
+                <>
+                  <Marker
+                    position={{ lat: p.lat_destination, lng: p.lon_destination }}
+                    icon={makeCircleIcon('#3730A3', 6)}
+                    onClick={() => setOpenWindow({ reportId: p.report_id, type: 'destination' })}
+                  />
+                  {openWindow?.reportId === p.report_id && openWindow.type === 'destination' &&
+                    renderInfoWindow(p, p.lat_destination, p.lon_destination, 'Destination', false)}
+                </>
               )}
 
               {showMovement && p.movement === 'yes' && (
                 <>
                   {p.lat_initial && p.lon_initial && p.lat_incident && p.lon_incident && (
                     <Polyline
-                      positions={[[p.lat_initial, p.lon_initial], [p.lat_incident, p.lon_incident]]}
-                      pathOptions={{ color: p.coercion === 'yes' ? '#9B1D1D' : '#9A9188', weight: 1.5, opacity: 0.5, dashArray: '5 5' }}
+                      path={[{ lat: p.lat_initial, lng: p.lon_initial }, { lat: p.lat_incident, lng: p.lon_incident }]}
+                      options={dashedLine(p.coercion === 'yes' ? '#9B1D1D' : '#9A9188', 0.5)}
                     />
                   )}
                   {p.lat_incident && p.lon_incident && p.lat_destination && p.lon_destination && (
                     <Polyline
-                      positions={[[p.lat_incident, p.lon_incident], [p.lat_destination, p.lon_destination]]}
-                      pathOptions={{ color: '#3730A3', weight: 1.5, opacity: 0.4, dashArray: '5 5' }}
+                      path={[{ lat: p.lat_incident, lng: p.lon_incident }, { lat: p.lat_destination, lng: p.lon_destination }]}
+                      options={dashedLine('#3730A3', 0.4)}
                     />
                   )}
                 </>
               )}
             </div>
           ))}
-        </MapContainer>
+        </GoogleMap>
       </div>
     </div>
   );

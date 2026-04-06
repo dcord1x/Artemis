@@ -74,18 +74,6 @@
   background: rgba(155, 29, 29, 0.15);
 }
 
-/* ── Leaflet overrides ──────────────────────────────── */
-.leaflet-container {
-  background: #e8e4dc;
-  font-family: 'DM Sans', sans-serif;
-  font-size: 12px;
-}
-.leaflet-popup-content-wrapper {
-  border-radius: var(--radius) !important;
-  box-shadow: var(--shadow) !important;
-  border: 1px solid var(--border);
-}
-.leaflet-popup-content { font-family: 'DM Sans', sans-serif; font-size: 12px; }
 
 /* ── Utility classes ─────────────────────────────────── */
 .card {
