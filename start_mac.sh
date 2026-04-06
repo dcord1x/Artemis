@@ -86,6 +86,23 @@ if git -C "$DIR" fetch origin master --quiet 2>>"$LOG"; then
         fi
     else
         echo "[$(date)] Already up to date (${LOCAL:0:7})" >> "$LOG"
+
+        # Rebuild if .env changed even without a git update
+        ENV_FILE="$DIR/frontend/.env"
+        ENV_HASH_FILE="$DIR/.last_env_hash"
+        if [ -f "$ENV_FILE" ]; then
+            NEW_ENV_HASH=$(md5 -q "$ENV_FILE" 2>/dev/null || md5sum "$ENV_FILE" | cut -d' ' -f1)
+            OLD_ENV_HASH=$(cat "$ENV_HASH_FILE" 2>/dev/null || echo "none")
+            if [ "$NEW_ENV_HASH" != "$OLD_ENV_HASH" ]; then
+                echo "[$(date)] .env changed - rebuilding frontend" >> "$LOG"
+                cd "$DIR/frontend" \
+                    && npm run build --silent >>"$LOG" 2>&1 \
+                    && echo "$NEW_ENV_HASH" > "$ENV_HASH_FILE" \
+                    && echo "[$(date)] Frontend rebuilt with new .env" >> "$LOG" \
+                    || echo "[$(date)] Frontend build failed" >> "$LOG"
+                cd "$DIR"
+            fi
+        fi
     fi
 else
     echo "[$(date)] git fetch failed - skipping update" >> "$LOG"
