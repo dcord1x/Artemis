@@ -76,6 +76,8 @@ export default function ImportBulletin() {
   const [error, setError] = useState('');
   const [dupWarning, setDupWarning] = useState<{ count: number; ids: string[] } | null>(null);
   const [dupStatus, setDupStatus] = useState<Record<number, DupEntry>>({});
+  const [dupChecking, setDupChecking] = useState(false);
+  const [dupCheckError, setDupCheckError] = useState(false);
   const [dupReviewOpen, setDupReviewOpen] = useState(false);
   const [dupDecisions, setDupDecisions] = useState<Record<number, boolean>>({});
 
@@ -94,6 +96,8 @@ export default function ImportBulletin() {
     setSelected(new Set());
     setParseMethod(null);
     setDupStatus({});
+    setDupChecking(false);
+    setDupCheckError(false);
 
     try {
       const form = new FormData();
@@ -110,6 +114,8 @@ export default function ImportBulletin() {
 
       // Check each incident for duplicates in the background
       if (parsed.length > 0) {
+        setDupChecking(true);
+        setDupCheckError(false);
         fetch(`${BASE}/check-duplicates`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -131,8 +137,13 @@ export default function ImportBulletin() {
               };
             }
             setDupStatus(map);
+            setDupChecking(false);
           })
-          .catch((e) => console.warn('[check-duplicates]', e));
+          .catch((e) => {
+            console.warn('[check-duplicates]', e);
+            setDupChecking(false);
+            setDupCheckError(true);
+          });
       }
     } catch (e: any) {
       setError(e.message || 'Network error');
@@ -262,14 +273,20 @@ export default function ImportBulletin() {
             <>
               <button className="btn-ghost" style={{ fontSize: 12.5 }} onClick={() => setSelected(new Set(incidents.map((_, i) => i)))}>Select all</button>
               <button className="btn-ghost" style={{ fontSize: 12.5 }} onClick={() => setSelected(new Set())}>None</button>
+              {dupCheckError && (
+                <span style={{ fontSize: 11.5, color: 'var(--accent)', padding: '2px 8px', borderRadius: 4, background: 'var(--accent-pale)', border: '1px solid var(--accent-border)' }}>
+                  Duplicate check failed — save may skip review
+                </span>
+              )}
               <button
                 className="btn-primary"
-                disabled={saving || selected.size === 0}
+                disabled={saving || selected.size === 0 || dupChecking}
                 onClick={handleSave}
                 style={{ fontSize: 12.5 }}
+                title={dupChecking ? 'Checking for duplicates…' : undefined}
               >
                 <Check size={13} />
-                {saving ? 'Saving…' : `Save ${selected.size} report${selected.size !== 1 ? 's' : ''}`}
+                {saving ? 'Saving…' : dupChecking ? 'Checking…' : `Save ${selected.size} report${selected.size !== 1 ? 's' : ''}`}
               </button>
             </>
           )}
