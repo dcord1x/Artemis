@@ -817,44 +817,7 @@ function SummaryTab({ fields }: { fields: Partial<Report> }) {
 
 type Section = 'basics' | 'encounter' | 'mobility' | 'suspect' | 'narrative' | 'gis' | 'scoring' | 'summary';
 
-// ── Behavioral domain scoring config (mirrors BINARY_FIELDS in backend/similarity.py) ──
-
-const SCORING_DOMAINS = [
-  { key: 'control', label: 'Control behaviors', color: '#7C2D12', fields: [
-    { key: 'physical_force',                 label: 'Physical force',           weight: 2.0 },
-    { key: 'coercion_present',               label: 'Coercion',                 weight: 2.0 },
-    { key: 'threats_present',                label: 'Threats',                  weight: 1.5 },
-    { key: 'pressure_after_refusal',         label: 'Pressure after refusal',   weight: 1.5 },
-    { key: 'offender_control_over_movement', label: 'Movement control',         weight: 1.5 },
-  ]},
-  { key: 'sexual', label: 'Sexual behaviors', color: '#9B1D1D', fields: [
-    { key: 'sexual_assault',  label: 'Sexual assault',  weight: 2.0 },
-    { key: 'stealthing',      label: 'Stealthing',      weight: 2.0 },
-    { key: 'refusal_present', label: 'Refusal present', weight: 1.5 },
-  ]},
-  { key: 'style', label: 'Style/approach behaviors', color: '#B45309', fields: [
-    { key: 'robbery_theft',        label: 'Robbery/theft',       weight: 1.0 },
-    { key: 'verbal_abuse',         label: 'Verbal abuse',         weight: 1.0 },
-    { key: 'negotiation_present',  label: 'Negotiation present',  weight: 0.5 },
-    { key: 'service_discussed',    label: 'Service discussed',    weight: 0.5 },
-    { key: 'payment_discussed',    label: 'Payment discussed',    weight: 0.5 },
-  ]},
-  { key: 'escape', label: 'Escape/mobility behaviors', color: '#166534', fields: [
-    { key: 'movement_present',          label: 'Movement present',       weight: 1.0 },
-    { key: 'entered_vehicle',           label: 'Entered vehicle',         weight: 1.0 },
-    { key: 'public_to_private_shift',   label: 'Public→private shift',   weight: 1.0 },
-    { key: 'public_to_secluded_shift',  label: 'Public→secluded shift',  weight: 1.0 },
-    { key: 'cross_municipality',        label: 'Cross municipality',      weight: 1.0 },
-    { key: 'cross_neighbourhood',       label: 'Cross neighbourhood',     weight: 1.0 },
-  ]},
-  { key: 'target', label: 'Target selection behaviors', color: '#1D4ED8', fields: [
-    { key: 'deserted',            label: 'Deserted location', weight: 1.0 },
-    { key: 'repeat_suspect_flag', label: 'Repeat suspect',    weight: 1.0 },
-    { key: 'repeat_vehicle_flag', label: 'Repeat vehicle',    weight: 1.0 },
-  ]},
-];
-
-function ScoringTab({ fields }: { fields: Partial<Report> }) {
+function ScoringTab() {
   return <div />;
 }
 
@@ -1944,7 +1907,7 @@ export default function CodingScreen() {
               </div>
             )}
 
-            {activeTab === 'scoring' && <ScoringTab fields={fields} />}
+            {activeTab === 'scoring' && <ScoringTab />}
             {activeTab === 'summary' && <SummaryTab fields={fields} />}
           </div>
         </div>

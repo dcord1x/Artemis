@@ -40,6 +40,7 @@ export interface Report {
 
   movement_present: string;
   movement_attempted: string;
+  movement_count: string;
   mode_of_movement: string;
   entered_vehicle: string;
   vehicle_driver_role: string;
@@ -67,6 +68,7 @@ export interface Report {
   early_escalation_score: string;
   mobility_richness_score: string;
   escalation_point: string;
+  resolution_endpoint: string;
   summary_analytic: string;
   key_quotes: string;
   coder_notes: string;
