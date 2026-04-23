@@ -855,126 +855,7 @@ const SCORING_DOMAINS = [
 ];
 
 function ScoringTab({ fields }: { fields: Partial<Report> }) {
-  return (
-    <div>
-      <p style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 14, marginTop: 0 }}>
-        Behavioral domain breakdown for this case. Coded fields contribute to similarity matching when compared against other cases.
-      </p>
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-        {SCORING_DOMAINS.map((domain) => {
-          const codedCount = domain.fields.filter((fd) => {
-            const v = String((fields as any)[fd.key] || '').toLowerCase();
-            return v === 'yes' || v === 'no' || v === 'probable' || v === 'inferred';
-          }).length;
-          const noCoded = codedCount === 0;
-
-          return (
-            <div key={domain.key} style={{
-              flex: '1 1 220px',
-              border: '1px solid var(--border)',
-              borderRadius: 8,
-              overflow: 'hidden',
-              background: 'var(--surface)',
-            }}>
-              {/* Header */}
-              <div style={{
-                padding: '8px 12px',
-                borderBottom: `2px solid ${domain.color}`,
-                background: `${domain.color}10`,
-              }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: domain.color, letterSpacing: '0.02em' }}>
-                  {domain.label}
-                </span>
-              </div>
-
-              {/* Badge / count row */}
-              <div style={{
-                padding: '5px 10px',
-                display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
-                borderBottom: '1px solid var(--border)',
-                background: noCoded ? 'var(--surface-2)' : 'transparent',
-              }}>
-                {noCoded && (
-                  <span style={{
-                    fontSize: 9.5, fontWeight: 600, color: '#6B7280',
-                    background: '#F3F4F6', padding: '1px 6px',
-                    borderRadius: 3, border: '1px solid #E5E7EB',
-                  }}>
-                    No coded values
-                  </span>
-                )}
-                <span style={{ fontSize: 9.5, color: 'var(--text-3)' }}>
-                  {codedCount} of {domain.fields.length} fields coded
-                  {noCoded && <span style={{ color: '#B45309', fontWeight: 600 }}> · score suppressed</span>}
-                </span>
-              </div>
-
-              {/* Table header */}
-              <div style={{
-                display: 'grid', gridTemplateColumns: '1fr 60px 108px',
-                padding: '4px 8px', background: 'var(--surface-2)',
-                borderBottom: '1px solid var(--border)',
-              }}>
-                {['Field', 'Value', 'Status'].map((h) => (
-                  <span key={h} style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.05em', color: 'var(--text-3)', textTransform: 'uppercase' }}>{h}</span>
-                ))}
-              </div>
-
-              {/* Field rows */}
-              {domain.fields.map((fd) => {
-                const raw = String((fields as any)[fd.key] || '').toLowerCase();
-                const isEmpty = !raw || raw === 'unclear' || raw === 'unknown' || raw === 'n/a';
-
-                let statusLabel = 'Not coded';
-                let statusColor = '#9CA3AF';
-                let statusBg = 'transparent';
-                let rowBg = 'transparent';
-
-                if (raw === 'yes') {
-                  statusLabel = 'Yes — coded'; statusColor = '#166534'; statusBg = '#D1FAE5'; rowBg = '#F0FDF480';
-                } else if (raw === 'no') {
-                  statusLabel = 'No — coded'; statusColor = '#6B7280'; statusBg = '#F3F4F6';
-                } else if (raw === 'probable' || raw === 'inferred') {
-                  statusLabel = 'Probable/inferred'; statusColor = '#92400E'; statusBg = '#FEF3C7'; rowBg = '#FFFBEB60';
-                } else if (raw === 'unclear') {
-                  statusLabel = 'Unclear'; statusColor = '#6B7280'; statusBg = '#F3F4F6';
-                }
-
-                return (
-                  <div key={fd.key} style={{
-                    display: 'grid', gridTemplateColumns: '1fr 60px 108px',
-                    padding: '4px 8px', borderBottom: '1px solid var(--border)',
-                    background: rowBg, alignItems: 'center',
-                  }}>
-                    <div>
-                      <span style={{ fontSize: 10, color: isEmpty ? 'var(--text-3)' : 'var(--text-1)', fontWeight: isEmpty ? 400 : 500 }}>
-                        {fd.label}
-                      </span>
-                    </div>
-                    <span style={{
-                      fontSize: 10, fontWeight: isEmpty ? 400 : 600,
-                      color: isEmpty ? 'var(--text-3)' : 'var(--text-1)',
-                      fontStyle: isEmpty ? 'italic' : 'normal',
-                    }}>
-                      {isEmpty ? '—' : raw}
-                    </span>
-                    <span style={{
-                      fontSize: 9, fontWeight: 600, color: statusColor,
-                      background: statusBg !== 'transparent' ? statusBg : undefined,
-                      padding: statusBg !== 'transparent' ? '1px 5px' : undefined,
-                      borderRadius: 3, display: 'inline-block', lineHeight: 1.4,
-                    }}>
-                      {statusLabel}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
+  return <div />;
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; border: string }> = {
@@ -1891,24 +1772,23 @@ export default function CodingScreen() {
 
             {activeTab === 'mobility' && (
               <div style={{ marginBottom: 12 }}>
-                <SectionPanel title="Movement" fieldKeys={['movement_present','movement_attempted','movement_completed','mode_of_movement','entered_vehicle','vehicle_driver_role','who_controlled_movement']} fields={fields}>
+                <SectionPanel title="Movement" fieldKeys={['movement_present','mode_of_movement','entered_vehicle','vehicle_driver_role','who_controlled_movement']} fields={fields}>
                   <FieldRow label="Movement present" value={f('movement_present')} onChange={(v) => set('movement_present', v)} type="yesno-extended" suggested={s('movement_present')} onAcceptSuggestion={() => acceptSuggestion('movement_present')} provenance={prov('movement_present')} onMarkReviewed={() => markReviewed('movement_present')} badge={showNlpChips ? <NlpBadge rank={nlp.movement_rank ?? 3} evidence={nlp.movement_evidence ?? []} fieldValue={f('movement_present')} /> : undefined} />
-                  <FieldRow label="Movement attempted" value={f('movement_attempted')} onChange={(v) => set('movement_attempted', v)} type="yesno" suggested={s('movement_attempted')} onAcceptSuggestion={() => acceptSuggestion('movement_attempted')} provenance={prov('movement_attempted')} onMarkReviewed={() => markReviewed('movement_attempted')} />
-                  <FieldRow label="Movement completed" value={f('movement_completed')} onChange={(v) => set('movement_completed', v)} type="yesno" provenance={prov('movement_completed')} onMarkReviewed={() => markReviewed('movement_completed')} />
-                  <FieldRow label="Mode of movement" value={f('mode_of_movement')} onChange={(v) => set('mode_of_movement', v)} suggested={s('mode_of_movement')} onAcceptSuggestion={() => acceptSuggestion('mode_of_movement')} provenance={prov('mode_of_movement')} onMarkReviewed={() => markReviewed('mode_of_movement')} />
+                  <FieldRow label="Movement count" value={f('movement_count')} onChange={(v) => set('movement_count', v)} type="text" placeholder="Number of distinct movements" provenance={prov('movement_count')} onMarkReviewed={() => markReviewed('movement_count')} />
+                  <FieldRow label="Mode of movement" value={f('mode_of_movement')} onChange={(v) => set('mode_of_movement', v)} type="select" options={['on foot','personal vehicle','offender vehicle','rideshare / taxi','public transit','bicycle','motorcycle','boat','unknown','other']} suggested={s('mode_of_movement')} onAcceptSuggestion={() => acceptSuggestion('mode_of_movement')} provenance={prov('mode_of_movement')} onMarkReviewed={() => markReviewed('mode_of_movement')} />
                   <FieldRow label="Entered vehicle" value={f('entered_vehicle')} onChange={(v) => set('entered_vehicle', v)} type="yesno" suggested={s('entered_vehicle')} onAcceptSuggestion={() => acceptSuggestion('entered_vehicle')} provenance={prov('entered_vehicle')} onMarkReviewed={() => markReviewed('entered_vehicle')} />
                   <FieldRow label="Vehicle driver role" value={f('vehicle_driver_role')} onChange={(v) => set('vehicle_driver_role', v)} provenance={prov('vehicle_driver_role')} onMarkReviewed={() => markReviewed('vehicle_driver_role')} />
                   <FieldRow label="Who controlled movement" value={f('who_controlled_movement')} onChange={(v) => set('who_controlled_movement', v)} type="select" options={['offender','victim','shared','unclear']} provenance={prov('who_controlled_movement')} onMarkReviewed={() => markReviewed('who_controlled_movement')} />
                 </SectionPanel>
 
                 <SectionPanel title="Geography" fieldKeys={['start_location_type','destination_location_type','public_to_private_shift','public_to_secluded_shift','cross_neighbourhood','cross_municipality','cross_city_movement','offender_control_over_movement']} fields={fields}>
-                  <FieldRow label="Start location type" value={f('start_location_type')} onChange={(v) => set('start_location_type', v)} suggested={s('start_location_type')} onAcceptSuggestion={() => acceptSuggestion('start_location_type')} provenance={prov('start_location_type')} onMarkReviewed={() => markReviewed('start_location_type')} />
+                  <FieldRow label="Start location type" value={f('start_location_type')} onChange={(v) => set('start_location_type', v)} type="select" options={['residence','SRO','hostel','street / public area','hotel / motel','bar / club / lounge','massage parlour / spa','escort agency','vehicle','park / open space','vacant lot','commercial building','industrial / warehouse','alley / lane','transit hub','unknown','other']} suggested={s('start_location_type')} onAcceptSuggestion={() => acceptSuggestion('start_location_type')} provenance={prov('start_location_type')} onMarkReviewed={() => markReviewed('start_location_type')} />
                   <FieldRow label="Destination location type" value={f('destination_location_type')} onChange={(v) => set('destination_location_type', v)} suggested={s('destination_location_type')} onAcceptSuggestion={() => acceptSuggestion('destination_location_type')} provenance={prov('destination_location_type')} onMarkReviewed={() => markReviewed('destination_location_type')} />
                   <FieldRow label="Public → private shift" value={f('public_to_private_shift')} onChange={(v) => set('public_to_private_shift', v)} type="yesno" suggested={s('public_to_private_shift')} onAcceptSuggestion={() => acceptSuggestion('public_to_private_shift')} provenance={prov('public_to_private_shift')} onMarkReviewed={() => markReviewed('public_to_private_shift')} />
                   <FieldRow label="Public → secluded shift" value={f('public_to_secluded_shift')} onChange={(v) => set('public_to_secluded_shift', v)} type="yesno" suggested={s('public_to_secluded_shift')} onAcceptSuggestion={() => acceptSuggestion('public_to_secluded_shift')} provenance={prov('public_to_secluded_shift')} onMarkReviewed={() => markReviewed('public_to_secluded_shift')} />
                   <FieldRow label="Cross neighbourhood" value={f('cross_neighbourhood')} onChange={(v) => set('cross_neighbourhood', v)} type="yesno" provenance={prov('cross_neighbourhood')} onMarkReviewed={() => markReviewed('cross_neighbourhood')} />
                   <FieldRow label="Cross municipality" value={f('cross_municipality')} onChange={(v) => set('cross_municipality', v)} type="yesno" provenance={prov('cross_municipality')} onMarkReviewed={() => markReviewed('cross_municipality')} />
-                  <FieldRow label="Cross-city movement" value={f('cross_city_movement')} onChange={(v) => set('cross_city_movement', v)} type="select" options={['yes','no','unclear']} provenance={prov('cross_city_movement')} onMarkReviewed={() => markReviewed('cross_city_movement')} />
+                  <FieldRow label="Cross-city movement" value={f('cross_city_movement')} onChange={(v) => set('cross_city_movement', v)} type="yesno" provenance={prov('cross_city_movement')} onMarkReviewed={() => markReviewed('cross_city_movement')} />
                   <FieldRow label="Offender movement control" value={f('offender_control_over_movement')} onChange={(v) => set('offender_control_over_movement', v)} type="select" options={['low','moderate','high','unclear']} provenance={prov('offender_control_over_movement')} onMarkReviewed={() => markReviewed('offender_control_over_movement')} />
                 </SectionPanel>
 
