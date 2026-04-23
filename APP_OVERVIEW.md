@@ -78,7 +78,7 @@ The frontend is a **pre-built static bundle** served directly by the FastAPI bac
 | Frontend framework | React 18 + TypeScript |
 | Frontend build | Vite |
 | Routing | React Router v6 |
-| Styling | CSS custom properties (no UI library) |
+| Styling | Tailwind CSS 4 |
 | Icons | Lucide React |
 | Mapping | Google Maps JavaScript API (`@react-google-maps/api`) |
 | Backend framework | FastAPI (Python) |
@@ -182,8 +182,10 @@ Stores analyst verdicts on pairs of cases:
 | `GET` | `/stats` | Aggregate statistics for the Analysis dashboard |
 | `GET` | `/export/csv` | Export all reports as CSV |
 | `GET` | `/export/geojson` | Export geocoded points as GeoJSON |
-| `POST` | `/import/bulletin` | Upload a PDF bulletin and parse it into reports |
-| `POST` | `/import/excel` | Upload an Excel file and bulk-import reports |
+| `POST` | `/parse-bulletin` | Upload a PDF bulletin; returns parsed per-incident field values |
+| `POST` | `/parse-excel` | Upload an Excel file; returns array of parsed incident rows |
+| `POST` | `/check-duplicates` | Check parsed incidents against existing records before import |
+| `POST` | `/bulk-save` | Save analyst-approved incidents; silently skips exact duplicates |
 
 ### `models.py` — Database
 
@@ -258,7 +260,7 @@ Aggregate view across all coded cases:
 - All stat cards are clickable — click to navigate to CaseList filtered to matching cases
 
 #### `MapView.tsx` — GIS map
-Interactive Google Maps view showing:
+Interactive Google Maps view (Google Maps JavaScript API + Places Autocomplete) showing:
 - Color-coded circle markers: red (initial contact), orange (incident), indigo (destination)
 - Dashed polylines connecting the three location stages (initial contact → incident → destination)
 - Click marker → InfoWindow with report ID, city, point type, coercion warning, "Open report" and "Street View" buttons
@@ -403,7 +405,7 @@ Each point has a full confidence metadata block: `precision` (exact/approximate/
    Analyst pastes narrative OR uploads PDF bulletin
         ↓
    POST /reports  →  creates Report row with raw_narrative
-   (Bulletin: POST /import/bulletin → Claude parses → multiple reports)
+   (Bulletin: POST /parse-bulletin → Claude parses → DupReviewModal → POST /bulk-save)
 
 2. AI SUGGEST (optional)
    Analyst clicks "AI Suggest"
@@ -474,7 +476,8 @@ Red Light Alert/
 │   ├── similarity.py        ← Weighted case similarity engine
 │   ├── weather.py           ← Open-Meteo historical weather lookup
 │   ├── parser.py            ← Rules-based bulletin text parser
-│   └── import_excel.py      ← Excel batch import handler
+│   ├── import_excel.py      ← Excel batch import handler
+│   └── research.py          ← Research-oriented aggregate analysis
 │
 └── frontend/
     ├── dist/                ← Built static files served by FastAPI
@@ -490,16 +493,19 @@ Red Light Alert/
     │   │   ├── FieldRow.tsx      ← Single coded field with provenance, AI chip
     │   │   ├── TimelineStrip.tsx ← Horizontal field-state timeline
     │   │   ├── SectionPanel.tsx  ← Collapsible section with progress bar
-    │   │   └── Toast.tsx         ← Toast notification system
+    │   │   ├── Toast.tsx         ← Toast notification system
+    │   │   ├── GisMapModal.tsx   ← Inline map modal for reviewing geocoded points
+    │   │   └── DupReviewModal.tsx← Pre-save duplicate review (Skip / Import anyway)
     │   │
     │   └── pages/
     │       ├── CodingScreen.tsx      ← Main coding workspace
     │       ├── CaseList.tsx          ← Case browser + filtering
     │       ├── Analysis.tsx          ← Statistics dashboard
-    │       ├── MapView.tsx           ← GIS / Leaflet map
+    │       ├── MapView.tsx           ← GIS / Google Maps view
     │       ├── ImportBulletin.tsx    ← PDF/Excel bulletin import
     │       ├── SimilarCasesPage.tsx  ← Similarity search results
-    │       └── LinkageScreen.tsx     ← Side-by-side case comparison
+    │       ├── LinkageScreen.tsx     ← Side-by-side case comparison
+    │       └── ResearchOutputs.tsx   ← Research aggregate exports
     │
     ├── package.json
     └── vite.config.ts

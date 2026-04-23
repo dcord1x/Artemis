@@ -25,32 +25,32 @@ The app should feel like a beautifully designed research workstation — think d
 **Issue:** ~80 fields on one page is cognitively overwhelming. There is no sense of progress, no section collapse, no way to jump between sections.
 
 **Fixes:**
-- **Collapsible section panels** with a header showing `fields coded / total` per section (e.g., `Encounter 4/12 ✓`). Completed sections auto-collapse.
-- **Section progress bar** — a mini horizontal progress strip at the top of each section panel. Color transitions: gray → amber (in progress) → green (complete).
-- **Sticky section jump rail** — a narrow vertical sidebar (left edge) with section abbreviations (APP / NEG / MOB / COE / VIO / GIS). Clicking scrolls to that section. Active section highlighted. This replaces the current static TimelineStrip or complements it.
-- **Field search** — a small magnifying glass in the header bar of CodingScreen that opens a command-palette style search: type "vehicle" and it jumps to and highlights the vehicle fields. Essential for a 80-field form.
-- **Autosave indicator** — subtle "Saved 3s ago" ghost text in the toolbar. Replaces the need to manually remember to save. Fire a PATCH on field blur or after 2s of inactivity.
-- **Accept All Suggestions button** — one-click to accept all pending AI suggestions in a section. Currently requires accepting one-by-one.
+- ✅ **Collapsible section panels** — `SectionPanel` shows `fields coded / total`. Completed sections auto-collapse.
+- ✅ **Section progress bar** — amber horizontal strip per section panel.
+- **Sticky section jump rail** — a narrow vertical sidebar (left edge) with section abbreviations. Clicking scrolls to that section. Active section highlighted. *(not yet built)*
+- **Field search** — command-palette style search: type "vehicle" to jump to and highlight vehicle fields. *(not yet built)*
+- ✅ **Autosave indicator** — "Saved Xs ago" ghost text in toolbar. Fires PATCH 2s after last change.
+- **Accept All Suggestions button** — one-click to accept all pending AI suggestions in a section. *(not yet built)*
 
 ### 1.2 Navigation & Wayfinding
 
 **Issue:** No breadcrumbs, no "currently viewing case X of N" context, no back navigation from detail views.
 
 **Fixes:**
-- **Breadcrumb bar** below the nav header: `Cases > Report #2024-0042 > Linkage Comparison`
-- **Case counter pill** on CodingScreen: `Case 12 of 47 in-progress` with ← → arrow navigation to move between cases in the current filter set (like a lightbox). Critical for high-volume coding sessions.
-- **Last visited indicator** on Cases list — a subtle `→ current` marker on the case the analyst was last working on. Restore scroll position on back navigation.
+- **Breadcrumb bar** below the nav header: `Cases > Report #2024-0042 > Linkage Comparison` *(not yet built)*
+- ✅ **Case counter pill** — `Case X of N` with ← → arrow navigation in CodingScreen toolbar.
+- **Last visited indicator** on Cases list — subtle `→ current` marker + restore scroll on back navigation. *(not yet built)*
 
 ### 1.3 CaseList — Density & Scannability
 
 **Issue:** Card list is functional but dense. Quick indicators (colored dots) lack labels. Filtering is comprehensive but visually cluttered.
 
 **Fixes:**
-- **Two-mode list** — toggle between Card view and Table/Spreadsheet view. Table view shows one row per case with inline yes/no/— cells for key fields. Analysts who code dozens of cases prefer a dense row view.
-- **Column picker** for table mode — choose which fields appear as columns.
-- **Inline status badge** that is larger and clearer: `CODED`, `IN PROGRESS`, `UNCODED`, `REVIEWED` — full text, not just a dot.
-- **Filter panel as a collapsible sidebar** (left side, 220px wide) instead of a top bar. Saves vertical space for the case list.
-- **Bulk action toolbar** — appears when checkboxes are selected: "Mark Reviewed (3)", "Export Selected (3)", "Delete (3)". Currently there is no bulk workflow.
+- **Two-mode list** — toggle between Card view and Table/Spreadsheet view. Table view shows one row per case with inline yes/no/— cells for key fields. *(not yet built)*
+- ✅ **Column picker** for table mode — ServiceNow-style column manager.
+- **Inline status badge** — larger, full-text: `CODED`, `IN PROGRESS`, `UNCODED`, `REVIEWED`. *(not yet built)*
+- **Filter panel as a collapsible sidebar** (left side, 220px wide) instead of a top bar. *(not yet built)*
+- ✅ **Bulk action toolbar** — bulk delete and delete-all-visible.
 
 ### 1.4 Analysis Dashboard
 
@@ -127,8 +127,7 @@ For initial triage of newly imported cases, analysts only need to assess ~10 key
 
 **Proposed:** A "Triage Mode" toggle on CodingScreen that shows only: coercion, movement, physical_force, sexual_assault, threats, vehicle_present, weapon, escalation_score. Saves as `coding_status = in_progress`. Allows rapid first-pass assessment before full coding.
 
-**C. Autosave**
-Currently analysts must manually hit Save. On a 80-field form, this risks data loss. Auto-save on blur or after 2s idle is essential.
+**C. ✅ Autosave** — Implemented. Fires PATCH 2s after last field change; "Saved Xs ago" indicator in toolbar.
 
 **D. Undo / Redo**
 No ability to undo a field change. Especially risky when "Accept All Suggestions" is added. Should maintain a local change stack (Ctrl+Z / Ctrl+Y).
@@ -170,21 +169,15 @@ The app flags `repeat_suspect` and `repeat_vehicle` but there's no visual showin
 
 ### 2.3 🟡 MEDIUM VALUE
 
-**K. Keyboard Shortcut System**
-Power users coding dozens of cases need keyboard navigation. No shortcuts currently exist.
+**K. ✅ Keyboard Shortcut System** — Partially implemented.
+- ✅ `Ctrl+S` → Save
+- ✅ `Ctrl+→` / `Ctrl+←` → Next/prev case in filtered list
+- `Ctrl+A` → Accept all AI suggestions in current section *(not yet built)*
+- `Ctrl+R` → Mark current field as reviewed *(not yet built)*
+- `1` / `2` / `3` → Fill yes/no/unclear on focused yes-no field *(not yet built)*
+- `/` → Open field search *(not yet built)*
 
-**Proposed shortcuts:**
-- `Ctrl+S` → Save
-- `Ctrl+→` / `Ctrl+←` → Next/prev case in filtered list
-- `Ctrl+A` → Accept all AI suggestions in current section
-- `Ctrl+R` → Mark current field as reviewed
-- `1` / `2` / `3` → Fill yes/no/unclear on focused yes-no field
-- `/` → Open field search
-
-**L. Weather Data Display**
-The backend fetches historical weather data (`weather.py`) and stores it in `ai_suggestions`. It is never displayed in the UI.
-
-**Proposed:** Show a small weather chip on CodingScreen header: `⛅ 12°C, partly cloudy` when weather data is available.
+**L. ✅ Weather Data Display** — Implemented. Weather card shown in the Narrative tab when NLP analysis has been run.
 
 **M. Memo / Analyst Journal**
 A case-level free-text memo pad separate from `coder_notes` — a running log of analytical thoughts, hypotheses, follow-up questions.
@@ -201,10 +194,7 @@ Researchers need to track time spent coding for grant reporting.
 
 **Proposed:** A subtle timer in the CodingScreen header tracking time-on-task per case. Auto-pauses after 5min of inactivity. Stores `coding_time_minutes` per case.
 
-**P. Custom Tags**
-The field set is fixed. Analysts sometimes need ad-hoc tagging (e.g., "flagged for legal review", "awaiting corroboration").
-
-**Proposed:** A tag input on each case (like GitHub issue labels). Free-text tags, auto-complete from existing tags, filterable in CaseList.
+**P. ✅ Custom Tags** — Implemented. Free-text tag input on each case, filterable in CaseList.
 
 ### 2.4 🟢 FUTURE / RESEARCH FEATURES
 
@@ -247,27 +237,35 @@ A dedicated structured field (separate from narrative) to capture the survivor's
 
 ---
 
-## 5. PRIORITIZED IMPLEMENTATION ORDER
+## 5. IMPLEMENTATION STATUS
+
+### Shipped
+
+| Feature | Notes |
+|---------|-------|
+| Autosave with "Saved Xs ago" indicator | Fires 2s after last change |
+| Section collapse + per-section progress | `SectionPanel` auto-collapses when complete |
+| Case ← → navigation arrows | Counter pill in CodingScreen toolbar |
+| Toast notification system | `Toast.tsx` + `useToast()` hook |
+| Keyboard shortcuts (Ctrl+S, Ctrl+←/→) | Active in CodingScreen |
+| Column picker for CaseList table mode | ServiceNow-style column manager |
+| Bulk action toolbar on CaseList | Bulk delete + delete-all-visible |
+| Custom tags | Tag input on each case, filterable |
+| Weather data display | Weather card in Narrative tab |
+
+### Remaining (Prioritized)
 
 | Priority | Feature | Effort | Impact |
 |----------|---------|--------|--------|
-| 1 | Autosave with "Saved Xs ago" indicator | Low | Critical |
-| 2 | Section collapse + per-section progress | Medium | High |
-| 3 | Case ← → navigation arrows | Low | High |
-| 4 | Toast notification system | Low | Medium |
-| 5 | Keyboard shortcuts (Ctrl+S, arrows, 1/2/3) | Low | High |
-| 6 | Narrative annotation / highlighted evidence spans | High | High |
-| 7 | Triage / Quick-code mode | Medium | High |
-| 8 | Recharts on Analysis page | Medium | High |
-| 9 | Map clustering + time filter slider | Medium | High |
-| 10 | Field search (command palette) | Medium | Medium |
-| 11 | Validation rules engine | Medium | Medium |
-| 12 | Weather data display chip | Low | Low |
-| 13 | Bulk action toolbar on CaseList | Medium | Medium |
-| 14 | Offender profile builder | High | High |
-| 15 | Case timeline view | High | Medium |
-| 16 | Report export / print view | Medium | Medium |
-| 17 | Inter-rater reliability tracker | High | High |
-| 18 | Custom tags | Medium | Medium |
-| 19 | Suspect/vehicle network graph | High | Medium |
-| 20 | Dataset health dashboard | High | Medium |
+| 1 | Narrative annotation / highlighted evidence spans | High | High |
+| 2 | Triage / Quick-code mode | Medium | High |
+| 3 | Recharts on Analysis page | Medium | High |
+| 4 | Map clustering + time filter slider | Medium | High |
+| 5 | Field search (command palette) | Medium | Medium |
+| 6 | Validation rules engine | Medium | Medium |
+| 7 | Offender profile builder | High | High |
+| 8 | Case timeline view | High | Medium |
+| 9 | Report export / print view | Medium | Medium |
+| 10 | Inter-rater reliability tracker | High | High |
+| 11 | Suspect/vehicle network graph | High | Medium |
+| 12 | Dataset health dashboard | High | Medium |

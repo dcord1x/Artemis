@@ -429,6 +429,7 @@ async def parse_excel_endpoint(file: UploadFile = File(...)):
         date_reported_raw = _cell(3)
         city_raw          = _cell(4)
         location_raw      = _cell(5)
+        coords_raw        = _cell(6)
         description_raw   = _cell(7)
         vehicle_raw       = _cell(8)
 
@@ -438,6 +439,17 @@ async def parse_excel_endpoint(file: UploadFile = File(...)):
 
         veh  = parse_vehicle(vehicle_text)
         locs = parse_locations(location_text, synopsis)
+
+        lat_initial = lon_initial = None
+        if coords_raw and str(coords_raw).strip() not in ("None", ""):
+            raw_str = str(coords_raw).strip().strip("()")
+            parts = raw_str.split(",")
+            if len(parts) == 2:
+                try:
+                    lat_initial = float(parts[0].strip())
+                    lon_initial = float(parts[1].strip())
+                except ValueError:
+                    pass
 
         incidents.append({
             "raw_narrative":              synopsis,
@@ -464,6 +476,8 @@ async def parse_excel_endpoint(file: UploadFile = File(...)):
             "vehicle_colour":   veh.get("vehicle_colour",  ""),
             "plate_partial":    veh.get("plate_partial",   ""),
             "summary_analytic": "",
+            "lat_initial":  lat_initial,
+            "lon_initial":  lon_initial,
             "flags": [],
         })
 
@@ -662,6 +676,8 @@ def bulk_save(data: BulkSaveRequest, db: Session = Depends(get_db)):
             vehicle_colour=inc.get("vehicle_colour", ""),
             plate_partial=inc.get("plate_partial", ""),
             summary_analytic=inc.get("summary_analytic", ""),
+            lat_initial=inc.get("lat_initial"),
+            lon_initial=inc.get("lon_initial"),
             ai_suggestions={"flags": inc.get("flags", []), "entry_type": inc.get("entry_type", "")},
             audit_log=[{"ts": datetime.utcnow().isoformat(), "action": "imported from bulletin", "by": data.analyst_name or "system"}],
         )
