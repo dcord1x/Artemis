@@ -38,7 +38,7 @@ export default function Layout({ children }: Props) {
               letterSpacing: '-0.01em',
               lineHeight: 1.1,
             }}>
-              VIA
+              VIRGO
             </div>
             <div style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: '0.04em' }}>
               Violence, Interaction, and Analysis
