@@ -32,6 +32,9 @@ if git -C "$DIR" fetch origin master --quiet 2>>"$LOG"; then
     LOCAL=$(git -C "$DIR" rev-parse HEAD 2>/dev/null)
     REMOTE=$(git -C "$DIR" rev-parse origin/master 2>/dev/null)
 
+    BUILD_HASH_FILE="$DIR/.last_build_hash"
+    OLD_BUILD_HASH=$(cat "$BUILD_HASH_FILE" 2>/dev/null || echo "none")
+
     if [ "$LOCAL" != "$REMOTE" ]; then
         echo "[$(date)] Update available: ${LOCAL:0:7} -> ${REMOTE:0:7}" >> "$LOG"
 
@@ -77,6 +80,7 @@ if git -C "$DIR" fetch origin master --quiet 2>>"$LOG"; then
             echo "[$(date)] Building frontend..." >> "$LOG"
             cd "$DIR/frontend" \
                 && npm run build --silent >>"$LOG" 2>&1 \
+                && echo "$REMOTE" > "$BUILD_HASH_FILE" \
                 && echo "[$(date)] Frontend built successfully" >> "$LOG" \
                 || echo "[$(date)] Frontend build failed - old dist may still serve" >> "$LOG"
             cd "$DIR"
@@ -86,6 +90,17 @@ if git -C "$DIR" fetch origin master --quiet 2>>"$LOG"; then
         fi
     else
         echo "[$(date)] Already up to date (${LOCAL:0:7})" >> "$LOG"
+
+        # Rebuild if dist was built from a different commit
+        if [ "$LOCAL" != "$OLD_BUILD_HASH" ]; then
+            echo "[$(date)] dist outdated for commit ${LOCAL:0:7} - rebuilding frontend" >> "$LOG"
+            cd "$DIR/frontend" \
+                && npm run build --silent >>"$LOG" 2>&1 \
+                && echo "$LOCAL" > "$BUILD_HASH_FILE" \
+                && echo "[$(date)] Frontend rebuilt successfully" >> "$LOG" \
+                || echo "[$(date)] Frontend build failed" >> "$LOG"
+            cd "$DIR"
+        fi
 
         # Rebuild if .env changed even without a git update
         ENV_FILE="$DIR/frontend/.env"

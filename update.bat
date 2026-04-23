@@ -37,9 +37,28 @@ if exist "%ENV_FILE%" (
 set "OLD_ENV_HASH="
 if exist "%ENV_HASH_FILE%" set /p OLD_ENV_HASH=<"%ENV_HASH_FILE%"
 
+REM ── 2c. Check if dist was built from a different commit ──────────────────────
+set "BUILD_HASH_FILE=%DIR%.last_build_hash"
+set "OLD_BUILD_HASH="
+if exist "%BUILD_HASH_FILE%" set /p OLD_BUILD_HASH=<"%BUILD_HASH_FILE%"
+
 if "%LOCAL%"=="%REMOTE%" (
     if "%NEW_ENV_HASH%"=="%OLD_ENV_HASH%" (
-        echo [%date% %time%] Already up to date ^(%LOCAL:~0,7%^) >> "%LOG%"
+        if "%LOCAL%"=="%OLD_BUILD_HASH%" (
+            echo [%date% %time%] Already up to date ^(%LOCAL:~0,7%^) >> "%LOG%"
+            goto :done
+        )
+        echo [%date% %time%] dist outdated for commit %LOCAL:~0,7% - rebuilding frontend >> "%LOG%"
+        pushd "%DIR%frontend"
+        npm run build --silent 2>>"%LOG%"
+        if errorlevel 1 (
+            echo [%date% %time%] Frontend build failed >> "%LOG%"
+            popd
+        ) else (
+            popd
+            echo %LOCAL%> "%BUILD_HASH_FILE%"
+            echo [%date% %time%] Frontend rebuilt successfully >> "%LOG%"
+        )
         goto :done
     )
     echo [%date% %time%] .env changed - rebuilding frontend >> "%LOG%"
@@ -51,6 +70,7 @@ if "%LOCAL%"=="%REMOTE%" (
     ) else (
         popd
         echo %NEW_ENV_HASH%> "%ENV_HASH_FILE%"
+        echo %LOCAL%> "%BUILD_HASH_FILE%"
         echo [%date% %time%] Frontend rebuilt with new .env >> "%LOG%"
     )
     goto :done
@@ -145,6 +165,7 @@ if errorlevel 1 (
     popd
     echo %NEW_ENV_HASH%> "%ENV_HASH_FILE%"
     echo [%date% %time%] Frontend built successfully >> "%LOG%"
+    echo %REMOTE%> "%BUILD_HASH_FILE%"
 )
 
 :done
