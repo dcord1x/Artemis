@@ -915,7 +915,7 @@ function ScoringTab({ fields }: { fields: Partial<Report> }) {
                 padding: '4px 8px', background: 'var(--surface-2)',
                 borderBottom: '1px solid var(--border)',
               }}>
-                {['Field (weight)', 'Value', 'Status'].map((h) => (
+                {['Field', 'Value', 'Status'].map((h) => (
                   <span key={h} style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.05em', color: 'var(--text-3)', textTransform: 'uppercase' }}>{h}</span>
                 ))}
               </div>
@@ -950,7 +950,6 @@ function ScoringTab({ fields }: { fields: Partial<Report> }) {
                       <span style={{ fontSize: 10, color: isEmpty ? 'var(--text-3)' : 'var(--text-1)', fontWeight: isEmpty ? 400 : 500 }}>
                         {fd.label}
                       </span>
-                      <span style={{ fontSize: 9, color: 'var(--text-3)', marginLeft: 4 }}>×{fd.weight}</span>
                     </div>
                     <span style={{
                       fontSize: 10, fontWeight: isEmpty ? 400 : 600,

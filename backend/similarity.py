@@ -22,9 +22,29 @@ from datetime import datetime
 from typing import Any
 
 STOPWORDS = {
+    # Generic English function words
     'the','a','an','and','or','was','were','he','she','they','it','in','on',
     'at','to','of','with','had','did','not','said','told','then','after',
     'her','his','him','who','that','this','when','from','but','by','as',
+    'been','have','has','would','could','should','will','be','are','is',
+    'for','so','if','no','yes','all','its','our','your','their','also',
+    'just','more','than','out','up','do','can','get','got','one','two',
+    'into','over','down','off','may','any','very','some','other','such',
+    # Crime report narrative boilerplate — ubiquitous, zero discriminating power
+    'suspect','victim','complainant','female','male','person','individual',
+    'subject','client','worker','officer','detective','police','reported',
+    'report','reporting','incident','case','file','stated','indicated',
+    'advised','described','according','provided','alleged','alleging',
+    'approximately','around','about','during','prior','following','occurred',
+    'took','place','area','location','time','date','unknown','known',
+    'told','said','asked','wanted','went','came','left','arrived','was',
+    'scene','address','call','contacted','identified','involved','found',
+    'appeared','observed','seen','heard','spoke','speaking','met','meeting',
+    'repeatedly','multiple','several','numerous','various','further',
+    'following','regarding','related','above','below','between','without',
+    'against','because','while','before','being','however','therefore',
+    'information','details','contact','situation','matter','issue',
+    'noted','noted','confirmed','denied','refused','stated','explained',
 }
 
 

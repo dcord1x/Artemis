@@ -236,6 +236,28 @@ const COLUMN_DEFS: ColumnDef[] = [
     render: (_r, ctx) => ctx.nlp.movement_rank  ? <span style={{ fontSize: 11 }}>R{ctx.nlp.movement_rank}</span>  : <span style={{ color: 'var(--border-mid)', fontSize: 11 }}>–</span> },
   { id: 'nlp_weapon_rank',    group: 'NLP', header: 'NLP Weapon Rank',    label: 'NLP Wpn', align: 'center',
     render: (_r, ctx) => ctx.nlp.weapon_rank    ? <span style={{ fontSize: 11 }}>R{ctx.nlp.weapon_rank}</span>    : <span style={{ color: 'var(--border-mid)', fontSize: 11 }}>–</span> },
+
+  // ── GIS ───────────────────────────────────────────────────────────────────
+  { id: 'lat_initial',     group: 'GIS', header: 'Lat — Initial Contact',  label: 'Lat (Contact)',  align: 'right', sortKey: 'lat_initial',
+    render: (r) => <span style={{ fontFamily: 'monospace', fontSize: 11 }}>{(r as any).lat_initial != null ? Number((r as any).lat_initial).toFixed(5) : '—'}</span> },
+  { id: 'lon_initial',     group: 'GIS', header: 'Lon — Initial Contact',  label: 'Lon (Contact)',  align: 'right', sortKey: 'lon_initial',
+    render: (r) => <span style={{ fontFamily: 'monospace', fontSize: 11 }}>{(r as any).lon_initial != null ? Number((r as any).lon_initial).toFixed(5) : '—'}</span> },
+  { id: 'lat_incident',    group: 'GIS', header: 'Lat — Incident',         label: 'Lat (Incident)', align: 'right', sortKey: 'lat_incident',
+    render: (r) => <span style={{ fontFamily: 'monospace', fontSize: 11 }}>{(r as any).lat_incident != null ? Number((r as any).lat_incident).toFixed(5) : '—'}</span> },
+  { id: 'lon_incident',    group: 'GIS', header: 'Lon — Incident',         label: 'Lon (Incident)', align: 'right', sortKey: 'lon_incident',
+    render: (r) => <span style={{ fontFamily: 'monospace', fontSize: 11 }}>{(r as any).lon_incident != null ? Number((r as any).lon_incident).toFixed(5) : '—'}</span> },
+  { id: 'lat_destination', group: 'GIS', header: 'Lat — Destination',      label: 'Lat (Dest)',     align: 'right', sortKey: 'lat_destination',
+    render: (r) => <span style={{ fontFamily: 'monospace', fontSize: 11 }}>{(r as any).lat_destination != null ? Number((r as any).lat_destination).toFixed(5) : '—'}</span> },
+  { id: 'lon_destination', group: 'GIS', header: 'Lon — Destination',      label: 'Lon (Dest)',     align: 'right', sortKey: 'lon_destination',
+    render: (r) => <span style={{ fontFamily: 'monospace', fontSize: 11 }}>{(r as any).lon_destination != null ? Number((r as any).lon_destination).toFixed(5) : '—'}</span> },
+  { id: 'geocode_status',  group: 'GIS', header: 'Geocode Status',          label: 'Geo Status',     sortKey: 'geocode_status',
+    render: (r) => txt(r_.r(r, 'geocode_status')) },
+  { id: 'initial_contact_address_raw',      group: 'GIS', header: 'Address Raw — Initial Contact', label: 'Addr Raw (Contact)', render: (r) => txt(r_.r(r,'initial_contact_address_raw'), 180) },
+  { id: 'incident_address_raw',             group: 'GIS', header: 'Address Raw — Incident',        label: 'Addr Raw (Incident)', render: (r) => txt(r_.r(r,'incident_address_raw'), 180) },
+  { id: 'destination_address_raw',          group: 'GIS', header: 'Address Raw — Destination',     label: 'Addr Raw (Dest)', render: (r) => txt(r_.r(r,'destination_address_raw'), 180) },
+  { id: 'initial_contact_address_normalized', group: 'GIS', header: 'Address Normalized — Initial Contact', label: 'Addr Norm (Contact)', render: (r) => txt(r_.r(r,'initial_contact_address_normalized'), 180) },
+  { id: 'incident_address_normalized',      group: 'GIS', header: 'Address Normalized — Incident',  label: 'Addr Norm (Incident)', render: (r) => txt(r_.r(r,'incident_address_normalized'), 180) },
+  { id: 'destination_address_normalized',   group: 'GIS', header: 'Address Normalized — Destination', label: 'Addr Norm (Dest)', render: (r) => txt(r_.r(r,'destination_address_normalized'), 180) },
 ];
 
 const COL_MAP = Object.fromEntries(COLUMN_DEFS.map(c => [c.id, c]));
