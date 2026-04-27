@@ -124,6 +124,78 @@ Accepts an array of `DupCheckItem` objects and returns a status for each before 
 
 ---
 
+## Stage CRUD
+
+Each report has an ordered list of analyst-coded stages stored in the `report_stages` table.
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/reports/{report_id}/stages` | List all stages for a report, ordered by `stage_order` |
+| `POST` | `/reports/{report_id}/stages` | Create a new stage on a report |
+| `PUT` | `/reports/{report_id}/stages/{stage_id}` | Update a stage (partial — all fields optional) |
+| `DELETE` | `/reports/{report_id}/stages/{stage_id}` | Delete a stage |
+| `PUT` | `/reports/{report_id}/stages/reorder` | Bulk-update `stage_order` for all stages on a report |
+
+> **Route order matters:** `/stages/reorder` is registered before `/stages/{stage_id}` in `main.py` so FastAPI does not treat the literal string `reorder` as a stage ID.
+
+### POST /reports/{id}/stages — Body
+
+```json
+{
+  "stage_type": "initial_contact",
+  "stage_order": 1,
+  "client_behaviors": ["pressure", "deception"],
+  "victim_responses": ["compliance"],
+  "turning_point_notes": "",
+  "visibility": "public",
+  "guardianship": "present",
+  "isolation_level": "not_isolated",
+  "control_type": "offender",
+  "location_label": "street corner",
+  "location_type": "public",
+  "movement_type_to_here": "none"
+}
+```
+
+All fields except `stage_type` are optional on create (default to empty string / empty array).
+
+### PUT /reports/{id}/stages/{stage_id} — Body
+
+Same shape as `POST` but all fields optional (PATCH semantics).
+
+### PUT /reports/{id}/stages/reorder — Body
+
+```json
+[
+  { "id": 12, "stage_order": 1 },
+  { "id": 13, "stage_order": 2 },
+  { "id": 14, "stage_order": 3 }
+]
+```
+
+### Stage response shape (`StageOut`)
+
+```json
+{
+  "id": 12,
+  "report_id": "RLA-...",
+  "stage_order": 1,
+  "stage_type": "initial_contact",
+  "client_behaviors": ["pressure"],
+  "victim_responses": ["compliance"],
+  "turning_point_notes": "",
+  "visibility": "public",
+  "guardianship": "present",
+  "isolation_level": "not_isolated",
+  "control_type": "offender",
+  "location_label": "street corner",
+  "location_type": "public",
+  "movement_type_to_here": "none"
+}
+```
+
+---
+
 ## Similarity & Linkage
 
 | Method | Path | Description |
@@ -145,10 +217,56 @@ Returns a ranked list of candidates with:
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/stats` | Aggregate statistics across all reports (KPIs, signal prevalence, breakdowns) |
-| `GET` | `/research/aggregate` | Research-oriented aggregates |
+| `GET` | `/research/aggregate` | Research-oriented aggregates (encounter sequences, mobility, environment) |
+| `GET` | `/research/stage-patterns` | Cross-case stage pattern analysis with optional filters (see below) |
 | `GET` | `/reports/{report_id}/summary` | AI-generated narrative summary for a single report |
 | `GET` | `/export/case-summaries` | Export all case summaries |
 | `GET` | `/export/research-tables` | Export research-ready data tables |
+
+### GET /research/stage-patterns — Query Parameters
+
+| Parameter | Type | Description |
+|---|---|---|
+| `stage_type` | string | Filter to a specific stage type (`initial_contact`, `negotiation`, `movement`, `escalation`, `outcome`) |
+| `visibility` | string | Filter to stages with this visibility value |
+| `guardianship` | string | Filter to stages with this guardianship value |
+
+All parameters are optional. When no filters are provided, aggregates run across all stages in all cases.
+
+### GET /research/stage-patterns — Response
+
+```json
+{
+  "stage_type_frequency": [
+    { "value": "escalation", "count": 42 },
+    { "value": "initial_contact", "count": 38 }
+  ],
+  "visibility_by_stage": {
+    "escalation": [
+      { "value": "private", "count": 28 },
+      { "value": "semi_private", "count": 10 }
+    ]
+  },
+  "guardianship_by_stage": { "escalation": [{ "value": "absent", "count": 31 }] },
+  "isolation_by_stage":    { "escalation": [{ "value": "isolated", "count": 25 }] },
+  "control_by_stage":      { "escalation": [{ "value": "offender", "count": 33 }] },
+  "movement_by_stage":     { "movement":   [{ "value": "vehicle", "count": 19 }] },
+  "behavior_frequency": [
+    { "value": "aggression", "count": 35 }
+  ],
+  "response_frequency": [
+    { "value": "compliance", "count": 28 }
+  ],
+  "sequence_frequency": [
+    { "value": "initial_contact → negotiation → escalation → outcome", "count": 14 }
+  ],
+  "matching_cases": ["RLA-001", "RLA-007"],
+  "total_stages": 187,
+  "total_cases_with_stages": 51
+}
+```
+
+`matching_cases` contains the `report_id` values of every case that has at least one stage matching all supplied filter criteria. Used by the Stage Patterns tab in ResearchOutputs to build a filterable case list.
 
 ---
 

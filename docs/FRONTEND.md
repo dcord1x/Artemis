@@ -1,126 +1,134 @@
 # Frontend Guide
 
-React 18 + TypeScript SPA built with Vite. Source in `frontend/src/`.
+React 19 + TypeScript SPA built with Vite. Source in `frontend/src/`.
 
 Dev server: `npm run dev` (port 5173, proxies `/api/*` to backend on 8000).
-Production bundle: `frontend/dist/` (served directly by FastAPI).
+Production bundle: `frontend/dist/` (served directly by FastAPI with `Cache-Control: no-store` on `index.html`).
 
 ---
 
 ## Pages (`src/pages/`)
 
 ### CodingScreen.tsx
-Main coding workspace. Two-column layout:
-- **Left** — raw narrative (immutable, scrollable)
-- **Right** — 7-tab interface: Basics | Encounter | Mobility | Suspect | Narrative | GIS | Scoring
+Main coding workspace. Resizable two-column split layout:
+- **Left** — raw narrative (immutable, dark background), analyst transcription textarea, analyst summary textarea, timeline strip, tags
+- **Right** — 8-tab interface
 
-Features:
-- Autosave on field change
-- AI suggestion chips (accept / reject per field)
-- NLP badge overlay from spaCy results
-- Provenance border color per field state (unset → ai_suggested → analyst_filled → reviewed)
-- `SectionPanel` components auto-collapse when all fields are filled
+**Tabs:**
+
+| Tab | Contents |
+|-----|---------|
+| **Basics** | Date/time, city, neighbourhood, three location stages with city-confidence selects |
+| **Stages** *(new)* | `StageSequencer` component — analyst-defined ordered stages, each with behaviours, conditions, and location |
+| **Encounter** | Negotiation & Approach, Violence Indicators, Early Escalation Detail (3 collapsible sub-panels) |
+| **Mobility** | Movement, Geography, Assessment (3 collapsible sub-panels) |
+| **Suspect** | Suspect Description, Vehicle |
+| **Narrative** | NLP signals panel, escalation arc, weather card, escalation/resolution selects, analytic scores, coder notes |
+| **GIS** | Raw/normalized addresses, precision/source/confidence, lat/lon for 3 points |
+| **Scoring** | Behavioral domain breakdown showing similarity weight mapping |
+
+**Toolbar:** case ← → navigation, coding status badge + selector, autosave indicator, AI Suggest, NLP Analyze, Find Similar, Save, Export CSV.
+
+**Keyboard shortcuts:** `Ctrl+S` save, `Ctrl+←`/`Ctrl+→` navigate cases.
 
 ### CaseList.tsx
-Filterable report browser. Filters: coding status, city, violence indicators (coercion, physical force, sexual assault, threats, vehicle), date range, free-text search, NLP signals.
-
-Each row shows report ID, date, city, coding status, and key violence flags. Clicking opens CodingScreen.
+Filterable case browser. Filters: coding status, city, violence indicators, date range, free-text search, NLP signals. Each row shows report ID, date, city, coding status, key violence flags.
 
 ### Analysis.tsx
-Statistics dashboard:
-- KPI cards (total cases, coded %, violence signal rates)
+Aggregate statistics dashboard:
+- KPI stat cards (total, coded, violence rates) — all clickable → filtered CaseList
 - NLP signal prevalence bars (coercion, physical, sexual, movement, weapon, escalation)
-- Breakdowns by year, city, vehicle presence
-- All stat cards and bars are clickable → navigates to CaseList with matching filters
+- Year breakdown, city/neighbourhood distribution
+- Vehicle make/colour/type breakdowns, repeated plate fragments
 
 ### MapView.tsx
 Interactive Google Maps view:
 - Color-coded circle markers: red (initial contact), orange (incident), indigo (destination)
-- Dashed movement polylines (initial contact → incident → destination)
-- Address search via Google Places Autocomplete
+- Dashed movement polylines per case
+- Click marker → InfoWindow with report ID, city, coercion warning, "Open report" and "Street View"
+- Street View — pegman drag or per-marker button
+- Google Places Autocomplete address search
 - Filter by coercion flag; toggle movement lines
-- Click marker → InfoWindow with report ID, city, type, coercion warning
-- **Street View** — drag the pegman onto any road, or click "Street View" in a marker popup to jump directly to that coordinate in Street View
-- Requires `VITE_GOOGLE_MAPS_API_KEY` in `frontend/.env` (Maps JavaScript API + Places API must be enabled)
+- Requires `VITE_GOOGLE_MAPS_API_KEY` in `frontend/.env`
 
 ### ImportBulletin.tsx
-PDF or Excel upload interface:
-- Choose AI parse (Claude) or rules-based parse
-- Review extracted fields before saving
-- Duplicate detection runs automatically in the background after parse; exact matches (red badge) and possible matches (amber badge) are shown on each card
-- The Save button shows **"Checking…"** and is disabled while `/check-duplicates` is in-flight, preventing a race condition where Save could fire before `dupStatus` was populated
-- If the duplicate check fails (network error, backend unreachable), a visible error banner appears next to Save: *"Duplicate check failed — save may skip review"*
-- When Save is clicked and any selected incident is flagged, the **DupReviewModal** opens for analyst review before any data is written
-- Supports bulk save of multiple incidents from one file
+PDF or Excel upload. Choose AI parse (Claude) or rules-based. Duplicate detection runs automatically after parse — exact matches (red) and possible matches (amber) shown per card. DupReviewModal intercepts save if any flagged item is selected.
 
 ### SimilarCasesPage.tsx
-Given a focal report, fetches and ranks similar cases from the similarity engine. Shows:
-- Ranked candidate list with overall score (0–100)
-- Per-domain score breakdown (control, sexual, style, mobility, etc.)
-- Link to open full side-by-side comparison
+For a focal report, fetches ranked similar cases from the similarity engine. Shows score + per-domain breakdown. "Compare" opens LinkageScreen.
 
 ### LinkageScreen.tsx
-Side-by-side comparison of two specific cases:
-- Field-by-field diff view
-- Similarity score and domain breakdown
-- Analyst verdict panel: `possible_link` | `unlikely_link` | `needs_review`
-- Notes field; verdict saved to `case_linkages` table
+Side-by-side comparison of two cases. Field-by-field diff, similarity domain scores, analyst verdict panel (`possible_link` | `unlikely_link` | `needs_review`) with notes saved to `case_linkages`.
 
 ### ResearchOutputs.tsx
-Research-oriented export and aggregate views. Connects to `/research/aggregate` and export endpoints.
+Research-oriented aggregate analysis. Five tabs — **Stage Patterns is the default**:
+
+| Tab | Contents |
+|-----|---------|
+| **Stage Patterns** *(new, default)* | Filter panel (stage type, visibility, guardianship), matching case IDs, stage frequency bars, sequence frequency, behaviour/response frequencies, conditions-by-stage cross-tab table |
+| **Encounter Sequences** | NLP-derived encounter sequence frequencies, bigrams, escalation pathways |
+| **Mobility Pathways** | Movement/route pattern aggregates |
+| **Environmental Patterns** | Indoor/outdoor, public/private, deserted distributions + violence cross-tabs |
+| **Case Sequence Table** | Per-case sequence with provisional flags |
 
 ---
 
 ## Components (`src/components/`)
 
-### FieldRow.tsx
-Single coded field row. Renders:
-- Field label
-- Input widget (text, select, textarea — determined by field type)
-- Provenance-colored left border
-- AI suggestion chip (accept/reject buttons appear when `ai_suggested`)
-- NLP badge when spaCy flagged the field
+### StageSequencer.tsx *(new)*
+Full stage coding UI. Self-contained — loads/saves its own data via the stage API.
 
-Used by every section of CodingScreen.
+Features:
+- **Add Stage** dropdown — pick from 5 fixed stage types (Initial Contact, Negotiation, Movement, Escalation, Outcome)
+- **Stage cards** in order with: colored type badge, completion indicator (n/6 fields), ↑↓ reorder arrows, delete button, expand/collapse toggle
+- **Expanded panel** — four sub-sections:
+  - *Behaviours:* client behaviour checkboxes, victim response checkboxes, turning point textarea
+  - *Conditions:* visibility, guardianship, isolation, control — all fixed-option selects with `?` definition tooltips
+  - *Location:* label text input, location type select, movement-to-here select
+- **Autosave** — 800ms debounce on every field change
+- **Validation warning** — yellow banner if no stages are defined when saving as `coded`
+- **Sequence strip** — shows the full ordered sequence at the bottom (e.g. `Initial Contact → Negotiation → Escalation → Outcome`)
+
+### FieldRow.tsx
+Single coded field row:
+- Label, input widget (text / select / textarea / yesno / yesno-extended)
+- Provenance-colored left border
+- AI suggestion chip (Accept/Reject when `ai_suggested`)
+- NLP badge slot (from spaCy results)
+- Mark-reviewed button
 
 ### SectionPanel.tsx
-Collapsible group of `FieldRow` components. Shows a progress bar (fields filled / total). Auto-collapses when all fields in the section have a non-empty value.
+Collapsible group of `FieldRow` components. Shows progress bar (filled/total). Auto-collapses when all fields have non-empty values.
 
 ### TimelineStrip.tsx
-Visual strip showing the provenance state of all fields in a section at a glance. Color bands: grey (unset), yellow (ai_suggested), blue (analyst_filled), green (reviewed).
+Horizontal strip showing provenance state of all fields at a glance. Color bands: grey (unset), yellow (ai_suggested), blue (analyst_filled), green (reviewed).
 
 ### DupReviewModal.tsx
-Pre-save duplicate review modal. Opens when the analyst clicks Save and one or more selected incidents are flagged as duplicates (only reachable after the background `/check-duplicates` call completes). For each flagged item it shows:
-- Incoming vs matched record narrative previews (side by side, 120-char snippets)
-- Status badge: **Exact duplicate** (red, always skipped — backend blocks these) or **Possible duplicate** (amber)
-- Per-item decision toggle: **Skip** (default) or **Import anyway** (analyst override)
-- Footer summary counts and a "Confirm Import" button that sends only approved items to `/bulk-save`
-
-Escape key and clicking the backdrop close the modal without saving.
+Pre-save duplicate review modal. For each flagged incident: incoming vs matched narrative previews, status badge, per-item Skip/Import toggle. Confirm sends only approved items to `/bulk-save`. Escape key and backdrop click close without saving.
 
 ### GisMapModal.tsx
-Inline Google Maps modal for reviewing geocoded coordinates on a single report. Shows all three point types (initial contact, incident, destination) as markers. Click a marker to open an InfoWindow with full address metadata (raw, normalized, precision, source, confidence, analyst notes, lat/lon). Includes a "Street View" button per point.
+Inline Google Maps modal for reviewing geocoded coordinates. Shows all three point types as markers with InfoWindows containing full metadata (raw/normalized address, precision, source, confidence, lat/lon). Street View button per point.
 
 ### ParseViewer.tsx
-Displays the raw output of a bulletin parse (AI or rules-based) as a reviewable table before bulk-save. Highlights fields that are missing or low-confidence.
+Reviewable table of bulletin parse output before bulk-save. Highlights missing or low-confidence fields.
 
 ### Layout.tsx
-Top navigation header with logo, page links, and active-route highlighting. Wraps every page.
+Top navigation header with logo + page links + active-route highlighting. Wraps every page.
 
 ### Toast.tsx
-Notification system. Auto-dismissing toasts for save confirmations, errors, and AI suggestion results.
+Auto-dismissing notification system. `ToastProvider` wraps the app; `useToast()` hook available anywhere.
 
 ---
 
 ## Key Source Files
 
 | File | Purpose |
-|---|---|
-| `types.ts` | TypeScript `Report` interface and all related types |
-| `api.ts` | HTTP client functions for every backend endpoint |
+|------|---------|
+| `types.ts` | `Report`, `ReportStage`, `StagePatterns`, `SimilarityResult`, `ResearchAggregate`, and all related interfaces |
+| `api.ts` | HTTP client for all endpoints — reports CRUD, stage CRUD, stats, research, similarity, import, export |
 | `App.tsx` | React Router setup; maps routes to pages |
 | `main.tsx` | React entry point |
-| `index.css` / `App.css` | Global styles + Tailwind customizations |
+| `index.css` | Global CSS variables + utility classes |
 
 ---
 
@@ -129,6 +137,7 @@ Notification system. Auto-dismissing toasts for save confirmations, errors, and 
 No global state library. State flows via:
 - Component `useState` / `useEffect` for local UI state
 - Direct API calls in page components via `api.ts`
+- `StageSequencer` manages its own stage state independently
 - URL query params for CaseList filters (preserves state on navigation)
 
 ---
@@ -136,7 +145,7 @@ No global state library. State flows via:
 ## Routing
 
 | Route | Page |
-|---|---|
+|-------|------|
 | `/` | CaseList |
 | `/code/:reportId` | CodingScreen |
 | `/import` | ImportBulletin |

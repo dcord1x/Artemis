@@ -1,6 +1,6 @@
 # Red Light Alert
 
-A qualitative harm-report coding and GIS research tool for documenting violence against sex workers. Researchers use it to import raw narratives, systematically code incidents across ~80 fields, map locations, detect violence signals via NLP, and link suspected repeat offenders.
+A qualitative harm-report coding and GIS research tool for documenting violence against sex workers. Researchers use it to import raw narratives, systematically code incidents across ~80 fields, sequence events into analyst-defined stages, map locations, detect violence signals via NLP, and link suspected repeat offenders.
 
 ---
 
@@ -8,8 +8,7 @@ A qualitative harm-report coding and GIS research tool for documenting violence 
 
 ### Windows
 ```bat
-start_with_ai.bat      # prompts for ANTHROPIC_API_KEY, then launches everything
-start.bat              # no AI suggestions
+start.bat              # builds frontend, checks for updates, launches everything
 ```
 
 ### Mac / Linux
@@ -17,18 +16,19 @@ start.bat              # no AI suggestions
 ./start_mac.sh
 ```
 
-Both scripts start the FastAPI backend on **port 8000** and open the React frontend at **http://localhost:5173**.
+Both scripts build the frontend, start the FastAPI backend on **port 8000**, and open **http://localhost:8000** in the browser.
 
 ---
 
 ## Workflow
 
 1. **Import** — paste a narrative or upload PDF/Excel bulletins
-2. **Code** — fill ~80 structured fields in 7 categories (Basics, Encounter, Mobility, Suspect, Narrative, GIS, Scoring)
-3. **Assist** — Claude suggests field values; spaCy flags violence signals; analyst decides
-4. **Map** — geocode three location stages and visualize movement trajectories
-5. **Analyze** — aggregate statistics dashboard with drill-down filters
-6. **Link** — similarity engine scores case pairs for suspected repeat offenders
+2. **Code** — fill ~80 structured fields across 8 categories (Basics, Stages, Encounter, Mobility, Suspect, Narrative, GIS, Scoring)
+3. **Stage** — break each report into ordered stages (Initial Contact → Negotiation → Movement → Escalation → Outcome), each carrying behaviours, situational conditions, and location
+4. **Assist** — Claude suggests field values; spaCy flags violence signals; analyst decides
+5. **Map** — geocode three location points and visualize movement trajectories
+6. **Analyze** — aggregate statistics dashboard + stage pattern analysis across all cases
+7. **Link** — similarity engine scores case pairs for suspected repeat offenders
 
 > All AI suggestions are reviewer-only; every field has a provenance state (`unset → ai_suggested → analyst_filled → reviewed`).
 
@@ -38,7 +38,8 @@ Both scripts start the FastAPI backend on **port 8000** and open the React front
 
 | Layer | Technology |
 |---|---|
-| Frontend | React 18 + TypeScript, Vite, Tailwind CSS 4 |
+| Frontend | React 19 + TypeScript, Vite, Tailwind CSS 4 |
+| Routing | React Router v7 |
 | Mapping | Google Maps JavaScript API (Street View, Places Autocomplete) |
 | Backend | FastAPI (Python 3), SQLAlchemy 2 |
 | Database | SQLite (`redlight.db`) |
@@ -58,7 +59,7 @@ Both scripts start the FastAPI backend on **port 8000** and open the React front
 | [docs/CODING_FIELDS.md](docs/CODING_FIELDS.md) | Complete field reference organized by coding section |
 | [docs/BACKEND.md](docs/BACKEND.md) | Backend module guide (`main.py`, `ai.py`, `nlp_analysis.py`, etc.) |
 | [docs/FRONTEND.md](docs/FRONTEND.md) | Frontend pages and components guide |
-| [UI_UX_IMPROVEMENTS.md](UI_UX_IMPROVEMENTS.md) | Recent UI changes and design decisions |
+| [docs/UPDATE.md](docs/UPDATE.md) | Research requirements (RQ1–RQ3, stage sequencing spec) |
 
 ---
 
@@ -67,8 +68,8 @@ Both scripts start the FastAPI backend on **port 8000** and open the React front
 ```
 Red Light Alert/
 ├── backend/                  # FastAPI application
-│   ├── main.py               # 30+ REST endpoints
-│   ├── models.py             # SQLAlchemy ORM (Report, CaseLinkage)
+│   ├── main.py               # 40+ REST endpoints
+│   ├── models.py             # SQLAlchemy ORM (Report, CaseLinkage, ReportStage)
 │   ├── schemas.py            # Pydantic I/O validation
 │   ├── ai.py                 # Claude API integration
 │   ├── nlp_analysis.py       # spaCy violence detection pipeline
@@ -79,13 +80,12 @@ Red Light Alert/
 │   └── research.py           # Research analysis outputs
 ├── frontend/                 # React SPA
 │   └── src/
-│       ├── pages/            # CodingScreen, CaseList, Analysis, MapView, …
-│       ├── components/       # FieldRow, SectionPanel, TimelineStrip, …
-│       ├── types.ts          # TypeScript interfaces
+│       ├── pages/            # CodingScreen, CaseList, Analysis, MapView, ResearchOutputs, …
+│       ├── components/       # FieldRow, SectionPanel, StageSequencer, TimelineStrip, …
+│       ├── types.ts          # TypeScript interfaces (Report, ReportStage, StagePatterns, …)
 │       └── api.ts            # HTTP client
 ├── docs/                     # Reference documentation
 ├── redlight.db               # SQLite database (auto-created)
 ├── requirements.txt
-├── start.bat / start_with_ai.bat / start_mac.sh
-└── APP_OVERVIEW.md
+└── start.bat / start_mac.sh
 ```

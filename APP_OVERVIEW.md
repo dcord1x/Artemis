@@ -1,6 +1,6 @@
 # Red Light Alert — Full Application Overview
 
-> A specialized harm-report coding and GIS research tool for documenting violence against sex workers. Built for researchers and analysts who need to systematically code, analyze, and map incident narratives.
+> A specialized harm-report coding and GIS research tool for documenting violence against sex workers. Built for researchers and analysts who need to systematically code, stage-sequence, analyze, and map incident narratives.
 
 ---
 
@@ -13,58 +13,67 @@
 5. [Data Model](#5-data-model)
 6. [Backend — API & Logic](#6-backend--api--logic)
 7. [Frontend — Pages & Components](#7-frontend--pages--components)
-8. [AI & NLP Pipeline](#8-ai--nlp-pipeline)
-9. [Similarity & Linkage Engine](#9-similarity--linkage-engine)
-10. [GIS & Mapping](#10-gis--mapping)
-11. [Data Flow — End to End](#11-data-flow--end-to-end)
-12. [File Structure](#12-file-structure)
+8. [Stage Sequencing System](#8-stage-sequencing-system)
+9. [AI & NLP Pipeline](#9-ai--nlp-pipeline)
+10. [Similarity & Linkage Engine](#10-similarity--linkage-engine)
+11. [GIS & Mapping](#11-gis--mapping)
+12. [Data Flow — End to End](#12-data-flow--end-to-end)
+13. [File Structure](#13-file-structure)
 
 ---
 
 ## 1. What the App Does
 
-Red Light Alert is a qualitative coding workstation for harm reports. Researchers receive raw narrative reports — written accounts of violent or harmful incidents — and need to systematically extract structured data from them for research and pattern analysis.
+Red Light Alert is a qualitative coding workstation for harm reports. Researchers receive raw narrative reports — written accounts of violent or harmful incidents — and need to systematically extract structured data for research and pattern analysis.
 
 The workflow is:
 
 1. **Import** a raw narrative (paste, or bulk import from PDF/bulletin)
 2. **Code** it — fill ~80 structured fields covering incident basics, encounter sequence, mobility, suspect description, GIS locations
-3. **Use AI assistance** — an LLM (Claude) suggests field values; a spaCy NLP pipeline flags violence signals independently
-4. **Map it** — geocoded locations appear on an interactive Google Maps view with movement trajectories and Street View
-5. **Analyze patterns** — an analysis dashboard shows prevalence statistics across the whole dataset
-6. **Link cases** — a similarity engine compares any two cases and scores how likely they share an offender
+3. **Stage-sequence it** — break each report into ordered analyst-defined stages (Initial Contact → Negotiation → Movement → Escalation → Outcome), each carrying behaviours, situational conditions, and location
+4. **Use AI assistance** — Claude suggests field values; spaCy NLP flags violence signals independently
+5. **Map it** — geocoded locations appear on an interactive Google Maps view with movement trajectories and Street View
+6. **Analyze patterns** — statistics dashboard and stage pattern analysis across the whole dataset
+7. **Link cases** — a similarity engine compares any two cases and scores how likely they share an offender
 
-The tool is deliberately **human-led**: AI suggestions are never auto-applied. Every field has a provenance state (unset / ai_suggested / analyst_filled / reviewed) so the audit trail is clear.
+The tool is deliberately **human-led**: AI suggestions are never auto-applied. Every field has a provenance state (`unset / ai_suggested / analyst_filled / reviewed`) so the audit trail is always clear.
+
+The core analytic unit is: **stage → behaviour → conditions → location**. This enables queries like: *"Show me all cases where escalation occurred after movement into a private location with absent guardianship."*
 
 ---
 
 ## 2. Architecture Overview
 
 ```
-┌─────────────────────────────────────────────┐
-│               Browser (React SPA)            │
-│  CodingScreen │ CaseList │ Analysis │ Map    │
-│  ImportBulletin │ Linkage │ Similar Cases    │
-└────────────────────┬────────────────────────┘
-                     │ HTTP/JSON (/api/*)
-                     │
-┌────────────────────▼────────────────────────┐
-│            Python Backend (FastAPI)          │
-│                                              │
-│  main.py     — REST API routes               │
-│  models.py   — SQLAlchemy ORM + migrations   │
-│  schemas.py  — Pydantic I/O models           │
-│  ai.py       — Claude API (field suggest,    │
-│                bulletin parse)               │
-│  nlp_analysis.py — spaCy violence detector  │
-│  similarity.py   — weighted case comparison  │
-│  weather.py      — Open-Meteo lookup        │
-│  parser.py       — rules-based bulletin parse│
-│  import_excel.py — Excel batch import        │
-└────────────────────┬────────────────────────┘
-                     │ SQLAlchemy
-                     ▼
-              redlight.db (SQLite)
+┌──────────────────────────────────────────────────────┐
+│                  Browser (React SPA)                  │
+│  CodingScreen │ CaseList │ Analysis │ Map             │
+│  ImportBulletin │ Linkage │ ResearchOutputs           │
+└───────────────────────┬──────────────────────────────┘
+                        │ HTTP/JSON
+                        │
+┌───────────────────────▼──────────────────────────────┐
+│              Python Backend (FastAPI)                 │
+│                                                       │
+│  main.py         — REST API routes (40+ endpoints)    │
+│  models.py       — SQLAlchemy ORM + auto-migrations   │
+│  schemas.py      — Pydantic I/O models                │
+│  ai.py           — Claude API (field suggest, parse)  │
+│  nlp_analysis.py — spaCy violence detector            │
+│  similarity.py   — weighted case comparison           │
+│  weather.py      — Open-Meteo lookup                  │
+│  parser.py       — rules-based bulletin parse         │
+│  import_excel.py — Excel batch import                 │
+│  research.py     — cross-case aggregate analysis      │
+└───────────────────────┬──────────────────────────────┘
+                        │ SQLAlchemy
+                        ▼
+                 redlight.db (SQLite)
+          ┌──────────────────────────┐
+          │  reports                 │
+          │  report_stages  ← NEW    │
+          │  case_linkages           │
+          └──────────────────────────┘
 ```
 
 The frontend is a **pre-built static bundle** served directly by the FastAPI backend at `/`. In development, Vite runs on port 5173 with a proxy to the backend on port 8000.
@@ -75,9 +84,9 @@ The frontend is a **pre-built static bundle** served directly by the FastAPI bac
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend framework | React 18 + TypeScript |
+| Frontend framework | React 19 + TypeScript |
 | Frontend build | Vite |
-| Routing | React Router v6 |
+| Routing | React Router v7 |
 | Styling | Tailwind CSS 4 |
 | Icons | Lucide React |
 | Mapping | Google Maps JavaScript API (`@react-google-maps/api`) |
@@ -94,10 +103,11 @@ The frontend is a **pre-built static bundle** served directly by the FastAPI bac
 ## 4. How to Run
 
 ### Windows
+```bat
+start.bat    ← builds frontend, checks for git updates, starts backend, opens browser
 ```
-start_with_ai.bat    ← includes ANTHROPIC_API_KEY prompt
-start.bat            ← runs without AI features
-```
+
+Add `ANTHROPIC_API_KEY` to `backend/.env` to enable AI suggestions.
 
 ### Mac / Linux
 ```bash
@@ -105,14 +115,6 @@ export ANTHROPIC_API_KEY="sk-ant-..."
 chmod +x start_mac.sh
 ./start_mac.sh
 ```
-
-The startup script:
-1. Checks for Python 3
-2. Creates a virtualenv (`venv_mac/`) and installs `requirements.txt` on first run
-3. Starts the FastAPI backend on `http://localhost:8000`
-4. Opens the browser
-
-The frontend `dist/` folder (pre-built from Vite) is served as static files by FastAPI. If you make frontend changes you must run `npm run build` inside `frontend/` to regenerate it.
 
 ### Development mode (hot reload)
 ```bash
@@ -127,37 +129,57 @@ cd frontend && npm run dev    # runs on :5173, proxies /api → :8000
 
 ## 5. Data Model
 
-All data lives in a single SQLite file: `redlight.db`.
+All data lives in a single SQLite file: `redlight.db`. Three tables.
 
-### Reports table (`reports`)
+### `reports` table
 
-Each row is one coded incident report. Key field groups:
+Each row is one coded incident report. ~150 fields organized by purpose:
 
-| Group | Fields | Purpose |
-|-------|--------|---------|
-| **Admin** | `report_id`, `analyst_name`, `source_organization`, `date_received`, `coding_status`, `confidence_level` | Who coded it, where it came from, what state it's in |
+| Group | Sample Fields | Purpose |
+|-------|--------------|---------|
+| **Admin** | `report_id`, `analyst_name`, `coding_status`, `confidence_level` | Source, coder, state |
 | **Incident basics** | `incident_date`, `incident_time_*`, `day_of_week`, `city`, `neighbourhood` | When and where |
-| **Location stages** | `initial_contact_location/city`, `incident_location_primary/city`, `incident_location_secondary`, `destination_city` | Three-stage location model: where contact happened → where the incident occurred → where the victim ended up |
-| **Environment** | `indoor_outdoor`, `public_private`, `deserted` | Physical context of the incident location |
-| **Encounter sequence** | `initial_approach_type`, `negotiation_present`, `refusal_present`, `pressure_after_refusal`, `coercion_present`, `threats_present`, `verbal_abuse`, `physical_force`, `sexual_assault`, `robbery_theft`, `stealthing`, `exit_type` | What happened step by step |
-| **Early escalation detail** | `repeated_pressure`, `intimidation_present`, `abrupt_tone_change`, `verbal_abuse_before_violence`, `escalation_trigger` | How the situation escalated |
-| **Mobility** | `movement_present`, `movement_attempted`, `movement_completed`, `mode_of_movement`, `entered_vehicle`, `start/destination_location_type`, `public_to_private_shift`, `cross_neighbourhood`, `cross_municipality`, `cross_city_movement`, `offender_control_over_movement` | Whether and how the victim was moved |
-| **Suspect/vehicle** | `suspect_count`, `suspect_gender`, `suspect_description_text`, `suspect_race_ethnicity`, `suspect_age_estimate`, `vehicle_present`, `vehicle_make/model/colour`, `plate_partial`, `repeat_suspect_flag`, `repeat_vehicle_flag` | Offender and vehicle description |
-| **Narrative coding** | `early_escalation_score`, `mobility_richness_score`, `escalation_point`, `summary_analytic`, `key_quotes`, `coder_notes`, `uncertainty_notes`, `cleaned_narrative` | Analyst's interpretive layer |
-| **GIS** | `*_address_raw`, `lat_*/lon_*`, `*_address_normalized`, `*_precision`, `*_source`, `*_confidence` | Three geocoded points (contact, incident, destination) with full confidence metadata |
-| **Metadata** | `field_provenance` (JSON), `analyst_summary`, `audit_log` (JSON), `ai_suggestions` (JSON), `tags` (JSON array) | Audit trail, AI outputs, free-form tags |
+| **Location stages** | `initial_contact_location/city`, `incident_location_primary/city`, `destination_city` | Three-point location model |
+| **Environment** | `indoor_outdoor`, `public_private`, `deserted` | Physical context |
+| **Encounter sequence** | `negotiation_present`, `refusal_present`, `coercion_present`, `physical_force`, `sexual_assault`, `exit_type` | Step-by-step events |
+| **Early escalation** | `repeated_pressure`, `intimidation_present`, `abrupt_tone_change`, `escalation_trigger` | How situation escalated |
+| **Mobility** | `movement_present`, `mode_of_movement`, `entered_vehicle`, `public_to_private_shift`, `offender_control_over_movement` | Movement and control |
+| **Suspect/vehicle** | `suspect_count`, `suspect_gender`, `vehicle_make/model/colour`, `plate_partial` | Offender description |
+| **Narrative coding** | `early_escalation_score`, `escalation_point`, `resolution_endpoint`, `summary_analytic`, `key_quotes`, `coder_notes` | Analyst interpretation |
+| **GIS** | `*_address_raw/normalized`, `lat_*/lon_*`, `*_precision/source/confidence` | Three geocoded points with metadata |
+| **Metadata** | `field_provenance` (JSON), `audit_log` (JSON), `ai_suggestions` (JSON), `tags` (JSON) | Audit trail |
 
 **Provenance states** for every field:
 - `unset` — never touched
-- `ai_suggested` — Claude suggested a value, analyst hasn't confirmed
+- `ai_suggested` — Claude suggested a value, not yet confirmed
 - `analyst_filled` — analyst typed or accepted a value
 - `reviewed` — analyst explicitly marked as reviewed
 
-### Case Linkages table (`case_linkages`)
+### `report_stages` table — NEW
 
-Stores analyst verdicts on pairs of cases:
+Each row is one analyst-coded stage within a report. Linked to `reports` via `report_id`.
+
+| Field | Values | Purpose |
+|-------|--------|---------|
+| `report_id` | string | Links to parent report |
+| `stage_order` | int (1-based) | Ordering within the report |
+| `stage_type` | `initial_contact` \| `negotiation` \| `movement` \| `escalation` \| `outcome` | What type of event this stage represents |
+| `client_behaviors` | JSON array | `pressure`, `deception`, `aggression`, `payment_dispute`, `condom_refusal`, `other` |
+| `victim_responses` | JSON array | `resistance`, `compliance`, `exit_attempt`, `negotiation`, `other` |
+| `turning_point_notes` | text | Free-text description of turning point / key shift |
+| `visibility` | `public` \| `semi_public` \| `semi_private` \| `private` \| `unknown` | How visible the interaction was to bystanders |
+| `guardianship` | `present` \| `reduced` \| `absent` \| `delayed` \| `unknown` | Whether capable guardians could intervene |
+| `isolation_level` | `not_isolated` \| `partially_isolated` \| `isolated` \| `unknown` | Victim's separation from support |
+| `control_type` | `victim` \| `offender` \| `shared` \| `unclear` | Who controlled space, transport, movement |
+| `location_label` | text | Descriptive label (e.g. "parked car", "hotel room") |
+| `location_type` | `public` \| `semi_public` \| `private` \| `unknown` | Type of location at this stage |
+| `movement_type_to_here` | `none` \| `walk` \| `vehicle` \| `unknown` | How victim arrived at this stage's location |
+
+### `case_linkages` table
+
+Analyst verdicts on case pairs:
 - `report_id_a`, `report_id_b`
-- `similarity_score` (float, computed)
+- `similarity_score` (float, 0–100, computed)
 - `analyst_status`: `possible_link` | `unlikely_link` | `needs_review`
 - `analyst_notes` (free text)
 
@@ -165,357 +187,326 @@ Stores analyst verdicts on pairs of cases:
 
 ## 6. Backend — API & Logic
 
-### `main.py` — API routes
+### `main.py` — API routes (40+ endpoints)
+
+**Reports CRUD:**
 
 | Method | Endpoint | What it does |
 |--------|----------|-------------|
-| `GET` | `/reports` | List all reports. Supports 15+ filter params: `coding_status`, `city`, `coercion_present`, `movement_present`, `date_from/to`, `search`, NLP signal filters (`nlp_coercion`, `nlp_physical`, etc.), `nlp_pattern`, `nlp_escalation_min` |
-| `GET` | `/reports/:id` | Get a single report by `report_id` |
-| `POST` | `/reports` | Create a new report (narrative + basic meta) |
-| `PATCH` | `/reports/:id` | Update any fields on an existing report |
+| `GET` | `/reports` | List all reports. 15+ filter params: `coding_status`, `city`, `coercion_present`, `movement_present`, `date_from/to`, `search`, NLP signal filters, `nlp_pattern`, `nlp_escalation_min` |
+| `GET` | `/reports/:id` | Get a single report |
+| `POST` | `/reports` | Create a new report |
+| `PATCH` | `/reports/:id` | Update any fields |
 | `DELETE` | `/reports/:id` | Delete a report |
-| `POST` | `/suggest` | Send a narrative to Claude → get JSON field suggestions back |
-| `POST` | `/reports/:id/analyze` | Run spaCy NLP + weather lookup on this report's narrative |
-| `GET` | `/reports/:id/similar` | Find similar cases using the similarity engine |
-| `GET` | `/reports/:idA/compare/:idB` | Full comparison of two specific cases |
-| `POST` | `/linkage` | Save an analyst linkage verdict |
-| `GET` | `/stats` | Aggregate statistics for the Analysis dashboard |
-| `GET` | `/export/csv` | Export all reports as CSV |
-| `GET` | `/export/geojson` | Export geocoded points as GeoJSON |
-| `POST` | `/parse-bulletin` | Upload a PDF bulletin; returns parsed per-incident field values |
-| `POST` | `/parse-excel` | Upload an Excel file; returns array of parsed incident rows |
-| `POST` | `/check-duplicates` | Check parsed incidents against existing records before import |
-| `POST` | `/bulk-save` | Save analyst-approved incidents; silently skips exact duplicates |
+
+**Stage CRUD (new):**
+
+| Method | Endpoint | What it does |
+|--------|----------|-------------|
+| `GET` | `/reports/:id/stages` | List all stages for a report, ordered by `stage_order` |
+| `POST` | `/reports/:id/stages` | Create a new stage |
+| `PUT` | `/reports/:id/stages/:stage_id` | Update a stage's fields |
+| `DELETE` | `/reports/:id/stages/:stage_id` | Delete a stage |
+| `PUT` | `/reports/:id/stages/reorder` | Bulk-update `stage_order` for all stages |
+
+**Research:**
+
+| Method | Endpoint | What it does |
+|--------|----------|-------------|
+| `GET` | `/research/aggregate` | Cross-case sequences, mobility, environment aggregates |
+| `GET` | `/research/stage-patterns` | Stage-level cross-case analysis with filter params (`stage_type`, `visibility`, `guardianship`) |
+
+**Other key endpoints:** `/suggest`, `/reports/:id/analyze`, `/stats`, `/parse-bulletin`, `/parse-excel`, `/check-duplicates`, `/bulk-save`, `/reports/:id/similar`, `/linkage`, `/export/csv`, `/export/geojson`
 
 ### `models.py` — Database
 
-- Defines the `Report` and `CaseLinkage` SQLAlchemy models
-- `init_db()` runs on startup: creates tables if they don't exist, then runs **safe migrations** — tries `ALTER TABLE ... ADD COLUMN` for each known new column and silently ignores if it already exists. This means the database schema upgrades automatically without losing data.
+- Defines `Report`, `CaseLinkage`, and `ReportStage` SQLAlchemy models
+- `init_db()` runs on startup: creates all tables, then runs **safe migrations** (`ALTER TABLE ADD COLUMN`) for any new columns — schema upgrades automatically without data loss
 
 ### `schemas.py` — I/O validation
 
-Pydantic models (`ReportCreate`, `ReportUpdate`, `ReportOut`) validate and serialize all API inputs and outputs.
-
-### `weather.py` — Historical weather
-
-When NLP analysis runs on a report, it calls the **Open-Meteo archive API** (free, no API key needed) to fetch historical weather for the incident date and city. Returns temperature, feels-like, weather description, precipitation, wind, and daytime/nighttime. Stored in `ai_suggestions.weather` and displayed as a weather card in the Narrative tab.
+Pydantic models: `ReportCreate`, `ReportUpdate`, `ReportOut`, `SuggestRequest`, `StageCreate`, `StageUpdate`, `StageOut`, `StageReorderItem`
 
 ---
 
 ## 7. Frontend — Pages & Components
 
-### Pages
+### CodingScreen.tsx — The core workspace
 
-#### `CodingScreen.tsx` — The core workspace
-The main page. Split layout: narrative on the left (dark panel, immutable after creation), coding fields on the right.
+Split layout: narrative on the left (dark panel, immutable), coding fields on the right.
 
-**Left panel:**
-- Source narrative (read-only, dark background — visually signals immutability)
-- Analyst Transcription textarea (editable cleaned version)
-- Analyst Interpretive Summary textarea
-- Timeline strip showing coded field state
-- Tags input
-
-**Right panel — tab bar with 7 sections:**
+**Right panel — 8-tab interface:**
 
 | Tab | What it codes |
 |-----|--------------|
-| **Basics** | Date/time, city, neighbourhood, location stages (3 collapsible sub-panels) |
-| **Encounter** | Negotiation & Approach, Violence Indicators, Early Escalation Detail (3 collapsible sub-panels) |
-| **Mobility** | Movement, Geography, Assessment (3 collapsible sub-panels) |
-| **Suspect** | Suspect Description, Vehicle (2 collapsible sub-panels) |
-| **Narrative** | NLP signals panel, escalation arc, weather card, analytic scores, coder notes |
-| **GIS** | Raw addresses, normalized addresses, precision/source/confidence for each of 3 location points, lat/lon display |
-| **Scoring** | Behavioral domain breakdown showing how coded fields map to similarity weights |
+| **Basics** | Date/time, city, neighbourhood, three location stages with city confidence |
+| **Stages** *(new)* | Analyst-ordered stage sequence — each stage carries behaviours, conditions, and location |
+| **Encounter** | Negotiation & Approach, Violence Indicators, Early Escalation Detail |
+| **Mobility** | Movement, Geography, Assessment |
+| **Suspect** | Suspect Description, Vehicle |
+| **Narrative** | NLP signals, escalation arc, weather card, analytic scores, coder notes |
+| **GIS** | Raw/normalized addresses, precision/source/confidence, lat/lon for 3 points |
+| **Scoring** | Behavioral domain breakdown showing similarity weight mapping |
 
-**Toolbar features:**
-- Case ← → navigation with `X / N` counter
-- Coding status badge + status selector dropdown
-- Autosave indicator ("Saved 23s ago")
-- AI Suggest button (calls Claude)
-- NLP Analyze button (runs spaCy)
-- Find Similar button
-- Manual Save button
-- Export CSV button
+### ResearchOutputs.tsx
 
-**Keyboard shortcuts:**
-- `Ctrl+S` — save
-- `Ctrl+←` / `Ctrl+→` — navigate to previous/next case
+Research-oriented aggregate analysis. Five tabs:
 
-**Collapsible section panels** (`SectionPanel.tsx`):
-Each section panel shows a progress bar and coded/total count. Automatically collapses when all its fields are filled.
+| Tab | Contents |
+|-----|---------|
+| **Stage Patterns** *(new, default)* | Stage type frequency, stage sequence patterns, behaviour/response frequencies, conditions-by-stage cross-tab, filter panel for targeted queries |
+| **Encounter Sequences** | NLP-derived encounter sequence frequencies (bigrams, escalation pathways) |
+| **Mobility Pathways** | Movement and route pattern aggregates |
+| **Environmental Patterns** | Indoor/outdoor, public/private, deserted distributions with violence cross-tabs |
+| **Case Sequence Table** | Per-case encounter sequence with provenance flags |
 
-**Field provenance system** (`FieldRow.tsx`):
-Every field has a colored left border indicating its provenance state. AI-suggested fields show an "Accept" chip. Analyst can mark a field as reviewed.
+### Other pages
 
-#### `CaseList.tsx` — Case browser
-Lists all reports with filtering. Filters include: coding status, city, violence indicators (coercion, movement, physical force, sexual assault, vehicle), date range, free-text search. Clicking a case navigates to its CodingScreen.
-
-#### `Analysis.tsx` — Statistics dashboard
-Aggregate view across all coded cases:
-- KPI stat cards: total cases, coding progress, key indicator counts
-- NLP signal bars: stacked bar charts showing rank-1 (strong) vs rank-2 (possible) signal counts for coercion, physical force, sexual assault, movement, weapon
-- Year breakdown, city/neighbourhood distribution
-- Vehicle make/colour/type breakdowns, repeated plate fragments
-- All stat cards are clickable — click to navigate to CaseList filtered to matching cases
-
-#### `MapView.tsx` — GIS map
-Interactive Google Maps view (Google Maps JavaScript API + Places Autocomplete) showing:
-- Color-coded circle markers: red (initial contact), orange (incident), indigo (destination)
-- Dashed polylines connecting the three location stages (initial contact → incident → destination)
-- Click marker → InfoWindow with report ID, city, point type, coercion warning, "Open report" and "Street View" buttons
-- **Street View** — built-in pegman drag control, or "Street View" button per marker jumps directly to that coordinate
-- Address search via Google Places Autocomplete
-- Filter by coercion; toggle movement lines
-- Requires `VITE_GOOGLE_MAPS_API_KEY` in `frontend/.env`
-
-#### `ImportBulletin.tsx` — Bulk import
-Upload a PDF bulletin or Excel file. The backend parses it into individual incidents using either Claude (AI parse) or rules-based extraction. Analyst reviews the parsed fields before saving.
-
-#### `SimilarCasesPage.tsx` — Similarity search
-For a given report, runs the similarity engine against all other coded cases. Shows ranked candidates with a similarity score breakdown. Clicking "Compare" opens the Linkage screen.
-
-#### `LinkageScreen.tsx` — Side-by-side comparison
-Full side-by-side comparison of two cases:
-- All shared fields displayed in a three-column layout (Case A | field name | Case B)
-- Similarity dimension strip showing domain scores
-- Behavioral domain breakdown showing joint-present, discordant, and absent fields
-- Analyst verdict panel: mark as Possible Link / Unlikely Link / Needs Review + notes
+| Page | Purpose |
+|------|---------|
+| `CaseList.tsx` | Filterable case browser with status, violence flags, date range, NLP signal filters |
+| `Analysis.tsx` | KPI dashboard — stat cards, NLP bars, year/city/vehicle breakdowns |
+| `MapView.tsx` | Google Maps with movement polylines, Street View, coercion filter |
+| `ImportBulletin.tsx` | PDF/Excel upload, duplicate detection, bulk save |
+| `SimilarCasesPage.tsx` | Similarity engine ranked results |
+| `LinkageScreen.tsx` | Side-by-side case comparison with analyst verdict |
 
 ### Components
 
 | Component | Purpose |
 |-----------|---------|
-| `Layout.tsx` | Nav header with logo + nav links. Wraps every page. |
-| `FieldRow.tsx` | Single field row with label, input (text/select/yesno/textarea), provenance border, AI suggestion chip, NLP badge slot, mark-reviewed button |
-| `TimelineStrip.tsx` | Horizontal strip at the bottom of the narrative panel showing the coded state of key fields |
-| `SectionPanel.tsx` | Collapsible panel with Lora header, amber progress bar, coded/total pill. Auto-collapses when complete. |
-| `Toast.tsx` | Toast notification system. `ToastProvider` wraps the app; `useToast()` hook fires notifications from any component. |
+| `StageSequencer.tsx` *(new)* | Full stage coding UI — add/reorder/delete stages; per-stage behaviours, conditions, location; definition tooltips; sequence summary strip |
+| `FieldRow.tsx` | Single field with label, input, provenance border, AI chip, NLP badge |
+| `SectionPanel.tsx` | Collapsible group with progress bar |
+| `TimelineStrip.tsx` | Visual field-state overview strip |
+| `Toast.tsx` | Auto-dismissing notification system |
+| `GisMapModal.tsx` | Inline map for reviewing geocoded points |
+| `DupReviewModal.tsx` | Pre-save duplicate review with Skip / Import controls |
 
 ---
 
-## 8. AI & NLP Pipeline
+## 8. Stage Sequencing System
 
-There are **two independent AI systems** that operate separately and never auto-write to fields.
+This is the primary analytic layer for the research study. It was built to satisfy UPDATE.md requirements RQ1–RQ3.
 
-### System 1 — Claude (Anthropic API) — `ai.py`
+### Analytic unit
 
-**Triggered by:** "AI Suggest" button in CodingScreen toolbar.
+Each stage carries four linked components:
+```
+stage_type  →  behaviours  →  conditions  →  location
+```
 
-**What it does:**
-Sends the raw narrative to `claude-3-5-haiku` with a structured prompt asking it to extract ~35 field values as JSON. Returns suggestions for: incident date, location, approach type, all violence indicators, mobility fields, suspect/vehicle description, escalation scores, summary, key quotes, and a `flags` array of notable signals.
+This enables the key research query: *"Show me cases where escalation occurred after movement into a private location with absent guardianship."*
 
-Suggestions are displayed as yellow "Accept" chips next to each field. The analyst decides whether to accept or ignore each one. Accepting a suggestion sets the field value and marks provenance as `analyst_filled`.
+### Stage types (fixed vocabulary)
 
-**Bulletin parsing:** "Import Bulletin" also uses Claude to parse multi-incident PDF bulletins into structured per-incident JSON when AI parsing is selected.
+| Type | Definition |
+|------|-----------|
+| `initial_contact` | First moment of interaction |
+| `negotiation` | Discussion of terms, services, or payment |
+| `movement` | Physical relocation — on foot or by vehicle |
+| `escalation` | Shift from negotiation to coercion or violence |
+| `outcome` | Resolution — assault completed, escaped, interrupted, etc. |
 
-### System 2 — spaCy NLP — `nlp_analysis.py`
+### Per-stage fields
 
-**Triggered by:** "NLP Analyze" button in CodingScreen toolbar.
+**Behaviours** — multi-select checkboxes, both parties:
+- Client: pressure, deception, aggression, payment dispute, condom refusal, other
+- Victim: resistance, compliance, exit attempt, negotiation, other
+- Plus free-text turning point notes
 
-**What it does:**
-Runs the narrative through `spaCy en_core_web_sm` and a hand-crafted vocabulary system to independently detect:
+**Conditions** — fixed select with definition tooltips:
+- Visibility: public → semi-public → semi-private → private → unknown
+- Guardianship: present → reduced → absent → delayed → unknown
+- Isolation: not isolated → partially isolated → isolated → unknown
+- Control: victim / offender / shared / unclear
+
+**Location:**
+- Label (free text: "street corner", "parked car")
+- Type: public / semi-public / private / unknown
+- Movement to here: none / walk / vehicle / unknown
+
+### Cross-case stage patterns (`/research/stage-patterns`)
+
+Returns with optional filters (`stage_type`, `visibility`, `guardianship`):
+- Stage type frequency counts
+- Condition distributions per stage type
+- Behaviour and response frequency rankings
+- Stage sequence frequency across all cases
+- List of matching `report_id`s for filtered queries
+
+---
+
+## 9. AI & NLP Pipeline
+
+Two independent systems. Neither auto-writes to fields.
+
+### System 1 — Claude (Anthropic API)
+
+**Triggered by:** "AI Suggest" button.
+
+Sends the raw narrative to `claude-3-5-haiku` → returns ~35 field suggestions as JSON. Displayed as yellow "Accept" chips. Accepting sets provenance to `analyst_filled`.
+
+Also used for bulletin parsing (`/parse-bulletin`) when AI mode is selected.
+
+### System 2 — spaCy NLP
+
+**Triggered by:** "NLP Analyze" button.
+
+Runs `en_core_web_sm` + custom vocabulary to detect:
 
 | Signal | Method |
 |--------|--------|
-| **Coercion** | Subject-Verb-Object dependency parsing; verbs like grab/hold/restrain/pin with person-directed objects |
-| **Physical force** | SVO patterns with verbs like punch/kick/choke/strangle |
-| **Sexual assault** | Primary phrase match (rape, sexual assault) + secondary phrase match (forced to perform, without consent) |
-| **Movement/transport** | SVO patterns with verbs like drive/take/transport/lure |
-| **Weapon** | Weapon term detection with negation checking |
-| **Escalation arc** | Detects narrative arc stages (negotiation → refusal → pressure → threats → physical → sexual violence → robbery) and scores 1–5 |
-| **Location hints** | Extracts likely location names from the narrative as clickable chips in the GIS fields |
-| **Environment** | Infers location type (e.g. "vehicle", "hotel", "alley") and area character |
-| **Temporal** | Extracts time-of-day bucket and date certainty |
+| Coercion | SVO dependency parsing (grab/hold/restrain/pin) |
+| Physical force | SVO patterns (punch/kick/choke/strangle) |
+| Sexual assault | Primary phrase match + secondary contextual match |
+| Movement/transport | SVO patterns (drive/take/transport/lure) |
+| Weapon | Term detection with negation checking |
+| Escalation arc | Stage sequence scoring 1–5 |
+| Location hints | Named location-like phrases → clickable chips in GIS fields |
+| Environment | Infers location type, area character |
+| Temporal | Time-of-day bucket, date certainty |
 
-Each signal is ranked:
-- **Rank 1** — Strong grammatical evidence (SVO pattern or primary phrase)
-- **Rank 2** — Possible / keyword present but uncertain
-- **Rank 3** — No signal (not shown in UI)
+Each signal ranked: **Rank 1** (strong) / **Rank 2** (possible) / **Rank 3** (none — not shown).
 
-NLP results appear as colored badges on the relevant fields and in the full NLP Signals Panel in the Narrative tab. They **never write to any field** — analysts must accept or reject each signal.
-
-**Provenance stamping:** Results are tagged with `_source_report_id` and `_analyzed_at` so the UI can detect if the stored NLP data is stale (was generated for a different narrative).
+Results stored in `ai_suggestions.nlp`; NLP badges appear on relevant fields and in the Narrative tab signals panel.
 
 ---
 
-## 9. Similarity & Linkage Engine
+## 10. Similarity & Linkage Engine
 
-**`similarity.py`** — implements a weighted behavioral similarity algorithm based on published criminological research (Tonkin et al. 2025, Tonkin et al. 2017, Hobson et al. 2021).
+`similarity.py` — weighted behavioral similarity based on Tonkin et al. 2025 methodology. Produces a 0–100 score across domains.
 
-### How it works
+| Domain | Fields |
+|--------|--------|
+| Control (physical) | `physical_force`, `offender_control_over_movement` |
+| Control (coercion) | `coercion_present`, `repeated_pressure`, `intimidation_present` |
+| Control (threats) | `threats_present`, `verbal_abuse` |
+| Sexual | `sexual_assault`, `stealthing` |
+| Style/approach | `robbery_theft`, `negotiation_present`, `service_discussed` |
+| Mobility | `movement_present`, `entered_vehicle`, `public_to_private_shift` |
+| Vehicle | `vehicle_make`, `vehicle_colour`, `plate_partial` |
+| Suspect text | `suspect_description_text` (cosine similarity) |
+| Temporal | `incident_time_range`, `day_of_week` |
+| Geographic | Haversine distance between geocoded points |
 
-**Step 1 — Binary field comparison**
-~22 behavioral fields are compared between two cases using OR-based weights:
-
-| Domain | Fields | Weight tier |
-|--------|--------|------------|
-| Control behaviors | physical_force, coercion_present, threats_present, pressure_after_refusal, movement_control | Q1 (2.0) / Q2 (1.5) |
-| Sexual behaviors | sexual_assault, stealthing, refusal_present | Q1 / Q2 |
-| Style/approach | robbery_theft, verbal_abuse, negotiation, service/payment discussed | Q3 (1.0) / Q4 (0.5) |
-| Escape/mobility | movement_present, entered_vehicle, public→private shift, cross-boundary | Q3 |
-| Target selection | deserted, repeat_suspect_flag, repeat_vehicle_flag | Q3 |
-
-**Step 2 — Domain scoring**
-Each domain produces a score that accounts for:
-- **Joint presence** (both cases = yes) — positive signal
-- **Joint absence** (both cases = no) — weak positive signal (consistent behavior)
-- **Discordant** (one yes, one no) — negative signal
-
-**Step 3 — Specialty dimensions**
-| Dimension | What it checks |
-|-----------|---------------|
-| Vehicle | make, colour, plate fragment overlap |
-| Suspect description | text similarity of free-text descriptions |
-| Temporal | day of week, time of day bucket match |
-| Geographic | city, neighbourhood, location type match |
-| Repeat flags | explicit `repeat_suspect_flag` / `repeat_vehicle_flag` overlap |
-
-**Step 4 — Final score**
-Weighted sum across all dimensions, normalized 0–100. Displayed to analysts with a full breakdown of which fields matched, which were discordant, and a one-sentence reason per dimension. The UI shows color-coded field agreement rows (green = joint present, red = discordant, gray = both absent).
+Scoring logic: **joint presence** (positive), **joint absence** (weak positive), **discordant** (negative).
 
 ---
 
-## 10. GIS & Mapping
+## 11. GIS & Mapping
 
-Each report can have **three geocoded points**:
+Each report has **three geocoded points**: initial contact, primary incident, destination.
 
-| Point | Fields |
-|-------|--------|
-| Initial contact | `lat_initial`, `lon_initial`, `initial_contact_address_raw/normalized` |
-| Primary incident | `lat_incident`, `lon_incident`, `incident_address_raw/normalized` |
-| Destination | `lat_destination`, `lon_destination`, `destination_address_raw/normalized` |
-
-Each point has a full confidence metadata block: `precision` (exact/approximate/unknown), `source` (stated/inferred/unclear), `confidence` (high/medium/low/none), and `analyst_notes`.
+Each point has full metadata: `address_raw`, `address_normalized`, `lat/lon`, `precision` (exact/approximate/unknown), `source` (stated/inferred/unclear), `confidence` (high/medium/low/none), `analyst_notes`.
 
 **MapView** renders:
-- Circle markers color-coded by violence severity (red/amber/gray)
-- Polylines connecting the three points per case — visually showing victim movement trajectories
-- Click popups with case summary and link to CodingScreen
-- Nominatim address search to pan the map
+- Color-coded circle markers (red / orange / indigo)
+- Dashed polylines showing victim movement trajectories
+- Click popups with case summary + "Open report" and "Street View"
+- Google Places Autocomplete address search
 
-**GeoJSON export** (`/export/geojson`) produces a standard GeoJSON FeatureCollection of all geocoded points, importable into QGIS or any GIS tool.
+**GeoJSON export** (`/export/geojson`) produces a standard FeatureCollection importable into QGIS.
 
 ---
 
-## 11. Data Flow — End to End
+## 12. Data Flow — End to End
 
 ```
 1. IMPORT
-   Analyst pastes narrative OR uploads PDF bulletin
+   Paste narrative OR upload PDF bulletin
         ↓
-   POST /reports  →  creates Report row with raw_narrative
+   POST /reports → creates Report row with raw_narrative
    (Bulletin: POST /parse-bulletin → Claude parses → DupReviewModal → POST /bulk-save)
 
-2. AI SUGGEST (optional)
-   Analyst clicks "AI Suggest"
-        ↓
-   POST /suggest  →  Claude reads narrative → returns JSON suggestions
-   Suggestions stored in component state (NOT yet saved to DB)
-   Yellow "Accept" chips appear on fields
-
-3. NLP ANALYZE (optional)
-   Analyst clicks "NLP Analyze"
-        ↓
-   POST /reports/:id/analyze
-     → nlp_analysis.py runs spaCy on raw_narrative
-     → weather.py fetches Open-Meteo data for incident date + city
-     → Results saved to report.ai_suggestions.nlp + .weather
-   NLP badges appear on fields, signals panel populates
-
-4. MANUAL CODING
-   Analyst fills fields one by one
+2. CODE (case-level fields)
+   Analyst fills Basics, Encounter, Mobility, Suspect, Narrative, GIS tabs
    Each change: field_provenance[key] = "analyst_filled"
-   Autosave fires 2s after last change (PATCH /reports/:id)
-   OR analyst clicks Save manually
+   Autosave fires 2s after last change
+
+3. STAGE SEQUENCE (new)
+   Analyst clicks Stages tab → Add Stage → picks type
+   For each stage: codes behaviours, conditions, location
+   Each change autosaves via debounced PUT /reports/:id/stages/:stage_id
+
+4. AI ASSIST (optional)
+   POST /suggest → Claude → yellow Accept chips on fields
+   POST /reports/:id/analyze → spaCy + weather → NLP badges + signals panel
 
 5. SIMILARITY CHECK
-   Analyst clicks "Find Similar"
-        ↓
-   GET /reports/:id/similar
-     → similarity.py compares against all coded cases
-     → Returns ranked list with score breakdowns
-   Analyst selects a candidate → opens LinkageScreen
+   GET /reports/:id/similar → ranked candidates → LinkageScreen
+   POST /linkage → saves analyst verdict
 
-6. LINKAGE VERDICT
-   Analyst reviews side-by-side comparison
-        ↓
-   POST /linkage  →  saves CaseLinkage row with analyst verdict
+6. ANALYSIS & RESEARCH
+   GET /stats → Analysis dashboard (case-level)
+   GET /research/stage-patterns → Stage Patterns tab (stage-level cross-case)
+   GET /research/aggregate → Encounter sequences, mobility, environment tabs
 
-7. ANALYSIS
-   GET /stats  →  aggregates across all reports
-   Analysis dashboard shows prevalence bars, KPIs, breakdowns
-   Clicking a stat card → navigates to CaseList with matching filter
-
-8. EXPORT
-   GET /export/csv      → full dataset as CSV
-   GET /export/geojson  → geocoded points as GeoJSON (for QGIS)
+7. EXPORT
+   GET /export/csv → full dataset
+   GET /export/geojson → geocoded points for QGIS
+   GET /export/research-tables → ZIP of all research CSVs
 ```
 
 ---
 
-## 12. File Structure
+## 13. File Structure
 
 ```
 Red Light Alert/
 │
-├── redlight.db              ← SQLite database (all your case data lives here)
+├── redlight.db              ← SQLite database (all case data)
 ├── requirements.txt         ← Python dependencies
-├── start.bat                ← Windows launcher (no AI)
-├── start_with_ai.bat        ← Windows launcher (prompts for API key)
+├── start.bat                ← Windows launcher (builds + starts)
 ├── start_mac.sh             ← Mac/Linux launcher
 ├── APP_OVERVIEW.md          ← This file
-├── UI_UX_IMPROVEMENTS.md    ← Planned UI improvements backlog
 │
 ├── backend/
-│   ├── main.py              ← FastAPI app, all API routes
-│   ├── models.py            ← SQLAlchemy models + DB init/migration
-│   ├── schemas.py           ← Pydantic request/response schemas
-│   ├── ai.py                ← Claude API integration (suggest + bulletin parse)
+│   ├── main.py              ← FastAPI app, all 40+ API routes
+│   ├── models.py            ← SQLAlchemy: Report, CaseLinkage, ReportStage
+│   ├── schemas.py           ← Pydantic: ReportCreate/Update/Out, Stage schemas
+│   ├── ai.py                ← Claude API (suggest + bulletin parse)
 │   ├── nlp_analysis.py      ← spaCy violence detection pipeline
 │   ├── similarity.py        ← Weighted case similarity engine
-│   ├── weather.py           ← Open-Meteo historical weather lookup
+│   ├── weather.py           ← Open-Meteo historical weather
 │   ├── parser.py            ← Rules-based bulletin text parser
 │   ├── import_excel.py      ← Excel batch import handler
-│   └── research.py          ← Research-oriented aggregate analysis
+│   └── research.py          ← Cross-case aggregate analysis
 │
 └── frontend/
     ├── dist/                ← Built static files served by FastAPI
-    ├── src/
-    │   ├── App.tsx           ← Router + ToastProvider wrapper
-    │   ├── main.tsx          ← React entry point
-    │   ├── index.css         ← Global CSS variables + utility classes
-    │   ├── api.ts            ← All API calls (typed, centralized)
-    │   ├── types.ts          ← TypeScript interfaces for all data structures
-    │   │
-    │   ├── components/
-    │   │   ├── Layout.tsx        ← Nav header, app shell
-    │   │   ├── FieldRow.tsx      ← Single coded field with provenance, AI chip
-    │   │   ├── TimelineStrip.tsx ← Horizontal field-state timeline
-    │   │   ├── SectionPanel.tsx  ← Collapsible section with progress bar
-    │   │   ├── Toast.tsx         ← Toast notification system
-    │   │   ├── GisMapModal.tsx   ← Inline map modal for reviewing geocoded points
-    │   │   └── DupReviewModal.tsx← Pre-save duplicate review (Skip / Import anyway)
-    │   │
-    │   └── pages/
-    │       ├── CodingScreen.tsx      ← Main coding workspace
-    │       ├── CaseList.tsx          ← Case browser + filtering
-    │       ├── Analysis.tsx          ← Statistics dashboard
-    │       ├── MapView.tsx           ← GIS / Google Maps view
-    │       ├── ImportBulletin.tsx    ← PDF/Excel bulletin import
-    │       ├── SimilarCasesPage.tsx  ← Similarity search results
-    │       ├── LinkageScreen.tsx     ← Side-by-side case comparison
-    │       └── ResearchOutputs.tsx   ← Research aggregate exports
-    │
-    ├── package.json
-    └── vite.config.ts
-```
+    └── src/
+        ├── App.tsx              ← Router + ToastProvider
+        ├── api.ts               ← All API calls (typed, centralized)
+        ├── types.ts             ← Report, ReportStage, StagePatterns, …
+        │
+        ├── components/
+        │   ├── StageSequencer.tsx   ← Stage coding UI (NEW)
+        │   ├── FieldRow.tsx         ← Single coded field
+        │   ├── SectionPanel.tsx     ← Collapsible section with progress bar
+        │   ├── TimelineStrip.tsx    ← Field-state timeline strip
+        │   ├── Toast.tsx            ← Notification system
+        │   ├── GisMapModal.tsx      ← Geocoded points map modal
+        │   ├── DupReviewModal.tsx   ← Pre-save duplicate review
+        │   └── ParseViewer.tsx      ← Bulletin parse preview
+        │
+        └── pages/
+            ├── CodingScreen.tsx      ← Main coding workspace (8 tabs)
+            ├── CaseList.tsx          ← Case browser + filtering
+            ├── Analysis.tsx          ← KPI statistics dashboard
+            ├── MapView.tsx           ← GIS / Google Maps view
+            ├── ImportBulletin.tsx    ← PDF/Excel import
+            ├── SimilarCasesPage.tsx  ← Similarity search results
+            ├── LinkageScreen.tsx     ← Side-by-side case comparison
+            └── ResearchOutputs.tsx   ← Stage patterns + research aggregates
 
 ---
 
 ## Key Design Principles
 
 - **Human-led, auditable** — AI never writes to fields without analyst confirmation. Every field carries a provenance tag. An audit log tracks all changes.
-- **Privacy-conscious** — all data stays local (SQLite file). No cloud sync. The only outbound calls are to the Anthropic API (narratives), Open-Meteo (dates/cities, no narrative), and Google Maps API (map tiles, address search, Street View — no narrative data).
-- **Research-grade** — the similarity algorithm is grounded in published criminological research. NLP signals are ranked and explained, not just flagged. Linkage verdicts are logged with analyst name and timestamp.
-- **Resilient schema** — the database auto-migrates on startup. New columns are added safely without data loss, making it safe to update the app while preserving existing case data.
+- **Stage-structured analysis** — the core analytic unit is `stage → behaviour → conditions → location`, enabling structured cross-case comparison answering specific research questions.
+- **Privacy-conscious** — all data stays local (SQLite). No cloud sync. Outbound calls only: Anthropic API (narratives), Open-Meteo (dates/cities), Google Maps API (tiles, address search, Street View — no narrative data).
+- **Research-grade** — similarity algorithm grounded in published criminological research. NLP signals ranked and explained. Linkage verdicts logged with analyst name and timestamp.
+- **Resilient schema** — database auto-migrates on startup. New columns and tables are added safely without data loss.
+```

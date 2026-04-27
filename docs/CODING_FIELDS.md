@@ -169,6 +169,83 @@ Where `{stage}` is `initial_contact`, `incident`, or `destination`.
 
 ---
 
+## Section 8 — Stage Sequence Fields (`report_stages` table)
+
+Each report can have multiple ordered stages. Stages are the analytic unit — the stage row links a behaviour to its conditions and location within the incident sequence.
+
+### Stage Identity
+
+| Field | Values / Notes |
+|---|---|
+| `stage_order` | Integer, 1-based ordering within the report |
+| `stage_type` | See values below |
+
+**`stage_type` values:**
+
+| Value | Label |
+|---|---|
+| `initial_contact` | Initial Contact |
+| `negotiation` | Negotiation |
+| `movement` | Movement |
+| `escalation` | Escalation |
+| `outcome` | Outcome |
+
+---
+
+### Behaviours
+
+| Field | Type | Notes |
+|---|---|---|
+| `client_behaviors` | JSON array | Zero or more behavior codes (see below) |
+| `victim_responses` | JSON array | Zero or more response codes (see below) |
+| `turning_point_notes` | text | Free-text description of turning point within the stage |
+
+**`client_behaviors` codes:**
+
+| Code | Label |
+|---|---|
+| `pressure` | Pressure / persistence |
+| `deception` | Deception / false pretense |
+| `aggression` | Aggression / intimidation |
+| `payment_dispute` | Payment dispute |
+| `condom_refusal` | Condom refusal |
+| `other` | Other (described in turning_point_notes) |
+
+**`victim_responses` codes:**
+
+| Code | Label |
+|---|---|
+| `resistance` | Resistance / refusal |
+| `compliance` | Compliance |
+| `exit_attempt` | Exit attempt |
+| `negotiation` | Negotiation / de-escalation |
+| `other` | Other (described in turning_point_notes) |
+
+---
+
+### Situational Conditions
+
+Each condition uses fixed options to ensure cross-case comparability.
+
+| Field | Values | Definition |
+|---|---|---|
+| `visibility` | `public`, `semi_public`, `semi_private`, `private`, `unknown` | How visible was the interaction to bystanders? |
+| `guardianship` | `present`, `reduced`, `absent`, `delayed`, `unknown` | Were capable guardians present or able to intervene? |
+| `isolation_level` | `not_isolated`, `partially_isolated`, `isolated`, `unknown` | Was the victim separated from support networks or other people? |
+| `control_type` | `victim`, `offender`, `shared`, `unclear` | Who controlled the space, transport, and movement during this stage? |
+
+---
+
+### Location
+
+| Field | Values / Notes |
+|---|---|
+| `location_label` | Free-text descriptive label (e.g. "parked car", "hotel room", "street corner") |
+| `location_type` | `public`, `semi_public`, `private`, `unknown` |
+| `movement_type_to_here` | `none` (starting point), `walk`, `vehicle`, `unknown` |
+
+---
+
 ## Case Linkage Fields (`case_linkages` table)
 
 | Field | Notes |

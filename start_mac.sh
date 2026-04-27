@@ -3,9 +3,9 @@
 DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$DIR"
 
-echo "================================================"
-echo "  Red Light Alert — Demo Startup"
-echo "================================================"
+echo "============================================================"
+echo "  Red Light Alert"
+echo "============================================================"
 echo ""
 
 # ── 1. Python check ───────────────────────────────────────────────────────────
@@ -18,46 +18,39 @@ fi
 PYTHON=$(command -v python3)
 echo "Using Python: $PYTHON ($($PYTHON --version))"
 
-# ── 2. Auto-update ────────────────────────────────────────────────────────────
-VENV="$DIR/venv_mac"
+# ── 2. Git update (pull only if remote has new commits) ───────────────────────
 LOG="$DIR/update.log"
-
-# Rotate log if over 100 KB
 if [ -f "$LOG" ] && [ "$(wc -c < "$LOG")" -gt 102400 ]; then rm "$LOG"; fi
 
-echo "[$(date)] Update check started" >> "$LOG"
-echo "Checking for updates..."
+echo "[1/3] Checking for git updates..."
 
 if git -C "$DIR" fetch origin master --quiet 2>>"$LOG"; then
     LOCAL=$(git -C "$DIR" rev-parse HEAD 2>/dev/null)
     REMOTE=$(git -C "$DIR" rev-parse origin/master 2>/dev/null)
 
-    BUILD_HASH_FILE="$DIR/.last_build_hash"
-    OLD_BUILD_HASH=$(cat "$BUILD_HASH_FILE" 2>/dev/null || echo "none")
-
     if [ "$LOCAL" != "$REMOTE" ]; then
-        echo "[$(date)] Update available: ${LOCAL:0:7} -> ${REMOTE:0:7}" >> "$LOG"
-
-        git -C "$DIR" reset --hard HEAD --quiet 2>>"$LOG"
+        echo "       New commits on origin — pulling..."
+        echo "[$(date)] Update: ${LOCAL:0:7} -> ${REMOTE:0:7}" >> "$LOG"
 
         if git -C "$DIR" pull origin master --quiet 2>>"$LOG"; then
-            echo "[$(date)] Code updated successfully" >> "$LOG"
+            echo "       Code updated to latest."
+            echo "[$(date)] Pull succeeded" >> "$LOG"
 
-            # Python deps
+            # Reinstall Python deps if requirements.txt changed
             REQ_FILE="$DIR/requirements.txt"
             REQ_HASH_FILE="$DIR/.last_requirements_hash"
             NEW_REQ_HASH=$(md5 -q "$REQ_FILE" 2>/dev/null || md5sum "$REQ_FILE" | cut -d' ' -f1)
             OLD_REQ_HASH=$(cat "$REQ_HASH_FILE" 2>/dev/null || echo "none")
-
+            VENV="$DIR/venv_mac"
             if [ "$NEW_REQ_HASH" != "$OLD_REQ_HASH" ] && [ -d "$VENV" ]; then
-                echo "[$(date)] requirements.txt changed - reinstalling Python deps" >> "$LOG"
+                echo "       requirements.txt changed — updating Python deps..."
                 "$VENV/bin/pip" install -r "$REQ_FILE" -q >>"$LOG" 2>&1 \
                     && echo "$NEW_REQ_HASH" > "$REQ_HASH_FILE" \
                     && echo "[$(date)] Python deps updated" >> "$LOG" \
                     || echo "[$(date)] pip install failed" >> "$LOG"
             fi
 
-            # Node deps
+            # Reinstall Node deps if package.json / package-lock.json changed
             PKG_FILE="$DIR/frontend/package.json"
             LOCK_FILE="$DIR/frontend/package-lock.json"
             PKG_HASH_FILE="$DIR/.last_package_hash"
@@ -65,9 +58,8 @@ if git -C "$DIR" fetch origin master --quiet 2>>"$LOG"; then
             H2=$(md5 -q "$LOCK_FILE" 2>/dev/null || md5sum "$LOCK_FILE" | cut -d' ' -f1)
             NEW_PKG_HASH="${H1}${H2}"
             OLD_PKG_HASH=$(cat "$PKG_HASH_FILE" 2>/dev/null || echo "none")
-
             if [ "$NEW_PKG_HASH" != "$OLD_PKG_HASH" ]; then
-                echo "[$(date)] package.json changed - running npm ci" >> "$LOG"
+                echo "       package.json changed — running npm ci..."
                 cd "$DIR/frontend" \
                     && npm ci --silent >>"$LOG" 2>&1 \
                     && echo "$NEW_PKG_HASH" > "$PKG_HASH_FILE" \
@@ -75,57 +67,21 @@ if git -C "$DIR" fetch origin master --quiet 2>>"$LOG"; then
                     || echo "[$(date)] npm ci failed" >> "$LOG"
                 cd "$DIR"
             fi
-
-            # Frontend rebuild (Mac serves from dist/)
-            echo "[$(date)] Building frontend..." >> "$LOG"
-            cd "$DIR/frontend" \
-                && npm run build --silent >>"$LOG" 2>&1 \
-                && echo "$REMOTE" > "$BUILD_HASH_FILE" \
-                && echo "[$(date)] Frontend built successfully" >> "$LOG" \
-                || echo "[$(date)] Frontend build failed - old dist may still serve" >> "$LOG"
-            cd "$DIR"
-
         else
+            echo "       Pull failed — building from current local files."
             echo "[$(date)] git pull failed" >> "$LOG"
         fi
     else
+        echo "       Already up to date."
         echo "[$(date)] Already up to date (${LOCAL:0:7})" >> "$LOG"
-
-        # Rebuild if dist was built from a different commit
-        if [ "$LOCAL" != "$OLD_BUILD_HASH" ]; then
-            echo "[$(date)] dist outdated for commit ${LOCAL:0:7} - rebuilding frontend" >> "$LOG"
-            cd "$DIR/frontend" \
-                && npm run build --silent >>"$LOG" 2>&1 \
-                && echo "$LOCAL" > "$BUILD_HASH_FILE" \
-                && echo "[$(date)] Frontend rebuilt successfully" >> "$LOG" \
-                || echo "[$(date)] Frontend build failed" >> "$LOG"
-            cd "$DIR"
-        fi
-
-        # Rebuild if .env changed even without a git update
-        ENV_FILE="$DIR/frontend/.env"
-        ENV_HASH_FILE="$DIR/.last_env_hash"
-        if [ -f "$ENV_FILE" ]; then
-            NEW_ENV_HASH=$(md5 -q "$ENV_FILE" 2>/dev/null || md5sum "$ENV_FILE" | cut -d' ' -f1)
-            OLD_ENV_HASH=$(cat "$ENV_HASH_FILE" 2>/dev/null || echo "none")
-            if [ "$NEW_ENV_HASH" != "$OLD_ENV_HASH" ]; then
-                echo "[$(date)] .env changed - rebuilding frontend" >> "$LOG"
-                cd "$DIR/frontend" \
-                    && npm run build --silent >>"$LOG" 2>&1 \
-                    && echo "$NEW_ENV_HASH" > "$ENV_HASH_FILE" \
-                    && echo "[$(date)] Frontend rebuilt with new .env" >> "$LOG" \
-                    || echo "[$(date)] Frontend build failed" >> "$LOG"
-                cd "$DIR"
-            fi
-        fi
     fi
 else
-    echo "[$(date)] git fetch failed - skipping update" >> "$LOG"
+    echo "       No network or git not found — skipping update check."
+    echo "[$(date)] git fetch failed — skipping update" >> "$LOG"
 fi
 
-echo "[$(date)] Update check complete" >> "$LOG"
-
-# ── 3. Create virtualenv if needed ───────────────────────────────────────────
+# ── 3. Create virtualenv + install deps (first run only) ──────────────────────
+VENV="$DIR/venv_mac"
 if [ ! -d "$VENV" ]; then
   echo ""
   echo "Setting up virtual environment (first run only)..."
@@ -133,24 +89,20 @@ if [ ! -d "$VENV" ]; then
   "$VENV/bin/pip" install --upgrade pip -q
   "$VENV/bin/pip" install -r "$DIR/requirements.txt" -q
   echo "Dependencies installed."
-  # Write hash so next update doesn't re-run pip
   NEW_HASH=$(md5 -q "$DIR/requirements.txt" 2>/dev/null || md5sum "$DIR/requirements.txt" | cut -d' ' -f1)
   echo "$NEW_HASH" > "$DIR/.last_requirements_hash"
 fi
 
-# ── 4. Build frontend if dist/ is missing (first run after fresh clone) ───────
-if [ ! -d "$DIR/frontend/dist" ]; then
-  echo "Building frontend (first run)..."
-  if [ ! -d "$DIR/frontend/node_modules" ]; then
-    cd "$DIR/frontend" && npm install -q && cd "$DIR"
-  fi
-  cd "$DIR/frontend" && npm run build --silent && cd "$DIR"
+# ── 4. Install Node modules if missing (first run after fresh clone) ───────────
+if [ ! -d "$DIR/frontend/node_modules" ]; then
+  echo "Installing Node modules (first run only)..."
+  cd "$DIR/frontend" && npm install -q && cd "$DIR"
   H1=$(md5 -q "$DIR/frontend/package.json" 2>/dev/null || md5sum "$DIR/frontend/package.json" | cut -d' ' -f1)
   H2=$(md5 -q "$DIR/frontend/package-lock.json" 2>/dev/null || md5sum "$DIR/frontend/package-lock.json" | cut -d' ' -f1)
   echo "${H1}${H2}" > "$DIR/.last_package_hash"
 fi
 
-# ── 5. Validate spaCy model (handles version mismatch on existing venvs) ──────
+# ── 5. Validate spaCy model ────────────────────────────────────────────────────
 if ! "$VENV/bin/python" -c "import spacy; spacy.load('en_core_web_sm')" 2>/dev/null; then
   echo ""
   echo "spaCy model missing or incompatible — reinstalling (one-time, ~12 MB)..."
@@ -159,22 +111,31 @@ if ! "$VENV/bin/python" -c "import spacy; spacy.load('en_core_web_sm')" 2>/dev/n
   echo "spaCy model ready."
 fi
 
-# ── 6. Start backend ──────────────────────────────────────────────────────────
+# ── 6. Build frontend (always, so local commits are reflected) ─────────────────
 echo ""
-echo "Starting backend on http://localhost:8000 ..."
-cd "$DIR/backend"
-"$VENV/bin/python" -m uvicorn main:app --port 8000 &
-BACKEND_PID=$!
+echo "[2/3] Building frontend (first run may take ~30 seconds)..."
+cd "$DIR/frontend"
+npm run build
+if [ $? -ne 0 ]; then
+  echo ""
+  echo "ERROR: Frontend build failed. See errors above."
+  exit 1
+fi
 cd "$DIR"
+echo "       Frontend built OK."
 
-# ── 7. Wait for backend, then open browser ────────────────────────────────────
-sleep 2
+# ── 7. Start backend ──────────────────────────────────────────────────────────
 echo ""
-echo "================================================"
-echo "  Opening http://localhost:8000"
+echo "[3/3] Starting backend..."
+echo ""
+echo "============================================================"
+echo "  Running at http://localhost:8000"
 echo "  Press Ctrl+C to stop."
-echo "================================================"
-open "http://localhost:8000"
+echo "============================================================"
+echo ""
 
-# Wait for Ctrl+C
-wait $BACKEND_PID
+# Open browser after a short delay
+(sleep 2 && open "http://localhost:8000") &
+
+cd "$DIR/backend"
+"$VENV/bin/python" -m uvicorn main:app --port 8000
