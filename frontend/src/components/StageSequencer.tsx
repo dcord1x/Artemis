@@ -351,8 +351,8 @@ function StageCard({
 
           {/* ── Behaviours ─────────────────────────────────────────────────── */}
           <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
-            <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-2)',
-              letterSpacing: '0.03em', marginBottom: 10, textTransform: 'uppercase', fontSize: 10 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-2)',
+              letterSpacing: '0.03em', marginBottom: 10, textTransform: 'uppercase' }}>
               Behaviours
             </div>
 
@@ -530,7 +530,6 @@ const ICON_BTN: React.CSSProperties = {
 export default function StageSequencer({ reportId }: { reportId: string }) {
   const [stages, setStages] = useState<ReportStage[]>([]);
   const [loading, setLoading] = useState(true);
-  const [addingType, setAddingType] = useState('');
   const [showTypeMenu, setShowTypeMenu] = useState(false);
   const debounceRefs = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
 
