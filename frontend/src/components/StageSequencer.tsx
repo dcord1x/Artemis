@@ -229,6 +229,13 @@ function CheckboxGroup({
 
 // ── Single stage card ─────────────────────────────────────────────────────────
 
+const ICON_BTN: React.CSSProperties = {
+  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+  padding: 4, border: 'none', background: 'transparent',
+  color: 'var(--text-3)', cursor: 'pointer', borderRadius: 3,
+  flexShrink: 0,
+};
+
 function StageCard({
   stage, index, total,
   onUpdate, onDelete, onMoveUp, onMoveDown,
@@ -518,12 +525,6 @@ function StageCard({
   );
 }
 
-const ICON_BTN: React.CSSProperties = {
-  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-  padding: 4, border: 'none', background: 'transparent',
-  color: 'var(--text-3)', cursor: 'pointer', borderRadius: 3,
-  flexShrink: 0,
-};
 
 // ── Main StageSequencer ───────────────────────────────────────────────────────
 

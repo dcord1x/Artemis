@@ -1405,4 +1405,4 @@ if os.path.isdir(_DIST):
     @app.get("/{full_path:path}", include_in_schema=False)
     def spa_fallback(full_path: str):
         index = os.path.join(_DIST, "index.html")
-        return FileResponse(index)
+        return FileResponse(index, headers={"Cache-Control": "no-store"})
