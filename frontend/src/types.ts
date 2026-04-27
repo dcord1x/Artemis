@@ -144,6 +144,38 @@ export interface Report {
   cross_city_movement: string;
 }
 
+export interface ReportStage {
+  id: number;
+  report_id: string;
+  stage_order: number;
+  stage_type: string;
+  client_behaviors: string[];
+  victim_responses: string[];
+  turning_point_notes: string;
+  visibility: string;
+  guardianship: string;
+  isolation_level: string;
+  control_type: string;
+  location_label: string;
+  location_type: string;
+  movement_type_to_here: string;
+}
+
+export interface StagePatterns {
+  stage_type_frequency:    { value: string; count: number }[];
+  visibility_by_stage:     Record<string, { value: string; count: number }[]>;
+  guardianship_by_stage:   Record<string, { value: string; count: number }[]>;
+  isolation_by_stage:      Record<string, { value: string; count: number }[]>;
+  control_by_stage:        Record<string, { value: string; count: number }[]>;
+  movement_by_stage:       Record<string, { value: string; count: number }[]>;
+  behavior_frequency:      { value: string; count: number }[];
+  response_frequency:      { value: string; count: number }[];
+  matching_cases:          string[];
+  sequence_frequency:      { value: string; count: number }[];
+  total_stages:            number;
+  total_cases_with_stages: number;
+}
+
 export interface SimilarityDimension {
   label: string;
   score: number;

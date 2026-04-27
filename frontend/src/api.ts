@@ -1,4 +1,4 @@
-import type { Report, Stats, SimilarCandidate, CompareResult, ResearchAggregate, CaseSummary } from './types';
+import type { Report, Stats, SimilarCandidate, CompareResult, ResearchAggregate, CaseSummary, ReportStage, StagePatterns } from './types';
 
 // In dev: Vite proxies /api → localhost:8000. In production build: empty string (same-origin).
 const BASE = import.meta.env.VITE_API_BASE ?? '/api';
@@ -82,4 +82,32 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ text }),
     }),
+
+  // ── Stage CRUD ─────────────────────────────────────────────────────────────
+
+  getStages: (reportId: string) =>
+    req<ReportStage[]>(`/reports/${reportId}/stages`),
+
+  createStage: (reportId: string, data: Partial<ReportStage>) =>
+    req<ReportStage>(`/reports/${reportId}/stages`, {
+      method: 'POST', body: JSON.stringify(data),
+    }),
+
+  updateStage: (reportId: string, stageId: number, data: Partial<ReportStage>) =>
+    req<ReportStage>(`/reports/${reportId}/stages/${stageId}`, {
+      method: 'PUT', body: JSON.stringify(data),
+    }),
+
+  deleteStage: (reportId: string, stageId: number) =>
+    req<{ ok: boolean }>(`/reports/${reportId}/stages/${stageId}`, { method: 'DELETE' }),
+
+  reorderStages: (reportId: string, items: { id: number; stage_order: number }[]) =>
+    req<{ ok: boolean }>(`/reports/${reportId}/stages/reorder`, {
+      method: 'PUT', body: JSON.stringify(items),
+    }),
+
+  getStagePatterns: (params?: { stage_type?: string; visibility?: string; guardianship?: string }) => {
+    const qs = params ? '?' + new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([, v]) => v))).toString() : '';
+    return req<StagePatterns>(`/research/stage-patterns${qs}`);
+  },
 };

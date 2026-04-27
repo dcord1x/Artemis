@@ -15,8 +15,8 @@ import uuid
 import os
 from datetime import datetime
 
-from models import Report, CaseLinkage, init_db, get_db
-from schemas import ReportCreate, ReportUpdate, ReportOut, SuggestRequest
+from models import Report, CaseLinkage, ReportStage, init_db, get_db
+from schemas import ReportCreate, ReportUpdate, ReportOut, SuggestRequest, StageCreate, StageUpdate, StageOut, StageReorderItem
 from ai import get_ai_suggestions, parse_bulletin
 from parser import parse_bulletin_rules
 from similarity import compute_similarity, STOPWORDS
@@ -1035,6 +1035,170 @@ def get_stats(db: Session = Depends(get_db)):
             for r in reports
             if r.lat_initial or r.lat_incident
         ],
+    }
+
+
+# ── Stage CRUD ────────────────────────────────────────────────────────────────
+
+@app.get("/reports/{report_id}/stages", response_model=list[StageOut])
+def list_stages(report_id: str, db: Session = Depends(get_db)):
+    return (
+        db.query(ReportStage)
+        .filter(ReportStage.report_id == report_id)
+        .order_by(ReportStage.stage_order)
+        .all()
+    )
+
+
+@app.post("/reports/{report_id}/stages", response_model=StageOut)
+def create_stage(report_id: str, body: StageCreate, db: Session = Depends(get_db)):
+    stage = ReportStage(
+        report_id=report_id,
+        stage_order=body.stage_order or 1,
+        stage_type=body.stage_type or "",
+        client_behaviors=body.client_behaviors or [],
+        victim_responses=body.victim_responses or [],
+        turning_point_notes=body.turning_point_notes or "",
+        visibility=body.visibility or "",
+        guardianship=body.guardianship or "",
+        isolation_level=body.isolation_level or "",
+        control_type=body.control_type or "",
+        location_label=body.location_label or "",
+        location_type=body.location_type or "",
+        movement_type_to_here=body.movement_type_to_here or "",
+    )
+    db.add(stage)
+    db.commit()
+    db.refresh(stage)
+    return stage
+
+
+@app.put("/reports/{report_id}/stages/reorder")
+def reorder_stages(report_id: str, items: list[StageReorderItem], db: Session = Depends(get_db)):
+    for item in items:
+        stage = db.query(ReportStage).filter(
+            ReportStage.id == item.id,
+            ReportStage.report_id == report_id,
+        ).first()
+        if stage:
+            stage.stage_order = item.stage_order
+    db.commit()
+    return {"ok": True}
+
+
+@app.put("/reports/{report_id}/stages/{stage_id}", response_model=StageOut)
+def update_stage(report_id: str, stage_id: int, body: StageUpdate, db: Session = Depends(get_db)):
+    stage = db.query(ReportStage).filter(
+        ReportStage.id == stage_id,
+        ReportStage.report_id == report_id,
+    ).first()
+    if not stage:
+        raise HTTPException(404, "Stage not found")
+    for field, value in body.model_dump(exclude_none=True).items():
+        setattr(stage, field, value)
+    db.commit()
+    db.refresh(stage)
+    return stage
+
+
+@app.delete("/reports/{report_id}/stages/{stage_id}")
+def delete_stage(report_id: str, stage_id: int, db: Session = Depends(get_db)):
+    stage = db.query(ReportStage).filter(
+        ReportStage.id == stage_id,
+        ReportStage.report_id == report_id,
+    ).first()
+    if not stage:
+        raise HTTPException(404, "Stage not found")
+    db.delete(stage)
+    db.commit()
+    return {"ok": True}
+
+
+# ── Research: stage patterns ───────────────────────────────────────────────────
+
+@app.get("/research/stage-patterns")
+def get_stage_patterns(
+    stage_type:   Optional[str] = None,
+    visibility:   Optional[str] = None,
+    guardianship: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    """
+    Cross-case stage analysis.
+    Returns:
+      - stage_type_frequency: count per stage type
+      - visibility_by_stage: distribution of visibility values per stage type
+      - guardianship_by_stage: distribution of guardianship per stage type
+      - isolation_by_stage: distribution of isolation per stage type
+      - control_by_stage: distribution of control type per stage type
+      - behavior_frequency: client_behavior code counts across all stages
+      - response_frequency: victim_response code counts across all stages
+      - movement_by_stage: movement_type_to_here distribution per stage type
+      - matching_cases: report_ids of cases with any stage matching the filter params
+    """
+    from collections import Counter, defaultdict
+
+    query = db.query(ReportStage)
+    if stage_type:
+        query = query.filter(ReportStage.stage_type == stage_type)
+    if visibility:
+        query = query.filter(ReportStage.visibility == visibility)
+    if guardianship:
+        query = query.filter(ReportStage.guardianship == guardianship)
+
+    stages = query.all()
+
+    # Frequency counters
+    type_freq: Counter = Counter()
+    vis_by_stage: dict = defaultdict(Counter)
+    guard_by_stage: dict = defaultdict(Counter)
+    iso_by_stage: dict = defaultdict(Counter)
+    ctrl_by_stage: dict = defaultdict(Counter)
+    move_by_stage: dict = defaultdict(Counter)
+    behavior_freq: Counter = Counter()
+    response_freq: Counter = Counter()
+    matching_cases: set = set()
+
+    for s in stages:
+        t = s.stage_type or "unknown"
+        type_freq[t] += 1
+        if s.visibility:   vis_by_stage[t][s.visibility] += 1
+        if s.guardianship: guard_by_stage[t][s.guardianship] += 1
+        if s.isolation_level: iso_by_stage[t][s.isolation_level] += 1
+        if s.control_type:    ctrl_by_stage[t][s.control_type] += 1
+        if s.movement_type_to_here: move_by_stage[t][s.movement_type_to_here] += 1
+        for b in (s.client_behaviors or []):
+            behavior_freq[b] += 1
+        for r in (s.victim_responses or []):
+            response_freq[r] += 1
+        matching_cases.add(s.report_id)
+
+    def _counter_to_list(c: Counter):
+        return [{"value": k, "count": v} for k, v in c.most_common()]
+
+    def _nested_to_dict(d: dict):
+        return {k: _counter_to_list(v) for k, v in d.items()}
+
+    # Per-case stage sequences (for cross-case grouping)
+    all_stages = db.query(ReportStage).order_by(ReportStage.report_id, ReportStage.stage_order).all()
+    seq_map: dict = defaultdict(list)
+    for s in all_stages:
+        seq_map[s.report_id].append(s.stage_type or "?")
+    seq_strings: Counter = Counter(" → ".join(v) for v in seq_map.values() if v)
+
+    return {
+        "stage_type_frequency":  _counter_to_list(type_freq),
+        "visibility_by_stage":   _nested_to_dict(vis_by_stage),
+        "guardianship_by_stage": _nested_to_dict(guard_by_stage),
+        "isolation_by_stage":    _nested_to_dict(iso_by_stage),
+        "control_by_stage":      _nested_to_dict(ctrl_by_stage),
+        "movement_by_stage":     _nested_to_dict(move_by_stage),
+        "behavior_frequency":    _counter_to_list(behavior_freq),
+        "response_frequency":    _counter_to_list(response_freq),
+        "matching_cases":        sorted(matching_cases),
+        "sequence_frequency":    _counter_to_list(seq_strings),
+        "total_stages":          len(stages),
+        "total_cases_with_stages": len(seq_map),
     }
 
 

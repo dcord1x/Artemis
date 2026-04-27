@@ -304,3 +304,60 @@ class ReportOut(BaseModel):
 
 class SuggestRequest(BaseModel):
     narrative: str
+
+
+# ── Stage schemas ─────────────────────────────────────────────────────────────
+
+class StageCreate(BaseModel):
+    stage_order: Optional[int] = 1
+    stage_type: Optional[str] = ""
+    client_behaviors: Optional[list] = []
+    victim_responses: Optional[list] = []
+    turning_point_notes: Optional[str] = ""
+    visibility: Optional[str] = ""
+    guardianship: Optional[str] = ""
+    isolation_level: Optional[str] = ""
+    control_type: Optional[str] = ""
+    location_label: Optional[str] = ""
+    location_type: Optional[str] = ""
+    movement_type_to_here: Optional[str] = ""
+
+
+class StageUpdate(BaseModel):
+    stage_order: Optional[int] = None
+    stage_type: Optional[str] = None
+    client_behaviors: Optional[list] = None
+    victim_responses: Optional[list] = None
+    turning_point_notes: Optional[str] = None
+    visibility: Optional[str] = None
+    guardianship: Optional[str] = None
+    isolation_level: Optional[str] = None
+    control_type: Optional[str] = None
+    location_label: Optional[str] = None
+    location_type: Optional[str] = None
+    movement_type_to_here: Optional[str] = None
+
+
+class StageOut(BaseModel):
+    id: int
+    report_id: str
+    stage_order: int
+    stage_type: str
+    client_behaviors: Any
+    victim_responses: Any
+    turning_point_notes: str
+    visibility: str
+    guardianship: str
+    isolation_level: str
+    control_type: str
+    location_label: str
+    location_type: str
+    movement_type_to_here: str
+
+    class Config:
+        from_attributes = True
+
+
+class StageReorderItem(BaseModel):
+    id: int
+    stage_order: int

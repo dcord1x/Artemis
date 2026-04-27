@@ -9,6 +9,7 @@ import { useToast } from '../components/Toast';
 import SectionPanel from '../components/SectionPanel';
 import ParseViewer from '../components/ParseViewer';
 import GisMapModal from '../components/GisMapModal';
+import StageSequencer from '../components/StageSequencer';
 
 /**
  * Field-state-aware NLP badge.
@@ -815,7 +816,7 @@ function SummaryTab({ fields }: { fields: Partial<Report> }) {
   );
 }
 
-type Section = 'basics' | 'encounter' | 'mobility' | 'suspect' | 'narrative' | 'gis' | 'scoring' | 'summary';
+type Section = 'basics' | 'stages' | 'encounter' | 'mobility' | 'suspect' | 'narrative' | 'gis' | 'scoring' | 'summary';
 
 function ScoringTab() {
   return <div />;
@@ -1560,6 +1561,7 @@ export default function CodingScreen() {
           }}>
             {([
               ['basics', 'Basics', ['incident_date','city','neighbourhood','indoor_outdoor','public_private','deserted','incident_time_exact','day_of_week','destination_known','location_certainty','initial_contact_city','incident_city','destination_city']],
+              ['stages', 'Stages', []],
               ['encounter', 'Encounter', ['initial_approach_type','negotiation_present','refusal_present','pressure_after_refusal','coercion_present','threats_present','verbal_abuse','physical_force','sexual_assault','robbery_theft','stealthing','exit_type','repeated_pressure','intimidation_present','abrupt_tone_change','verbal_abuse_before_violence']],
               ['mobility', 'Mobility', ['movement_present','movement_attempted','mode_of_movement','entered_vehicle','public_to_private_shift','public_to_secluded_shift','cross_neighbourhood','cross_municipality','cross_city_movement','offender_control_over_movement','movement_completed','who_controlled_movement','movement_confidence']],
               ['suspect', 'Suspect', ['suspect_gender','suspect_age_estimate','vehicle_present','vehicle_make','vehicle_model','vehicle_colour','plate_partial']],
@@ -1698,6 +1700,18 @@ export default function CodingScreen() {
                 <FieldRow label="Destination city" value={f('destination_city')} onChange={(v) => set('destination_city', v)} provenance={prov('destination_city')} onMarkReviewed={() => markReviewed('destination_city')} />
                 <FieldRow label="Destination city — certainty" value={f('destination_city_confidence')} onChange={(v) => set('destination_city_confidence', v)} type="select" options={['known','probable','inferred','unknown']} provenance={prov('destination_city_confidence')} onMarkReviewed={() => markReviewed('destination_city_confidence')} />
                 </SectionPanel>
+              </div>
+            )}
+
+            {activeTab === 'stages' && (
+              <div style={{ marginBottom: 12 }}>
+                {reportId ? (
+                  <StageSequencer reportId={reportId} />
+                ) : (
+                  <div style={{ padding: '20px 0', color: 'var(--text-3)', fontSize: 13, fontStyle: 'italic' }}>
+                    Save the report first to add stages.
+                  </div>
+                )}
               </div>
             )}
 

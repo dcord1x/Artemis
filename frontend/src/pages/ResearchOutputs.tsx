@@ -25,6 +25,7 @@ import type {
   PathwayRow,
   RouteRow,
   EnvCross,
+  StagePatterns,
 } from '../types';
 
 // ── Shared sub-components ─────────────────────────────────────────────────────
@@ -149,22 +150,35 @@ function Panel({ children, style }: { children: React.ReactNode; style?: React.C
 
 // ── Tab types ─────────────────────────────────────────────────────────────────
 
-type Tab = 'sequences' | 'mobility' | 'environment' | 'caselist';
+type Tab = 'sequences' | 'mobility' | 'environment' | 'caselist' | 'stage_patterns';
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'sequences',   label: 'Encounter Sequences' },
-  { id: 'mobility',    label: 'Mobility Pathways' },
-  { id: 'environment', label: 'Environmental Patterns' },
-  { id: 'caselist',    label: 'Case Sequence Table' },
+  { id: 'stage_patterns', label: 'Stage Patterns' },
+  { id: 'sequences',      label: 'Encounter Sequences' },
+  { id: 'mobility',       label: 'Mobility Pathways' },
+  { id: 'environment',    label: 'Environmental Patterns' },
+  { id: 'caselist',       label: 'Case Sequence Table' },
 ];
 
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function ResearchOutputs() {
   const navigate = useNavigate();
-  const [data, setData]     = useState<ResearchAggregate | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [tab, setTab]       = useState<Tab>('sequences');
+  const [data, setData]             = useState<ResearchAggregate | null>(null);
+  const [loading, setLoading]       = useState(true);
+  const [tab, setTab]               = useState<Tab>('stage_patterns');
+  const [stageData, setStageData]   = useState<StagePatterns | null>(null);
+  const [stageLoading, setStageLoading] = useState(true);
+  const [filterStageType, setFilterStageType]   = useState('');
+  const [filterVisibility, setFilterVisibility] = useState('');
+  const [filterGuardianship, setFilterGuardianship] = useState('');
+
+  const loadStagePatterns = (params?: { stage_type?: string; visibility?: string; guardianship?: string }) => {
+    setStageLoading(true);
+    api.getStagePatterns(params)
+      .then(d => { setStageData(d); setStageLoading(false); })
+      .catch(() => setStageLoading(false));
+  };
 
   const load = () => {
     setLoading(true);
@@ -173,7 +187,7 @@ export default function ResearchOutputs() {
       .catch(() => setLoading(false));
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); loadStagePatterns(); }, []);
 
   // ── Tab bar ───────────────────────────────────────────────────────────────
 
@@ -579,6 +593,259 @@ export default function ResearchOutputs() {
     );
   };
 
+  // ── Stage Patterns tab ────────────────────────────────────────────────────
+
+  const StagePatternsTab = () => {
+    const STAGE_TYPE_OPTS = ['initial_contact','negotiation','movement','escalation','outcome'];
+    const VISIBILITY_OPTS = ['public','semi_public','semi_private','private'];
+    const GUARDIANSHIP_OPTS = ['present','reduced','absent','delayed'];
+
+    const applyFilter = () => loadStagePatterns({
+      stage_type:   filterStageType || undefined,
+      visibility:   filterVisibility || undefined,
+      guardianship: filterGuardianship || undefined,
+    });
+
+    const clearFilter = () => {
+      setFilterStageType(''); setFilterVisibility(''); setFilterGuardianship('');
+      loadStagePatterns({});
+    };
+
+    const fmtLabel = (v: string) => v.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
+    if (stageLoading) return (
+      <div style={{ color: 'var(--text-3)', fontSize: 13, fontStyle: 'italic', padding: '20px 0' }}>
+        Loading stage patterns…
+      </div>
+    );
+
+    if (!stageData) return (
+      <div style={{ color: 'var(--text-3)', fontSize: 13, fontStyle: 'italic', padding: '20px 0' }}>
+        No stage data available. Open a case, click the Stages tab, and code some stages.
+      </div>
+    );
+
+    const sd = stageData;
+    const maxTypeCount = Math.max(...sd.stage_type_frequency.map(r => r.count), 1);
+    const maxBehCount  = Math.max(...sd.behavior_frequency.map(r => r.count), 1);
+    const maxRespCount = Math.max(...sd.response_frequency.map(r => r.count), 1);
+    const maxSeqCount  = Math.max(...sd.sequence_frequency.map(r => r.count), 1);
+
+    return (
+      <div>
+        {/* Summary counts */}
+        <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+          {[
+            ['Total stages coded', sd.total_stages],
+            ['Cases with stages', sd.total_cases_with_stages],
+            ['Matching filter', sd.matching_cases.length],
+          ].map(([label, val]) => (
+            <div key={String(label)} style={{
+              padding: '10px 16px', border: '1px solid var(--border)',
+              borderRadius: 8, background: 'var(--surface)', flex: '0 0 auto',
+            }}>
+              <div style={{ fontSize: 10.5, color: 'var(--text-3)', fontWeight: 500,
+                textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>
+                {label}
+              </div>
+              <div style={{ fontFamily: 'Lora, serif', fontSize: 22, fontWeight: 500,
+                color: 'var(--text-1)', lineHeight: 1 }}>
+                {val}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Filter panel */}
+        <Panel>
+          <SectionHeading>Filter Stages</SectionHeading>
+          <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 12 }}>
+            Narrow results to stages matching these criteria — e.g. find cases where escalation
+            occurred in a private location with absent guardianship.
+          </div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <div>
+              <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Stage type</div>
+              <select value={filterStageType} onChange={e => setFilterStageType(e.target.value)}
+                style={{ padding: '5px 8px', fontSize: 12.5, border: '1px solid var(--border)', borderRadius: 4, background: 'var(--bg)', color: 'var(--text-1)' }}>
+                <option value="">All types</option>
+                {STAGE_TYPE_OPTS.map(v => <option key={v} value={v}>{fmtLabel(v)}</option>)}
+              </select>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Visibility</div>
+              <select value={filterVisibility} onChange={e => setFilterVisibility(e.target.value)}
+                style={{ padding: '5px 8px', fontSize: 12.5, border: '1px solid var(--border)', borderRadius: 4, background: 'var(--bg)', color: 'var(--text-1)' }}>
+                <option value="">Any</option>
+                {VISIBILITY_OPTS.map(v => <option key={v} value={v}>{fmtLabel(v)}</option>)}
+              </select>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Guardianship</div>
+              <select value={filterGuardianship} onChange={e => setFilterGuardianship(e.target.value)}
+                style={{ padding: '5px 8px', fontSize: 12.5, border: '1px solid var(--border)', borderRadius: 4, background: 'var(--bg)', color: 'var(--text-1)' }}>
+                <option value="">Any</option>
+                {GUARDIANSHIP_OPTS.map(v => <option key={v} value={v}>{fmtLabel(v)}</option>)}
+              </select>
+            </div>
+            <button onClick={applyFilter} style={{
+              padding: '6px 14px', borderRadius: 5, border: '1px solid var(--accent)',
+              background: 'var(--accent-pale)', color: 'var(--accent)',
+              fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+            }}>
+              Apply
+            </button>
+            <button onClick={clearFilter} style={{
+              padding: '6px 14px', borderRadius: 5, border: '1px solid var(--border)',
+              background: 'var(--surface)', color: 'var(--text-3)',
+              fontSize: 12.5, cursor: 'pointer',
+            }}>
+              Clear
+            </button>
+          </div>
+
+          {/* Matching cases list */}
+          {sd.matching_cases.length > 0 && (
+            <div style={{ marginTop: 14 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)',
+                textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>
+                Matching case IDs ({sd.matching_cases.length})
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                {sd.matching_cases.map(id => (
+                  <span key={id} style={{
+                    fontSize: 11.5, padding: '2px 8px', borderRadius: 4,
+                    background: 'var(--surface-2)', border: '1px solid var(--border)',
+                    color: 'var(--text-2)', fontFamily: 'monospace',
+                  }}>
+                    {id}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </Panel>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+
+          {/* Stage type frequency */}
+          <Panel>
+            <SectionHeading>Stage Type Frequency</SectionHeading>
+            {sd.stage_type_frequency.length === 0 ? (
+              <div style={{ fontSize: 12.5, color: 'var(--text-3)', fontStyle: 'italic' }}>No stages coded yet.</div>
+            ) : sd.stage_type_frequency.map(r => (
+              <FreqBar key={r.value} label={fmtLabel(r.value)} count={r.count} max={maxTypeCount} />
+            ))}
+          </Panel>
+
+          {/* Sequence frequency */}
+          <Panel>
+            <SectionHeading>Stage Sequences</SectionHeading>
+            <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginBottom: 10 }}>
+              Most common analyst-coded stage orderings across cases.
+            </div>
+            {sd.sequence_frequency.length === 0 ? (
+              <div style={{ fontSize: 12.5, color: 'var(--text-3)', fontStyle: 'italic' }}>No multi-stage cases yet.</div>
+            ) : sd.sequence_frequency.slice(0, 8).map(r => (
+              <FreqBar key={r.value} label={r.value} count={r.count} max={maxSeqCount} />
+            ))}
+          </Panel>
+
+          {/* Client behaviours */}
+          <Panel>
+            <SectionHeading>Client Behaviour Frequency</SectionHeading>
+            <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginBottom: 10 }}>
+              Across all coded stages (all cases combined).
+            </div>
+            {sd.behavior_frequency.length === 0 ? (
+              <div style={{ fontSize: 12.5, color: 'var(--text-3)', fontStyle: 'italic' }}>No behaviours coded yet.</div>
+            ) : sd.behavior_frequency.map(r => (
+              <FreqBar key={r.value} label={fmtLabel(r.value)} count={r.count} max={maxBehCount} color="var(--red, #DC2626)" />
+            ))}
+          </Panel>
+
+          {/* Victim responses */}
+          <Panel>
+            <SectionHeading>Victim Response Frequency</SectionHeading>
+            <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginBottom: 10 }}>
+              Across all coded stages (all cases combined).
+            </div>
+            {sd.response_frequency.length === 0 ? (
+              <div style={{ fontSize: 12.5, color: 'var(--text-3)', fontStyle: 'italic' }}>No responses coded yet.</div>
+            ) : sd.response_frequency.map(r => (
+              <FreqBar key={r.value} label={fmtLabel(r.value)} count={r.count} max={maxRespCount} color="var(--green)" />
+            ))}
+          </Panel>
+
+        </div>
+
+        {/* Conditions by stage type */}
+        <Panel>
+          <SectionHeading>Conditions by Stage Type</SectionHeading>
+          <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginBottom: 14 }}>
+            Distribution of situational conditions at each stage type.
+          </div>
+          {Object.keys(sd.visibility_by_stage).length === 0 ? (
+            <div style={{ fontSize: 12.5, color: 'var(--text-3)', fontStyle: 'italic' }}>No conditions coded yet.</div>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 12 }}>
+                <thead>
+                  <tr style={{ borderBottom: '2px solid var(--border)' }}>
+                    <th style={{ textAlign: 'left', padding: '6px 10px', color: 'var(--text-3)', fontWeight: 600, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Stage type
+                    </th>
+                    <th style={{ textAlign: 'left', padding: '6px 10px', color: 'var(--text-3)', fontWeight: 600, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Top visibility
+                    </th>
+                    <th style={{ textAlign: 'left', padding: '6px 10px', color: 'var(--text-3)', fontWeight: 600, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Top guardianship
+                    </th>
+                    <th style={{ textAlign: 'left', padding: '6px 10px', color: 'var(--text-3)', fontWeight: 600, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Top isolation
+                    </th>
+                    <th style={{ textAlign: 'left', padding: '6px 10px', color: 'var(--text-3)', fontWeight: 600, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Top control
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {['initial_contact','negotiation','movement','escalation','outcome'].map(stype => {
+                    const vis  = sd.visibility_by_stage[stype]?.[0];
+                    const grd  = sd.guardianship_by_stage[stype]?.[0];
+                    const iso  = sd.isolation_by_stage[stype]?.[0];
+                    const ctrl = sd.control_by_stage[stype]?.[0];
+                    if (!vis && !grd && !iso && !ctrl) return null;
+                    return (
+                      <tr key={stype} style={{ borderBottom: '1px solid var(--border)' }}>
+                        <td style={{ padding: '8px 10px', fontWeight: 600, color: 'var(--text-1)', fontSize: 12.5 }}>
+                          {fmtLabel(stype)}
+                        </td>
+                        <td style={{ padding: '8px 10px', color: 'var(--text-2)', fontSize: 12.5 }}>
+                          {vis ? `${fmtLabel(vis.value)} (${vis.count})` : '—'}
+                        </td>
+                        <td style={{ padding: '8px 10px', color: 'var(--text-2)', fontSize: 12.5 }}>
+                          {grd ? `${fmtLabel(grd.value)} (${grd.count})` : '—'}
+                        </td>
+                        <td style={{ padding: '8px 10px', color: 'var(--text-2)', fontSize: 12.5 }}>
+                          {iso ? `${fmtLabel(iso.value)} (${iso.count})` : '—'}
+                        </td>
+                        <td style={{ padding: '8px 10px', color: 'var(--text-2)', fontSize: 12.5 }}>
+                          {ctrl ? `${fmtLabel(ctrl.value)} (${ctrl.count})` : '—'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Panel>
+
+      </div>
+    );
+  };
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
@@ -668,10 +935,11 @@ export default function ResearchOutputs() {
 
         <TabBar />
 
-        {tab === 'sequences'   && <SequencesTab />}
-        {tab === 'mobility'    && <MobilityTab />}
-        {tab === 'environment' && <EnvironmentTab />}
-        {tab === 'caselist'    && <CaseListTab />}
+        {tab === 'stage_patterns' && <StagePatternsTab />}
+        {tab === 'sequences'      && <SequencesTab />}
+        {tab === 'mobility'       && <MobilityTab />}
+        {tab === 'environment'    && <EnvironmentTab />}
+        {tab === 'caselist'       && <CaseListTab />}
 
       </div>
     </div>

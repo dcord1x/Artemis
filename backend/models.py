@@ -166,6 +166,34 @@ class Report(Base):
     narrative_hash = Column(String(64), nullable=True, index=True)
 
 
+class ReportStage(Base):
+    __tablename__ = "report_stages"
+
+    id          = Column(Integer, primary_key=True, index=True)
+    report_id   = Column(String, index=True)       # FK → reports.report_id
+    stage_order = Column(Integer, default=1)        # 1-based ordering within report
+    stage_type  = Column(String, default="")        # initial_contact|negotiation|movement|escalation|outcome
+
+    # Behaviours
+    client_behaviors    = Column(JSON, default=list)  # ["pressure","deception","aggression","payment_dispute","condom_refusal","other"]
+    victim_responses    = Column(JSON, default=list)  # ["resistance","compliance","exit_attempt","negotiation","other"]
+    turning_point_notes = Column(Text, default="")
+
+    # Situational conditions
+    visibility      = Column(String, default="")  # public|semi_public|semi_private|private|unknown
+    guardianship    = Column(String, default="")  # present|reduced|absent|delayed|unknown
+    isolation_level = Column(String, default="")  # not_isolated|partially_isolated|isolated|unknown
+    control_type    = Column(String, default="")  # victim|offender|shared|unclear
+
+    # Location
+    location_label        = Column(String, default="")  # free text e.g. "street corner", "parked car"
+    location_type         = Column(String, default="")  # public|semi_public|private|unknown
+    movement_type_to_here = Column(String, default="")  # none|walk|vehicle|unknown
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class CaseLinkage(Base):
     __tablename__ = "case_linkages"
 
