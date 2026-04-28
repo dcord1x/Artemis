@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Save, Sparkles, AlertTriangle, Download, Tag, X, GitCompare, ScanSearch, Lock, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Save, Sparkles, AlertTriangle, Download, Tag, X, GitCompare, ScanSearch, Lock, ChevronLeft, ChevronRight, ExternalLink, FileText, ChevronDown } from 'lucide-react';
 import { api } from '../api';
 import type { Report } from '../types';
 import FieldRow from '../components/FieldRow';
@@ -855,6 +855,7 @@ export default function CodingScreen() {
   const [tagInput, setTagInput] = useState('');
   const [cleanedNarrative, setCleanedNarrative] = useState('');
   const [showCleaned, setShowCleaned] = useState(false);
+  const [showBulletinText, setShowBulletinText] = useState(false);
   const [nlp, setNlp] = useState<Record<string, any>>({});
   const [analyzingNlp, setAnalyzingNlp] = useState(false);
   const [nlpError, setNlpError] = useState<string | null>(null);
@@ -1391,6 +1392,70 @@ export default function CodingScreen() {
                 fontFamily: 'Georgia, serif',
               }}>
                 {narrative}
+              </div>
+            )}
+
+            {/* Source provenance — PDF attachment + full bulletin text */}
+            {!isNew && (report?.source_bulletin_session_id || report?.source_bulletin_text) && (
+              <div style={{ marginTop: 10 }}>
+                <div style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  marginBottom: 4,
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span className="section-label" style={{ color: '#6B7280' }}>SOURCE DOCUMENT</span>
+                    <span style={{
+                      fontSize: 9.5, padding: '1px 6px', borderRadius: 3,
+                      background: '#374151', color: '#9CA3AF',
+                      border: '1px solid #4B5563', fontWeight: 600, letterSpacing: '0.04em',
+                    }}>PROVENANCE</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {report?.source_bulletin_session_id && (
+                      <a
+                        href={`/api/attachments/${report.source_bulletin_session_id}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 4,
+                          fontSize: 11, color: '#60A5FA', textDecoration: 'none',
+                          padding: '2px 8px', borderRadius: 4,
+                          background: '#1E3A5F', border: '1px solid #2563EB33',
+                        }}
+                      >
+                        <FileText size={11} />
+                        View source PDF
+                        <ExternalLink size={10} />
+                      </a>
+                    )}
+                    {report?.source_bulletin_text && (
+                      <button
+                        onClick={() => setShowBulletinText((v) => !v)}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 4,
+                          fontSize: 11, background: 'none', border: 'none',
+                          color: '#6B7280', cursor: 'pointer', padding: '2px 4px',
+                        }}
+                      >
+                        <ChevronDown size={11} style={{ transform: showBulletinText ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }} />
+                        {showBulletinText ? 'hide full extraction' : 'full extraction text'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+                {showBulletinText && report?.source_bulletin_text && (
+                  <div style={{
+                    fontSize: 11.5, lineHeight: 1.7, color: '#9CA3AF',
+                    whiteSpace: 'pre-wrap',
+                    padding: '10px 12px', borderRadius: 6,
+                    background: '#0D1117',
+                    border: '1px solid #374151',
+                    maxHeight: 260, overflow: 'auto',
+                    fontFamily: 'monospace',
+                  }}>
+                    {report.source_bulletin_text}
+                  </div>
+                )}
               </div>
             )}
 

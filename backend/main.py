@@ -336,43 +336,62 @@ def batch_analyze(db: Session = Depends(get_db)):
 
 # ── Bulletin import ───────────────────────────────────────────────────────────
 
+_ATTACHMENTS_DIR = os.path.join(os.path.dirname(__file__), "..", "attachments")
+os.makedirs(_ATTACHMENTS_DIR, exist_ok=True)
+
+
 @app.post("/parse-bulletin")
 async def parse_bulletin_endpoint(file: UploadFile = File(...)):
     """
     Parse a Red Light Alert bulletin PDF into individual incident records.
     Uses AI (Claude) if ANTHROPIC_API_KEY is set, otherwise falls back to
     rule-based PDF column detection + regex extraction.
+    Returns a session_id that links to the stored source PDF.
     """
     content = await file.read()
     filename = file.filename or ""
     has_api_key = bool(os.environ.get("ANTHROPIC_API_KEY"))
 
+    # Generate a session ID and persist the source PDF for all methods
+    session_id = str(uuid.uuid4())
     if filename.lower().endswith(".pdf"):
+        pdf_path = os.path.join(_ATTACHMENTS_DIR, f"{session_id}.pdf")
+        with open(pdf_path, "wb") as f:
+            f.write(content)
+
+    if filename.lower().endswith(".pdf"):
+        # Always extract full text for provenance
+        import tempfile, pdfplumber
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+        try:
+            text_pages = []
+            with pdfplumber.open(tmp_path) as pdf:
+                for page in pdf.pages:
+                    t = page.extract_text()
+                    if t:
+                        text_pages.append(t)
+            bulletin_text = "\n\n".join(text_pages)
+        finally:
+            os.unlink(tmp_path)
+
         if has_api_key:
-            # AI path: extract full text then send to Claude
-            import tempfile, pdfplumber
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-                tmp.write(content)
-                tmp_path = tmp.name
-            try:
-                text_pages = []
-                with pdfplumber.open(tmp_path) as pdf:
-                    for page in pdf.pages:
-                        t = page.extract_text()
-                        if t:
-                            text_pages.append(t)
-                bulletin_text = "\n\n".join(text_pages)
-            finally:
-                os.unlink(tmp_path)
             try:
                 incidents = await parse_bulletin(bulletin_text)
-                return {"incidents": incidents, "total": len(incidents), "method": "ai"}
+                for inc in incidents:
+                    inc["_bulletin_text"] = bulletin_text
+                    inc["_session_id"] = session_id
+                return {"incidents": incidents, "total": len(incidents), "method": "ai", "session_id": session_id}
             except ValueError as e:
                 raise HTTPException(400, str(e))
         else:
             # Rule-based path: use PDF column detection + regex
             incidents = parse_bulletin_rules(content)
-            return {"incidents": incidents, "total": len(incidents), "method": "rules"}
+            for inc in incidents:
+                inc["_bulletin_text"] = bulletin_text
+                inc["_session_id"] = session_id
+            return {"incidents": incidents, "total": len(incidents), "method": "rules", "session_id": session_id}
     else:
         # Plain text — always use AI if available, else return error
         bulletin_text = content.decode("utf-8", errors="replace")
@@ -380,9 +399,24 @@ async def parse_bulletin_endpoint(file: UploadFile = File(...)):
             raise HTTPException(400, "Plain text import requires an AI API key. Upload a PDF instead, or add your ANTHROPIC_API_KEY.")
         try:
             incidents = await parse_bulletin(bulletin_text)
-            return {"incidents": incidents, "total": len(incidents), "method": "ai"}
+            for inc in incidents:
+                inc["_bulletin_text"] = bulletin_text
+                inc["_session_id"] = session_id
+            return {"incidents": incidents, "total": len(incidents), "method": "ai", "session_id": session_id}
         except ValueError as e:
             raise HTTPException(400, str(e))
+
+
+@app.get("/attachments/{session_id}")
+def get_attachment(session_id: str):
+    """Serve a stored source PDF by its session ID."""
+    # Sanitise: only allow UUID-shaped filenames
+    if not re.fullmatch(r"[0-9a-f\-]{36}", session_id):
+        raise HTTPException(400, "Invalid session ID")
+    pdf_path = os.path.join(_ATTACHMENTS_DIR, f"{session_id}.pdf")
+    if not os.path.isfile(pdf_path):
+        raise HTTPException(404, "Attachment not found")
+    return FileResponse(pdf_path, media_type="application/pdf", filename="source_bulletin.pdf")
 
 
 @app.post("/parse-excel")
@@ -524,6 +558,7 @@ class BulkSaveRequest(PydanticBaseModel):
     incidents: list[dict]
     analyst_name: str = ""
     source_organization: str = ""
+    bulletin_session_id: str = ""
 
 
 def _matched_info(report) -> dict:
@@ -635,6 +670,8 @@ def bulk_save(data: BulkSaveRequest, db: Session = Depends(get_db)):
             report_id=report_id,
             narrative_hash=h,
             raw_narrative=raw,
+            source_bulletin_text=inc.get("_bulletin_text", ""),
+            source_bulletin_session_id=inc.get("_session_id", "") or data.bulletin_session_id,
             source_organization=inc.get("source_organization") or data.source_organization,
             analyst_name=data.analyst_name,
             date_received=inc.get("bulletin_date") or datetime.utcnow().strftime("%Y-%m-%d"),

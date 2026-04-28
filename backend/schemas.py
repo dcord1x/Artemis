@@ -298,6 +298,10 @@ class ReportOut(BaseModel):
     destination_city_confidence: str
     cross_city_movement: str
 
+    # Source provenance — PDF attachment
+    source_bulletin_text: str
+    source_bulletin_session_id: str
+
     class Config:
         from_attributes = True
 

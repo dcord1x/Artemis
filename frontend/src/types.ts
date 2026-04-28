@@ -142,6 +142,10 @@ export interface Report {
   destination_city: string;
   destination_city_confidence: string;
   cross_city_movement: string;
+
+  // Source provenance — PDF attachment
+  source_bulletin_text: string;
+  source_bulletin_session_id: string;
 }
 
 export interface ReportStage {

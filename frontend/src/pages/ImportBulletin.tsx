@@ -87,6 +87,7 @@ export default function ImportBulletin() {
   const [analystName, setAnalystName] = useState(() => localStorage.getItem('analyst_name') || '');
   const [sourceOrg, setSourceOrg] = useState('');
   const [parseMethod, setParseMethod] = useState<'ai' | 'rules' | 'excel' | null>(null);
+  const [bulletinSessionId, setBulletinSessionId] = useState('');
 
   const handleFile = async (file: File) => {
     if (!file) return;
@@ -95,6 +96,7 @@ export default function ImportBulletin() {
     setIncidents([]);
     setSelected(new Set());
     setParseMethod(null);
+    setBulletinSessionId('');
     setDupStatus({});
     setDupChecking(false);
     setDupCheckError(false);
@@ -110,6 +112,7 @@ export default function ImportBulletin() {
       const parsed: any[] = data.incidents || [];
       setIncidents(parsed);
       setParseMethod(data.method || null);
+      setBulletinSessionId(data.session_id || '');
       setSelected(new Set(parsed.map((_: any, i: number) => i)));
 
       // Check each incident for duplicates in the background
@@ -166,7 +169,7 @@ export default function ImportBulletin() {
       const res = await fetch(`${BASE}/bulk-save`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ incidents: toSave, analyst_name: analystName, source_organization: sourceOrg }),
+        body: JSON.stringify({ incidents: toSave, analyst_name: analystName, source_organization: sourceOrg, bulletin_session_id: bulletinSessionId }),
       });
       const data = await res.json();
       if (!res.ok) { setError(data.detail || 'Save failed'); return; }

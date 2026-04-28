@@ -157,6 +157,10 @@ class Report(Base):
     destination_confidence = Column(String, default="")          # high/medium/low/none
     destination_analyst_notes = Column(Text, default="")
 
+    # Source provenance — PDF attachment
+    source_bulletin_text = Column(Text, default="")          # full pdfplumber extraction (all pages)
+    source_bulletin_session_id = Column(String, default="")  # links to stored PDF file
+
     # Audit / meta
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -269,6 +273,9 @@ def init_db():
         ("cross_city_movement", "VARCHAR DEFAULT ''"),
         # Deduplication
         ("narrative_hash", "VARCHAR(64) DEFAULT NULL"),
+        # PDF provenance
+        ("source_bulletin_text", "TEXT DEFAULT ''"),
+        ("source_bulletin_session_id", "VARCHAR DEFAULT ''"),
     ]
     with engine.connect() as conn:
         for col_name, col_def in _new_columns:
