@@ -136,14 +136,18 @@ export default function BulletinOutput() {
     : -0.1;
 
   return (
-    <div style={{ height: '100%', overflow: 'auto', background: 'var(--bg)', padding: '24px' }}>
-      {/* Print styles injected inline for portability */}
+    <div id="bulletin-scroll-root" style={{ height: '100%', overflow: 'auto', background: 'var(--bg)', padding: '24px' }}>
+      {/* Print styles — must unset all overflow/height constraints so the full document prints */}
       <style>{`
         @media print {
           .no-print { display: none !important; }
-          body { background: white !important; }
+          .print-only { display: block !important; }
+          html, body { height: auto !important; overflow: visible !important; background: white !important; }
+          main { height: auto !important; overflow: visible !important; }
+          #bulletin-scroll-root { height: auto !important; overflow: visible !important; padding: 12px !important; }
           .bulletin-section { break-inside: avoid; page-break-inside: avoid; }
         }
+        .print-only { display: none; }
       `}</style>
 
       <div style={{ maxWidth: 900, margin: '0 auto' }}>
@@ -489,20 +493,7 @@ export default function BulletinOutput() {
                 )}
               </BulletinSection>
 
-              {/* Bottom print button (no-print) */}
-              <div className="no-print" style={{ textAlign: 'center', paddingBottom: 32 }}>
-                <button
-                  onClick={printBulletin}
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 8,
-                    padding: '10px 24px', borderRadius: 6,
-                    border: '1px solid var(--accent)', background: 'var(--accent-pale)',
-                    color: 'var(--accent)', fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                  }}
-                >
-                  <Printer size={15} /> Print / Export PDF
-                </button>
-              </div>
+              <div style={{ paddingBottom: 32 }} />
             </div>
           );
         })()}
