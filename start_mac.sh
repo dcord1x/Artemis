@@ -24,7 +24,7 @@ if [ -f "$LOG" ] && [ "$(wc -c < "$LOG")" -gt 102400 ]; then rm "$LOG"; fi
 
 echo "[1/3] Checking for git updates..."
 
-if git -C "$DIR" fetch origin master --quiet 2>>"$LOG"; then
+if git -C "$DIR" fetch origin --quiet 2>>"$LOG"; then
     LOCAL=$(git -C "$DIR" rev-parse HEAD 2>/dev/null)
     REMOTE=$(git -C "$DIR" rev-parse origin/master 2>/dev/null)
 
