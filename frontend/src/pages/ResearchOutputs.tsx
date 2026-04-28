@@ -197,6 +197,7 @@ export default function ResearchOutputs() {
   const [newNoteText, setNewNoteText] = useState('');
   const [notesExpanded, setNotesExpanded] = useState(false);
   const [savingNote, setSavingNote] = useState(false);
+  const [noteError, setNoteError]   = useState('');
 
   // Google Maps
   const { isLoaded: mapsLoaded } = useJsApiLoader({
@@ -221,6 +222,28 @@ export default function ResearchOutputs() {
 
   const loadNotes = () => {
     api.getResearchNotes().then(setNotes).catch(() => {});
+  };
+
+  const saveNote = async () => {
+    if (!newNoteText.trim()) return;
+    setNoteError('');
+    setSavingNote(true);
+    try {
+      const note = await api.createResearchNote({ note_text: newNoteText.trim() });
+      setNotes(prev => [note, ...prev]);
+      setNewNoteText('');
+    } catch (err: any) {
+      setNoteError(err?.message || 'Save failed — is the server running?');
+    } finally {
+      setSavingNote(false);
+    }
+  };
+
+  const deleteNote = async (id: number) => {
+    try {
+      await api.deleteResearchNote(id);
+      setNotes(prev => prev.filter(n => n.id !== id));
+    } catch { /* ignore */ }
   };
 
   const load = () => {
@@ -1134,27 +1157,11 @@ export default function ResearchOutputs() {
 
   // ── Research Notes panel ──────────────────────────────────────────────────
 
+  const fmtNoteDate = (iso: string) => {
+    try { return new Date(iso).toLocaleString(); } catch { return iso; }
+  };
+
   const ResearchNotesPanel = () => {
-    const saveNote = async () => {
-      if (!newNoteText.trim()) return;
-      setSavingNote(true);
-      try {
-        const note = await api.createResearchNote({ note_text: newNoteText.trim() });
-        setNotes(prev => [note, ...prev]);
-        setNewNoteText('');
-      } catch { /* ignore */ }
-      setSavingNote(false);
-    };
-
-    const deleteNote = async (id: number) => {
-      await api.deleteResearchNote(id).catch(() => {});
-      setNotes(prev => prev.filter(n => n.id !== id));
-    };
-
-    const fmt = (iso: string) => {
-      try { return new Date(iso).toLocaleString(); } catch { return iso; }
-    };
-
     return (
       <div style={{
         marginTop: 24, border: '1px solid var(--border)', borderRadius: 8,
@@ -1192,7 +1199,7 @@ export default function ResearchOutputs() {
                 }}
               />
               <button
-                onClick={saveNote}
+                onClick={() => saveNote()}
                 disabled={savingNote || !newNoteText.trim()}
                 style={{
                   padding: '8px 14px', borderRadius: 5, alignSelf: 'flex-end',
@@ -1205,6 +1212,13 @@ export default function ResearchOutputs() {
                 Save
               </button>
             </div>
+
+            {/* Error message */}
+            {noteError && (
+              <div style={{ fontSize: 12, color: '#ef4444', marginBottom: 8, padding: '6px 10px', borderRadius: 4, background: '#fee2e2', border: '1px solid #fca5a5' }}>
+                {noteError}
+              </div>
+            )}
 
             {/* Saved notes */}
             {notes.length === 0 ? (
@@ -1223,7 +1237,7 @@ export default function ResearchOutputs() {
                       {note.note_text}
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 6 }}>
-                      {fmt(note.created_at)}
+                      {fmtNoteDate(note.created_at)}
                       {note.tagged_pattern && (
                         <span style={{ marginLeft: 8, padding: '1px 6px', borderRadius: 3, background: 'var(--surface)', border: '1px solid var(--border)', fontSize: 10.5 }}>
                           {note.tagged_pattern}

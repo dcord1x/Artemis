@@ -120,7 +120,38 @@ export default function BulletinOutput() {
     setLoading(false);
   };
 
-  const printBulletin = () => window.print();
+  const printBulletin = () => {
+    // CSS @media print cannot override inline style="" attributes.
+    // Walk up the DOM from the scroll root and temporarily remove all
+    // overflow/height inline constraints, then restore after printing.
+    const saved: { el: HTMLElement; overflow: string; height: string }[] = [];
+
+    const before = () => {
+      let cur: HTMLElement | null = document.getElementById('bulletin-scroll-root');
+      while (cur && cur.tagName !== 'HTML') {
+        saved.push({ el: cur, overflow: cur.style.overflow, height: cur.style.height });
+        cur.style.overflow = 'visible';
+        cur.style.height = 'auto';
+        cur = cur.parentElement as HTMLElement | null;
+      }
+    };
+
+    const after = () => {
+      saved.forEach(({ el, overflow, height }) => {
+        el.style.overflow = overflow;
+        el.style.height = height;
+      });
+      saved.length = 0;
+      window.removeEventListener('afterprint', after);
+    };
+
+    window.addEventListener('afterprint', after);
+    before();
+    window.print();
+    // afterprint fires when dialog closes; also restore inline in case afterprint
+    // doesn't fire (Safari) by calling after() on a short delay as fallback
+    setTimeout(after, 1000);
+  };
 
   const fmt = (s: string | null | undefined) => s || '—';
   const pct = (n: number) => `${n}%`;
