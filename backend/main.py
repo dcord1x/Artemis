@@ -15,7 +15,7 @@ import uuid
 import os
 from datetime import datetime
 
-from models import Report, CaseLinkage, ReportStage, init_db, get_db
+from models import Report, CaseLinkage, ReportStage, ResearchNote, init_db, get_db
 from schemas import ReportCreate, ReportUpdate, ReportOut, SuggestRequest, StageCreate, StageUpdate, StageOut, StageReorderItem
 from ai import get_ai_suggestions, parse_bulletin
 from parser import parse_bulletin_rules
@@ -1121,6 +1121,9 @@ def get_stage_patterns(
     stage_type:   Optional[str] = None,
     visibility:   Optional[str] = None,
     guardianship: Optional[str] = None,
+    isolation:    Optional[str] = None,
+    date_from:    Optional[str] = None,
+    date_to:      Optional[str] = None,
     db: Session = Depends(get_db),
 ):
     """
@@ -1145,6 +1148,15 @@ def get_stage_patterns(
         query = query.filter(ReportStage.visibility == visibility)
     if guardianship:
         query = query.filter(ReportStage.guardianship == guardianship)
+    if isolation:
+        query = query.filter(ReportStage.isolation_level == isolation)
+    if date_from or date_to:
+        # Join to Report to filter by incident_date
+        query = query.join(Report, ReportStage.report_id == Report.report_id)
+        if date_from:
+            query = query.filter(Report.incident_date >= date_from)
+        if date_to:
+            query = query.filter(Report.incident_date <= date_to)
 
     stages = query.all()
 
@@ -1214,6 +1226,287 @@ def get_research_aggregate(db: Session = Depends(get_db)):
         'mobility':    aggregate_mobility(reports),
         'environment': aggregate_environment(reports),
         'total':       len(reports),
+    }
+
+
+@app.get("/research/linkage-patterns")
+def get_linkage_patterns(db: Session = Depends(get_db)):
+    """
+    Aggregate potential linkage signals across all reports:
+    - repeated_vehicles: plates / make+colour combos seen in 2+ cases
+    - repeated_locations: initial contact / incident locations in 2+ cases
+    - behavior_clusters: co-occurring violence indicator patterns in 2+ cases
+    """
+    from collections import Counter, defaultdict
+
+    reports = db.query(Report).all()
+
+    # ── Repeated plates ───────────────────────────────────────────────────────
+    plate_map: dict = defaultdict(list)
+    for r in reports:
+        p = (r.plate_partial or "").strip().upper()
+        if p:
+            plate_map[p].append(r.report_id)
+
+    repeated_vehicles = []
+    # Plates with 2+ cases
+    for plate, rids in plate_map.items():
+        if len(rids) >= 2:
+            repeated_vehicles.append({"descriptor": plate, "count": len(rids), "report_ids": rids, "type": "plate"})
+
+    # Make + colour combos with 2+ cases
+    make_colour_map: dict = defaultdict(list)
+    for r in reports:
+        make = (r.vehicle_make or "").strip().title()
+        colour = (r.vehicle_colour or "").strip().title()
+        if make and colour:
+            key = f"{colour} {make}"
+            make_colour_map[key].append(r.report_id)
+    for desc, rids in make_colour_map.items():
+        if len(rids) >= 2:
+            repeated_vehicles.append({"descriptor": desc, "count": len(rids), "report_ids": rids, "type": "make_colour"})
+
+    repeated_vehicles.sort(key=lambda x: -x["count"])
+
+    # ── Repeated locations ────────────────────────────────────────────────────
+    loc_map: dict = defaultdict(list)
+    for r in reports:
+        for loc_field in ["initial_contact_location", "incident_location_primary"]:
+            loc = (getattr(r, loc_field, None) or "").strip()
+            if loc and len(loc) > 3:
+                loc_map[loc].append(r.report_id)
+
+    repeated_locations = []
+    for loc, rids in loc_map.items():
+        unique_rids = list(dict.fromkeys(rids))  # preserve order, deduplicate
+        if len(unique_rids) >= 2:
+            repeated_locations.append({"descriptor": loc, "count": len(unique_rids), "report_ids": unique_rids})
+    repeated_locations.sort(key=lambda x: -x["count"])
+
+    # ── Behavior clusters ─────────────────────────────────────────────────────
+    _FLAGS = [
+        ("coercion_present",  "Coercion"),
+        ("threats_present",   "Threats"),
+        ("physical_force",    "Physical force"),
+        ("sexual_assault",    "Sexual assault"),
+        ("movement_present",  "Movement"),
+        ("entered_vehicle",   "Vehicle entry"),
+    ]
+    cluster_map: dict = defaultdict(list)
+    for r in reports:
+        active = [label for field, label in _FLAGS if getattr(r, field, "") == "yes"]
+        if len(active) >= 2:
+            key = " + ".join(active)
+            cluster_map[key].append(r.report_id)
+
+    behavior_clusters = [
+        {"descriptor": k, "count": len(v), "report_ids": v}
+        for k, v in cluster_map.items()
+        if len(v) >= 2
+    ]
+    behavior_clusters.sort(key=lambda x: -x["count"])
+
+    return {
+        "repeated_vehicles":  repeated_vehicles[:20],
+        "repeated_locations": repeated_locations[:20],
+        "behavior_clusters":  behavior_clusters[:20],
+    }
+
+
+# ── Research Notes CRUD ───────────────────────────────────────────────────────
+
+class ResearchNoteCreate(BaseModel):
+    note_text: str
+    tagged_report_ids: list = []
+    tagged_pattern: str = ""
+
+
+@app.get("/research/notes")
+def list_research_notes(db: Session = Depends(get_db)):
+    notes = db.query(ResearchNote).order_by(ResearchNote.created_at.desc()).all()
+    return [
+        {
+            "id": n.id,
+            "note_text": n.note_text,
+            "tagged_report_ids": n.tagged_report_ids or [],
+            "tagged_pattern": n.tagged_pattern or "",
+            "created_at": n.created_at.isoformat() if n.created_at else "",
+        }
+        for n in notes
+    ]
+
+
+@app.post("/research/notes")
+def create_research_note(body: ResearchNoteCreate, db: Session = Depends(get_db)):
+    note = ResearchNote(
+        note_text=body.note_text,
+        tagged_report_ids=body.tagged_report_ids,
+        tagged_pattern=body.tagged_pattern,
+        created_at=datetime.utcnow(),
+    )
+    db.add(note)
+    db.commit()
+    db.refresh(note)
+    return {
+        "id": note.id,
+        "note_text": note.note_text,
+        "tagged_report_ids": note.tagged_report_ids or [],
+        "tagged_pattern": note.tagged_pattern or "",
+        "created_at": note.created_at.isoformat() if note.created_at else "",
+    }
+
+
+@app.delete("/research/notes/{note_id}")
+def delete_research_note(note_id: int, db: Session = Depends(get_db)):
+    note = db.query(ResearchNote).filter(ResearchNote.id == note_id).first()
+    if not note:
+        raise HTTPException(404, "Note not found")
+    db.delete(note)
+    db.commit()
+    return {"ok": True}
+
+
+# ── Bulletin data export ──────────────────────────────────────────────────────
+
+@app.get("/export/bulletin-data")
+def get_bulletin_data(
+    date_from: Optional[str] = None,
+    date_to:   Optional[str] = None,
+    status:    Optional[str] = None,
+    city:      Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    """
+    Return all data needed to render a structured analytic bulletin.
+    Filters: date_from, date_to, status (coding_status), city.
+    Sections: meta, overview, map_points, behavioral, conditions, movement, linkage.
+    """
+    from collections import Counter
+    from research import aggregate_sequences, aggregate_mobility, aggregate_environment
+
+    query = db.query(Report)
+    if date_from:
+        query = query.filter(Report.incident_date >= date_from)
+    if date_to:
+        query = query.filter(Report.incident_date <= date_to)
+    if status:
+        query = query.filter(Report.coding_status == status)
+    if city:
+        query = query.filter(
+            (Report.city.ilike(f"%{city}%")) |
+            (Report.initial_contact_city.ilike(f"%{city}%")) |
+            (Report.incident_city.ilike(f"%{city}%"))
+        )
+
+    reports = query.all()
+    total = len(reports)
+
+    if total == 0:
+        return {
+            "meta": {"case_count": 0, "date_from": date_from, "date_to": date_to, "status": status, "city": city},
+            "overview": {}, "map_points": [], "behavioral": {}, "conditions": {}, "movement": {}, "linkage": {},
+        }
+
+    # ── Sections ──────────────────────────────────────────────────────────────
+    dates = [r.incident_date for r in reports if r.incident_date]
+    cities_ctr: Counter = Counter()
+    for r in reports:
+        for c in [r.city, r.initial_contact_city, r.incident_city]:
+            if c and c.strip():
+                cities_ctr[c.strip().title()] += 1
+
+    location_types = Counter()
+    for r in reports:
+        lt = r.destination_location_type or r.start_location_type
+        if lt:
+            location_types[lt] += 1
+
+    overview = {
+        "case_count": total,
+        "date_earliest": min(dates) if dates else None,
+        "date_latest": max(dates) if dates else None,
+        "top_cities": [{"city": c, "count": n} for c, n in cities_ctr.most_common(5)],
+        "location_type_dist": [{"type": k, "count": v} for k, v in location_types.most_common()],
+        "coded_count": sum(1 for r in reports if r.coding_status in ("coded", "reviewed")),
+    }
+
+    map_points = [
+        {
+            "report_id": r.report_id,
+            "lat_initial": r.lat_initial,
+            "lon_initial": r.lon_initial,
+            "lat_incident": r.lat_incident,
+            "lon_incident": r.lon_incident,
+            "lat_destination": r.lat_destination,
+            "lon_destination": r.lon_destination,
+            "coercion": r.coercion_present,
+            "movement": r.movement_present,
+            "city": r.city,
+        }
+        for r in reports
+        if r.lat_initial or r.lat_incident
+    ]
+
+    seq_data = aggregate_sequences(reports)
+    behavioral = {
+        "top_sequences": seq_data["most_common_sequences"][:5],
+        "escalation_points": Counter(r.escalation_point for r in reports if r.escalation_point).most_common(5),
+        "top_transitions": seq_data["most_common_bigrams"][:5],
+    }
+
+    env_data = aggregate_environment(reports)
+    conditions = {
+        "indoor_outdoor": env_data["indoor_outdoor"],
+        "public_private": env_data["public_private"],
+        "deserted": env_data["deserted"],
+        "location_types": env_data["location_types"][:8],
+    }
+
+    mob_data = aggregate_mobility(reports)
+    mob_total = mob_data["total"] or 1
+    movement = {
+        "pct_movement": round(mob_data["counts"]["movement_present"] / mob_total * 100, 1),
+        "pct_entered_vehicle": round(mob_data["counts"]["entered_vehicle"] / mob_total * 100, 1),
+        "pct_public_to_private": round(mob_data["counts"]["public_to_private"] / mob_total * 100, 1),
+        "top_transitions": mob_data["route_patterns"][:5],
+        "common_pathways": mob_data["recurring_pathways"][:5],
+    }
+
+    # Linkage signals from the full dataset (not filtered — analysts want patterns across all cases)
+    plate_ctr: Counter = Counter(r.plate_partial for r in reports if r.plate_partial)
+    repeated_plates = [{"descriptor": p, "count": c} for p, c in plate_ctr.most_common(5) if c >= 2]
+
+    make_colour_ctr: Counter = Counter()
+    for r in reports:
+        m = (r.vehicle_make or "").strip().title()
+        cl = (r.vehicle_colour or "").strip().title()
+        if m and cl:
+            make_colour_ctr[f"{cl} {m}"] += 1
+    repeated_make_colour = [{"descriptor": k, "count": v} for k, v in make_colour_ctr.most_common(5) if v >= 2]
+
+    loc_ctr: Counter = Counter()
+    for r in reports:
+        for lf in ["initial_contact_location", "incident_location_primary"]:
+            loc = (getattr(r, lf, None) or "").strip()
+            if loc and len(loc) > 3:
+                loc_ctr[loc] += 1
+    repeated_locations = [{"descriptor": k, "count": v} for k, v in loc_ctr.most_common(5) if v >= 2]
+
+    linkage = {
+        "repeated_plates": repeated_plates,
+        "repeated_vehicles": repeated_make_colour,
+        "repeated_locations": repeated_locations,
+        "note": "Flagged as potential linkage only — not confirmed.",
+    }
+
+    return {
+        "meta": {"case_count": total, "date_from": date_from, "date_to": date_to, "status": status, "city": city},
+        "overview": overview,
+        "map_points": map_points,
+        "behavioral": behavioral,
+        "conditions": conditions,
+        "movement": movement,
+        "linkage": linkage,
     }
 
 

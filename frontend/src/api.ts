@@ -1,4 +1,4 @@
-import type { Report, Stats, SimilarCandidate, CompareResult, ResearchAggregate, CaseSummary, ReportStage, StagePatterns } from './types';
+import type { Report, Stats, SimilarCandidate, CompareResult, ResearchAggregate, CaseSummary, ReportStage, StagePatterns, ResearchNote, LinkagePatterns, BulletinData } from './types';
 
 // In dev: Vite proxies /api → localhost:8000. In production build: empty string (same-origin).
 const BASE = import.meta.env.VITE_API_BASE ?? '/api';
@@ -106,8 +106,23 @@ export const api = {
       method: 'PUT', body: JSON.stringify(items),
     }),
 
-  getStagePatterns: (params?: { stage_type?: string; visibility?: string; guardianship?: string }) => {
+  getStagePatterns: (params?: { stage_type?: string; visibility?: string; guardianship?: string; isolation?: string; date_from?: string; date_to?: string }) => {
     const qs = params ? '?' + new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([, v]) => v))).toString() : '';
     return req<StagePatterns>(`/research/stage-patterns${qs}`);
+  },
+
+  getLinkagePatterns: () => req<LinkagePatterns>('/research/linkage-patterns'),
+
+  getResearchNotes: () => req<ResearchNote[]>('/research/notes'),
+
+  createResearchNote: (data: { note_text: string; tagged_report_ids?: string[]; tagged_pattern?: string }) =>
+    req<ResearchNote>('/research/notes', { method: 'POST', body: JSON.stringify(data) }),
+
+  deleteResearchNote: (noteId: number) =>
+    req<{ ok: boolean }>(`/research/notes/${noteId}`, { method: 'DELETE' }),
+
+  getBulletinData: (params?: { date_from?: string; date_to?: string; status?: string; city?: string }) => {
+    const qs = params ? '?' + new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([, v]) => v))).toString() : '';
+    return req<BulletinData>(`/export/bulletin-data${qs}`);
   },
 };

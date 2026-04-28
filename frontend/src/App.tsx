@@ -9,6 +9,7 @@ import ImportBulletin from './pages/ImportBulletin';
 import SimilarCasesPage from './pages/SimilarCasesPage';
 import LinkageScreen from './pages/LinkageScreen';
 import ResearchOutputs from './pages/ResearchOutputs';
+import BulletinOutput from './pages/BulletinOutput';
 
 export default function App() {
   return (
@@ -25,6 +26,7 @@ export default function App() {
           <Route path="/similar/:reportId" element={<SimilarCasesPage />} />
           <Route path="/linkage/:reportIdA/:reportIdB" element={<LinkageScreen />} />
           <Route path="/research" element={<ResearchOutputs />} />
+          <Route path="/bulletin" element={<BulletinOutput />} />
         </Routes>
       </Layout>
       </ToastProvider>

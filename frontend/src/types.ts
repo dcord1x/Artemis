@@ -394,3 +394,83 @@ export interface MapPoint {
   movement: string;
   city: string;
 }
+
+// ── Research Notes ────────────────────────────────────────────────────────────
+
+export interface ResearchNote {
+  id: number;
+  note_text: string;
+  tagged_report_ids: string[];
+  tagged_pattern: string;
+  created_at: string;
+}
+
+// ── Linkage Patterns ──────────────────────────────────────────────────────────
+
+export interface LinkageItem {
+  descriptor: string;
+  count: number;
+  report_ids: string[];
+  type?: string;
+}
+
+export interface LinkagePatterns {
+  repeated_vehicles: LinkageItem[];
+  repeated_locations: LinkageItem[];
+  behavior_clusters: LinkageItem[];
+}
+
+// ── Bulletin Data ─────────────────────────────────────────────────────────────
+
+export interface BulletinOverview {
+  case_count: number;
+  date_earliest: string | null;
+  date_latest: string | null;
+  top_cities: { city: string; count: number }[];
+  location_type_dist: { type: string; count: number }[];
+  coded_count: number;
+}
+
+export interface BulletinBehavioral {
+  top_sequences: { sequence: string; count: number }[];
+  escalation_points: [string, number][];
+  top_transitions: { pattern: string; count: number }[];
+}
+
+export interface BulletinConditions {
+  indoor_outdoor: Record<string, number>;
+  public_private: Record<string, number>;
+  deserted: Record<string, number>;
+  location_types: { type: string; count: number }[];
+}
+
+export interface BulletinMovement {
+  pct_movement: number;
+  pct_entered_vehicle: number;
+  pct_public_to_private: number;
+  top_transitions: { route: string; count: number }[];
+  common_pathways: { pathway: string; count: number }[];
+}
+
+export interface BulletinLinkage {
+  repeated_plates: { descriptor: string; count: number }[];
+  repeated_vehicles: { descriptor: string; count: number }[];
+  repeated_locations: { descriptor: string; count: number }[];
+  note: string;
+}
+
+export interface BulletinData {
+  meta: {
+    case_count: number;
+    date_from: string | null;
+    date_to: string | null;
+    status: string | null;
+    city: string | null;
+  };
+  overview: BulletinOverview;
+  map_points: MapPoint[];
+  behavioral: BulletinBehavioral;
+  conditions: BulletinConditions;
+  movement: BulletinMovement;
+  linkage: BulletinLinkage;
+}

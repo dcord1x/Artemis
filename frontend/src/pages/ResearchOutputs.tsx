@@ -15,7 +15,8 @@
 
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Download, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Download, RefreshCw, AlertTriangle, FileText, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
+import { GoogleMap, useJsApiLoader, Marker, Polyline } from '@react-google-maps/api';
 import { api } from '../api';
 import type {
   ResearchAggregate,
@@ -26,7 +27,13 @@ import type {
   RouteRow,
   EnvCross,
   StagePatterns,
+  ResearchNote,
+  LinkagePatterns,
+  MapPoint,
 } from '../types';
+
+const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string;
+const MAP_LIBRARIES: ['places'] = ['places'];
 
 // ── Shared sub-components ─────────────────────────────────────────────────────
 
@@ -150,13 +157,15 @@ function Panel({ children, style }: { children: React.ReactNode; style?: React.C
 
 // ── Tab types ─────────────────────────────────────────────────────────────────
 
-type Tab = 'sequences' | 'mobility' | 'environment' | 'caselist' | 'stage_patterns';
+type Tab = 'sequences' | 'mobility' | 'environment' | 'caselist' | 'stage_patterns' | 'spatial' | 'linkage_view';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'stage_patterns', label: 'Stage Patterns' },
   { id: 'sequences',      label: 'Encounter Sequences' },
   { id: 'mobility',       label: 'Mobility Pathways' },
   { id: 'environment',    label: 'Environmental Patterns' },
+  { id: 'spatial',        label: 'Spatial Overview' },
+  { id: 'linkage_view',   label: 'Case Linkage View' },
   { id: 'caselist',       label: 'Case Sequence Table' },
 ];
 
@@ -169,15 +178,49 @@ export default function ResearchOutputs() {
   const [tab, setTab]               = useState<Tab>('stage_patterns');
   const [stageData, setStageData]   = useState<StagePatterns | null>(null);
   const [stageLoading, setStageLoading] = useState(true);
-  const [filterStageType, setFilterStageType]   = useState('');
-  const [filterVisibility, setFilterVisibility] = useState('');
+  const [filterStageType, setFilterStageType]       = useState('');
+  const [filterVisibility, setFilterVisibility]     = useState('');
   const [filterGuardianship, setFilterGuardianship] = useState('');
+  const [filterIsolation, setFilterIsolation]       = useState('');
+  const [filterDateFrom, setFilterDateFrom]         = useState('');
+  const [filterDateTo, setFilterDateTo]             = useState('');
 
-  const loadStagePatterns = (params?: { stage_type?: string; visibility?: string; guardianship?: string }) => {
+  // Linkage patterns
+  const [linkageData, setLinkageData]       = useState<LinkagePatterns | null>(null);
+  const [linkageLoading, setLinkageLoading] = useState(false);
+
+  // Map data for Spatial Overview
+  const [mapPoints, setMapPoints] = useState<MapPoint[]>([]);
+
+  // Research notes
+  const [notes, setNotes]           = useState<ResearchNote[]>([]);
+  const [newNoteText, setNewNoteText] = useState('');
+  const [notesExpanded, setNotesExpanded] = useState(false);
+  const [savingNote, setSavingNote] = useState(false);
+
+  // Google Maps
+  const { isLoaded: mapsLoaded } = useJsApiLoader({
+    id: 'google-map-script',
+    googleMapsApiKey: GOOGLE_MAPS_API_KEY,
+    libraries: MAP_LIBRARIES,
+  });
+
+  const loadStagePatterns = (params?: { stage_type?: string; visibility?: string; guardianship?: string; isolation?: string; date_from?: string; date_to?: string }) => {
     setStageLoading(true);
     api.getStagePatterns(params)
       .then(d => { setStageData(d); setStageLoading(false); })
       .catch(() => setStageLoading(false));
+  };
+
+  const loadLinkagePatterns = () => {
+    setLinkageLoading(true);
+    api.getLinkagePatterns()
+      .then(d => { setLinkageData(d); setLinkageLoading(false); })
+      .catch(() => setLinkageLoading(false));
+  };
+
+  const loadNotes = () => {
+    api.getResearchNotes().then(setNotes).catch(() => {});
   };
 
   const load = () => {
@@ -185,9 +228,16 @@ export default function ResearchOutputs() {
     api.getResearchAggregate()
       .then(d => { setData(d); setLoading(false); })
       .catch(() => setLoading(false));
+    // Also load map points via stats
+    api.getStats().then(s => setMapPoints(s.map_points ?? [])).catch(() => {});
   };
 
-  useEffect(() => { load(); loadStagePatterns(); }, []);
+  useEffect(() => {
+    load();
+    loadStagePatterns();
+    loadLinkagePatterns();
+    loadNotes();
+  }, []);
 
   // ── Tab bar ───────────────────────────────────────────────────────────────
 
@@ -601,13 +651,17 @@ export default function ResearchOutputs() {
     const GUARDIANSHIP_OPTS = ['present','reduced','absent','delayed'];
 
     const applyFilter = () => loadStagePatterns({
-      stage_type:   filterStageType || undefined,
-      visibility:   filterVisibility || undefined,
+      stage_type:   filterStageType   || undefined,
+      visibility:   filterVisibility  || undefined,
       guardianship: filterGuardianship || undefined,
+      isolation:    filterIsolation   || undefined,
+      date_from:    filterDateFrom    || undefined,
+      date_to:      filterDateTo      || undefined,
     });
 
     const clearFilter = () => {
       setFilterStageType(''); setFilterVisibility(''); setFilterGuardianship('');
+      setFilterIsolation(''); setFilterDateFrom(''); setFilterDateTo('');
       loadStagePatterns({});
     };
 
@@ -688,6 +742,24 @@ export default function ResearchOutputs() {
                 {GUARDIANSHIP_OPTS.map(v => <option key={v} value={v}>{fmtLabel(v)}</option>)}
               </select>
             </div>
+            <div>
+              <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Isolation</div>
+              <select value={filterIsolation} onChange={e => setFilterIsolation(e.target.value)}
+                style={{ padding: '5px 8px', fontSize: 12.5, border: '1px solid var(--border)', borderRadius: 4, background: 'var(--bg)', color: 'var(--text-1)' }}>
+                <option value="">Any</option>
+                {['not_isolated','partially_isolated','isolated','unknown'].map(v => <option key={v} value={v}>{fmtLabel(v)}</option>)}
+              </select>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Date from</div>
+              <input type="date" value={filterDateFrom} onChange={e => setFilterDateFrom(e.target.value)}
+                style={{ padding: '5px 8px', fontSize: 12.5, border: '1px solid var(--border)', borderRadius: 4, background: 'var(--bg)', color: 'var(--text-1)' }} />
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Date to</div>
+              <input type="date" value={filterDateTo} onChange={e => setFilterDateTo(e.target.value)}
+                style={{ padding: '5px 8px', fontSize: 12.5, border: '1px solid var(--border)', borderRadius: 4, background: 'var(--bg)', color: 'var(--text-1)' }} />
+            </div>
             <button onClick={applyFilter} style={{
               padding: '6px 14px', borderRadius: 5, border: '1px solid var(--accent)',
               background: 'var(--accent-pale)', color: 'var(--accent)',
@@ -709,17 +781,22 @@ export default function ResearchOutputs() {
             <div style={{ marginTop: 14 }}>
               <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)',
                 textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>
-                Matching case IDs ({sd.matching_cases.length})
+                Matching case IDs ({sd.matching_cases.length}) — click to open
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
                 {sd.matching_cases.map(id => (
-                  <span key={id} style={{
-                    fontSize: 11.5, padding: '2px 8px', borderRadius: 4,
-                    background: 'var(--surface-2)', border: '1px solid var(--border)',
-                    color: 'var(--text-2)', fontFamily: 'monospace',
-                  }}>
+                  <button
+                    key={id}
+                    onClick={() => navigate(`/code/${id}`)}
+                    title="Open in coding workstation"
+                    style={{
+                      fontSize: 11.5, padding: '2px 8px', borderRadius: 4,
+                      background: 'var(--surface-2)', border: '1px solid var(--border)',
+                      color: 'var(--accent)', fontFamily: 'monospace', cursor: 'pointer',
+                    }}
+                  >
                     {id}
-                  </span>
+                  </button>
                 ))}
               </div>
             </div>
@@ -846,6 +923,334 @@ export default function ResearchOutputs() {
     );
   };
 
+  // ── Spatial Overview tab ─────────────────────────────────────────────────
+
+  const SpatialOverviewTab = () => {
+    const hasGeo = mapPoints.some(p => p.lat_initial || p.lat_incident);
+
+    if (!GOOGLE_MAPS_API_KEY) {
+      return (
+        <Panel>
+          <SectionHeading>Spatial Overview</SectionHeading>
+          <div style={{ fontSize: 12.5, color: 'var(--text-3)' }}>
+            Google Maps API key not configured. Set VITE_GOOGLE_MAPS_API_KEY in frontend/.env to enable map features.
+          </div>
+        </Panel>
+      );
+    }
+
+    if (!mapsLoaded) {
+      return (
+        <Panel>
+          <div style={{ fontSize: 13, color: 'var(--text-3)', fontStyle: 'italic' }}>Loading map…</div>
+        </Panel>
+      );
+    }
+
+    if (!hasGeo) {
+      return (
+        <Panel>
+          <SectionHeading>Spatial Overview</SectionHeading>
+          <div style={{ fontSize: 12.5, color: 'var(--text-3)' }}>
+            No geocoded cases yet. Add GIS coordinates to cases to see them on the map.
+          </div>
+        </Panel>
+      );
+    }
+
+    // Default centre: average of all geocoded points
+    const geoPoints = mapPoints.filter(p => p.lat_initial || p.lat_incident);
+    const avgLat = geoPoints.reduce((s, p) => s + (p.lat_initial ?? p.lat_incident ?? 0), 0) / geoPoints.length;
+    const avgLon = geoPoints.reduce((s, p) => s + (p.lon_initial ?? p.lon_incident ?? 0), 0) / geoPoints.length;
+
+    return (
+      <div>
+        <Panel>
+          <SectionHeading>Spatial Overview</SectionHeading>
+          <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: '0 0 14px' }}>
+            Geocoded incident locations across{' '}
+            <strong style={{ color: 'var(--text-2)' }}>{geoPoints.length}</strong> cases.
+            Blue = initial contact · Red = incident · Green = destination.
+            Click any marker to open that case. Full map available at{' '}
+            <button onClick={() => navigate('/map')} style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: 12.5, padding: 0, textDecoration: 'underline' }}>Map view</button>.
+          </p>
+          <GoogleMap
+            mapContainerStyle={{ width: '100%', height: 400, borderRadius: 8 }}
+            center={{ lat: avgLat, lng: avgLon }}
+            zoom={11}
+            options={{ streetViewControl: false, mapTypeControl: false, fullscreenControl: false }}
+          >
+            {mapPoints.map(p => (
+              <div key={p.report_id}>
+                {p.lat_initial && p.lon_initial && (
+                  <Marker
+                    position={{ lat: p.lat_initial, lng: p.lon_initial }}
+                    title={`${p.report_id} — Initial contact`}
+                    icon={{ path: google.maps.SymbolPath.CIRCLE, fillColor: '#3b82f6', fillOpacity: 1, strokeColor: '#fff', strokeWeight: 1.5, scale: 6 }}
+                    onClick={() => navigate(`/code/${p.report_id}`)}
+                  />
+                )}
+                {p.lat_incident && p.lon_incident && (
+                  <Marker
+                    position={{ lat: p.lat_incident, lng: p.lon_incident }}
+                    title={`${p.report_id} — Incident`}
+                    icon={{ path: google.maps.SymbolPath.CIRCLE, fillColor: '#ef4444', fillOpacity: 1, strokeColor: '#fff', strokeWeight: 1.5, scale: 6 }}
+                    onClick={() => navigate(`/code/${p.report_id}`)}
+                  />
+                )}
+                {p.lat_destination && p.lon_destination && (
+                  <Marker
+                    position={{ lat: p.lat_destination, lng: p.lon_destination }}
+                    title={`${p.report_id} — Destination`}
+                    icon={{ path: google.maps.SymbolPath.CIRCLE, fillColor: '#10b981', fillOpacity: 1, strokeColor: '#fff', strokeWeight: 1.5, scale: 5 }}
+                    onClick={() => navigate(`/code/${p.report_id}`)}
+                  />
+                )}
+                {p.lat_initial && p.lon_initial && p.lat_incident && p.lon_incident && (
+                  <Polyline
+                    path={[{ lat: p.lat_initial, lng: p.lon_initial }, { lat: p.lat_incident, lng: p.lon_incident }]}
+                    options={{ strokeColor: '#6b7280', strokeOpacity: 0.4, strokeWeight: 1.5 }}
+                  />
+                )}
+              </div>
+            ))}
+          </GoogleMap>
+          {/* Legend */}
+          <div style={{ display: 'flex', gap: 18, marginTop: 10, fontSize: 11.5, color: 'var(--text-3)' }}>
+            {[['#3b82f6','Initial contact'],['#ef4444','Incident'],['#10b981','Destination']].map(([color, label]) => (
+              <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <div style={{ width: 10, height: 10, borderRadius: '50%', background: color, border: '1.5px solid #fff', boxShadow: '0 0 0 1px #aaa' }} />
+                {label}
+              </div>
+            ))}
+          </div>
+        </Panel>
+      </div>
+    );
+  };
+
+  // ── Case Linkage View tab ─────────────────────────────────────────────────
+
+  const LinkageViewTab = () => {
+    if (linkageLoading) return (
+      <div style={{ color: 'var(--text-3)', fontSize: 13, fontStyle: 'italic', padding: '20px 0' }}>
+        Loading linkage patterns…
+      </div>
+    );
+
+    if (!linkageData) return (
+      <div style={{ color: 'var(--text-3)', fontSize: 13, fontStyle: 'italic', padding: '20px 0' }}>
+        No linkage data available.
+      </div>
+    );
+
+    const { repeated_vehicles, repeated_locations, behavior_clusters } = linkageData;
+    const hasAny = repeated_vehicles.length > 0 || repeated_locations.length > 0 || behavior_clusters.length > 0;
+
+    const PotentialNote = () => (
+      <div style={{
+        display: 'flex', alignItems: 'flex-start', gap: 7,
+        fontSize: 11.5, color: 'var(--text-3)', padding: '7px 12px',
+        background: 'var(--surface-2)', borderRadius: 6,
+        border: '1px solid var(--border)', marginBottom: 16,
+      }}>
+        <AlertTriangle size={13} style={{ flexShrink: 0, marginTop: 1, color: 'var(--amber)' }} />
+        <span>All matches below are <strong style={{ color: 'var(--amber)', fontWeight: 600 }}>potential linkage only</strong> — not confirmed connections. Review individual cases before drawing conclusions.</span>
+      </div>
+    );
+
+    const LinkageTable = ({ items, emptyMsg }: { items: { descriptor: string; count: number; report_ids: string[] }[]; emptyMsg: string }) => (
+      items.length === 0 ? (
+        <div style={{ fontSize: 12.5, color: 'var(--text-3)', fontStyle: 'italic' }}>{emptyMsg}</div>
+      ) : (
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+          <thead>
+            <tr style={{ borderBottom: '1px solid var(--border)' }}>
+              {['Descriptor','Cases','Report IDs'].map(h => (
+                <th key={h} style={{ textAlign: 'left', padding: '5px 8px', fontSize: 11, color: 'var(--text-3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item, i) => (
+              <tr key={i} style={{ borderBottom: '1px solid var(--border)', background: i % 2 === 0 ? 'transparent' : 'var(--surface-2)' }}>
+                <td style={{ padding: '7px 8px', color: 'var(--text-1)', fontWeight: 500 }}>{item.descriptor}</td>
+                <td style={{ padding: '7px 8px', color: 'var(--text-3)', textAlign: 'center' }}>{item.count}</td>
+                <td style={{ padding: '7px 8px' }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                    {item.report_ids.map(id => (
+                      <button key={id} onClick={() => navigate(`/code/${id}`)}
+                        style={{ fontSize: 11, padding: '1px 6px', borderRadius: 3, background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--accent)', fontFamily: 'monospace', cursor: 'pointer' }}>
+                        {id}
+                      </button>
+                    ))}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )
+    );
+
+    return (
+      <div>
+        {!hasAny ? (
+          <Panel>
+            <SectionHeading>Case Linkage View</SectionHeading>
+            <div style={{ fontSize: 12.5, color: 'var(--text-3)' }}>
+              No repeated descriptors found across cases yet. As more cases are coded, shared vehicle descriptions, locations, and behavior patterns will appear here.
+            </div>
+          </Panel>
+        ) : (
+          <>
+            <PotentialNote />
+            <Panel>
+              <SectionHeading>Repeated Vehicle Descriptors</SectionHeading>
+              <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: '0 0 12px' }}>
+                Plates or make/colour combinations appearing in 2+ cases.
+              </p>
+              <LinkageTable items={repeated_vehicles} emptyMsg="No repeated vehicle descriptors." />
+            </Panel>
+            <Panel>
+              <SectionHeading>Repeated Locations</SectionHeading>
+              <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: '0 0 12px' }}>
+                Initial contact or incident locations shared across 2+ cases.
+              </p>
+              <LinkageTable items={repeated_locations} emptyMsg="No repeated locations." />
+            </Panel>
+            <Panel>
+              <SectionHeading>Behaviour Clusters</SectionHeading>
+              <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: '0 0 12px' }}>
+                Co-occurring violence indicators seen in 2+ cases.
+              </p>
+              <LinkageTable items={behavior_clusters} emptyMsg="No shared behavior clusters." />
+            </Panel>
+          </>
+        )}
+      </div>
+    );
+  };
+
+  // ── Research Notes panel ──────────────────────────────────────────────────
+
+  const ResearchNotesPanel = () => {
+    const saveNote = async () => {
+      if (!newNoteText.trim()) return;
+      setSavingNote(true);
+      try {
+        const note = await api.createResearchNote({ note_text: newNoteText.trim() });
+        setNotes(prev => [note, ...prev]);
+        setNewNoteText('');
+      } catch { /* ignore */ }
+      setSavingNote(false);
+    };
+
+    const deleteNote = async (id: number) => {
+      await api.deleteResearchNote(id).catch(() => {});
+      setNotes(prev => prev.filter(n => n.id !== id));
+    };
+
+    const fmt = (iso: string) => {
+      try { return new Date(iso).toLocaleString(); } catch { return iso; }
+    };
+
+    return (
+      <div style={{
+        marginTop: 24, border: '1px solid var(--border)', borderRadius: 8,
+        background: 'var(--surface)',
+      }}>
+        <button
+          onClick={() => setNotesExpanded(e => !e)}
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            width: '100%', padding: '10px 16px', background: 'none', border: 'none',
+            cursor: 'pointer', borderRadius: notesExpanded ? '8px 8px 0 0' : 8,
+            borderBottom: notesExpanded ? '1px solid var(--border)' : 'none',
+          }}
+        >
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>
+            Research Notes {notes.length > 0 && <span style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 400 }}>({notes.length} saved)</span>}
+          </span>
+          {notesExpanded ? <ChevronUp size={15} color="var(--text-3)" /> : <ChevronDown size={15} color="var(--text-3)" />}
+        </button>
+
+        {notesExpanded && (
+          <div style={{ padding: '14px 16px' }}>
+            {/* New note input */}
+            <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+              <textarea
+                value={newNoteText}
+                onChange={e => setNewNoteText(e.target.value)}
+                placeholder="Write an analytic note… (e.g. pattern observations, hypotheses, follow-up questions)"
+                rows={3}
+                style={{
+                  flex: 1, fontSize: 12.5, padding: '8px 10px',
+                  border: '1px solid var(--border)', borderRadius: 5,
+                  background: 'var(--bg)', color: 'var(--text-1)',
+                  resize: 'vertical', fontFamily: 'DM Sans, sans-serif',
+                }}
+              />
+              <button
+                onClick={saveNote}
+                disabled={savingNote || !newNoteText.trim()}
+                style={{
+                  padding: '8px 14px', borderRadius: 5, alignSelf: 'flex-end',
+                  border: '1px solid var(--accent)', background: 'var(--accent-pale)',
+                  color: 'var(--accent)', fontSize: 12.5, fontWeight: 600,
+                  cursor: savingNote || !newNoteText.trim() ? 'not-allowed' : 'pointer',
+                  opacity: savingNote || !newNoteText.trim() ? 0.5 : 1,
+                }}
+              >
+                Save
+              </button>
+            </div>
+
+            {/* Saved notes */}
+            {notes.length === 0 ? (
+              <div style={{ fontSize: 12.5, color: 'var(--text-3)', fontStyle: 'italic' }}>
+                No notes yet. Write and save analytic observations above.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {notes.map(note => (
+                  <div key={note.id} style={{
+                    padding: '10px 12px', borderRadius: 6,
+                    border: '1px solid var(--border)', background: 'var(--surface-2)',
+                    position: 'relative',
+                  }}>
+                    <div style={{ fontSize: 12.5, color: 'var(--text-1)', lineHeight: 1.5, whiteSpace: 'pre-wrap', paddingRight: 28 }}>
+                      {note.note_text}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 6 }}>
+                      {fmt(note.created_at)}
+                      {note.tagged_pattern && (
+                        <span style={{ marginLeft: 8, padding: '1px 6px', borderRadius: 3, background: 'var(--surface)', border: '1px solid var(--border)', fontSize: 10.5 }}>
+                          {note.tagged_pattern}
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => deleteNote(note.id)}
+                      style={{
+                        position: 'absolute', top: 8, right: 8, background: 'none',
+                        border: 'none', cursor: 'pointer', color: 'var(--text-3)', padding: 2,
+                        borderRadius: 3, display: 'flex', alignItems: 'center',
+                      }}
+                      title="Delete note"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
@@ -865,7 +1270,7 @@ export default function ResearchOutputs() {
               Methodological analysis layer · sequence reconstruction · mobility pathways · environmental patterns
             </p>
           </div>
-          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+          <div style={{ display: 'flex', gap: 8, flexShrink: 0, flexWrap: 'wrap' }}>
             <button
               onClick={load}
               style={{
@@ -894,14 +1299,26 @@ export default function ResearchOutputs() {
               onClick={() => api.exportResearchTables()}
               style={{
                 display: 'flex', alignItems: 'center', gap: 6,
+                padding: '7px 12px', borderRadius: 6, border: '1px solid var(--border)',
+                background: 'var(--surface)', color: 'var(--text-2)',
+                fontSize: 12, cursor: 'pointer',
+              }}
+              title="Download all aggregate research tables as ZIP"
+            >
+              <Download size={13} /> Research tables ZIP
+            </button>
+            <button
+              onClick={() => navigate('/bulletin')}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
                 padding: '7px 12px', borderRadius: 6,
                 border: '1px solid var(--accent)',
                 background: 'var(--accent-pale)', color: 'var(--accent)',
                 fontSize: 12, cursor: 'pointer', fontWeight: 500,
               }}
-              title="Download all aggregate research tables as ZIP"
+              title="Generate a structured analytic bulletin"
             >
-              <Download size={13} /> Research tables ZIP
+              <FileText size={13} /> Generate Bulletin
             </button>
           </div>
         </div>
@@ -939,7 +1356,11 @@ export default function ResearchOutputs() {
         {tab === 'sequences'      && <SequencesTab />}
         {tab === 'mobility'       && <MobilityTab />}
         {tab === 'environment'    && <EnvironmentTab />}
+        {tab === 'spatial'        && <SpatialOverviewTab />}
+        {tab === 'linkage_view'   && <LinkageViewTab />}
         {tab === 'caselist'       && <CaseListTab />}
+
+        <ResearchNotesPanel />
 
       </div>
     </div>

@@ -1,136 +1,219 @@
+Add 1 
 
-1. Stage identification (RQ1)
-Your tool must force you to break each report into stages.
 
-Minimum requirement:
 
-initial contact
-negotiation
-movement
-escalation
-outcome
-What to build/check:
+Objective
 
-each report cannot be saved without assigning stages
-allow multiple stages per report
-allow sequencing (order matters)
+Redesign the “Research” tab in VIRGO to function as a central analytic workspace that aggregates and surfaces key patterns across cases in real time.
+
+This is not a static dashboard. It should actively support research analysis and pattern identification.
+
+Core Purpose
+The Research tab should allow the user to:
+
+see patterns across all coded cases
+identify recurring behavioural sequences
+examine situational conditions across stages
+observe spatial trends and movement
+quickly move between high-level patterns and individual cases
+Required Functionality
+1. Pattern Summary (Top Section)
+Display:
+
+most common behavioural stage sequences
+most frequent escalation points
+counts or simple frequencies (no complex stats needed)
+Goal: immediate visibility of how encounters are unfolding across cases
+
+2. Situational Conditions Overview
+Aggregate across all cases:
+
+visibility patterns
+guardianship presence/absence
+isolation levels
+control indicators
+Allow filtering:
+
+by stage (e.g., show conditions at escalation only)
+3. Spatial Overview
+embedded map showing:
+incident locations
+movement where available
+allow filtering by:
+stage
+condition
+time (if available)
+4. Movement / Transition Patterns
+show common transitions:
+public → vehicle
+vehicle → private location
+highlight where escalation tends to occur relative to movement
+5. Case Linkage View
+Surface possible connections across reports:
+
+repeated vehicles
+repeated locations
+repeated behavioural patterns
 Important:
-You are not just tagging. You are ordering events.
 
-2. Behavioural extraction (within stages)
-Within each stage, your tool must capture what actually happened.
+label as “potential linkage”
+do not imply confirmation
+6. Drill-Down Capability
+From any pattern or summary:
 
-Examples:
+click → view underlying cases
+maintain link back to original narrative
+7. Filters (Critical)
+Allow filtering across:
 
-client behaviour (pressure, deception, aggression)
-victim response (resistance, compliance, exit attempts)
-turning points (shift from negotiation → coercion)
-What to build/check:
+stage
+condition
+location type
+presence of movement
+time range
+The Research tab should update dynamically based on filters.
 
-structured fields or tags per stage
-ability to attach multiple behaviours to a stage
-free text linked to structured coding (do not lose narrative detail)
-3. Situational conditions (RQ2)
-Your tool must explicitly code environment at each stage.
+8. Research Notes Panel
+allow user to write and save analytic notes
+optionally tag notes to patterns or cases
+9. Export Connection
+allow selected patterns or filtered views to be pushed directly into:
+Bulletin / Report Output module
+Design Constraints
+keep layout clean and analytical
+avoid “dashboard clutter”
+prioritize readability and logic over visuals
+no unnecessary graphs or gimmicks
+Conceptual Framing (important for Claude)
+This tab should function as:
 
-Core variables (keep these tight):
+a live synthesis layer
+where structured data becomes interpretable patterns
+supporting qualitative + spatial analysis
+NOT:
 
-visibility (public → private)
-guardianship (present → absent → delayed)
-isolation level
-control (who controls space, transport, movement)
-What to build/check:
+a static report
+a generic dashboard
+a visualization tool without analytic purpose
+One-line summary for Claude
+“The Research tab should act as a central analytic workspace that aggregates coded case data into interpretable patterns across behavioural stages, situational conditions and spatial movement, while allowing drill-down into individual reports.”
 
-these must be coded per stage, not just per case
-must allow change across stages
-no skipping allowed
-This is critical. Most people get this wrong.
 
-4. Spatial component (RQ3)
-Your tool must handle location and movement, not just static points.
 
-Minimum:
+Add 2
 
-start location
-subsequent locations
-movement type (walk, vehicle, unknown)
-What to build/check:
 
-ability to log multiple locations per case
-ordered sequence of locations
-link locations to stages
-Advanced (if possible, not required):
 
-timestamps
-approximate distance or direction
-5. Cross-case comparison (this is where your contribution lives)
-Your tool must let you see patterns across reports.
 
-Not just:
 
-one case at a time
-But:
+Objective
 
-how many cases follow a similar path
-where escalation commonly occurs
-what conditions are present at escalation
-What to build/check:
+Add an applied output module to VIRGO that converts coded case data into structured analytic bulletins (PDF export), including geospatial maps, behavioural patterns and cross-case insights.
 
-filtering (e.g., show all cases with vehicle movement)
-grouping (cases with similar stage sequences)
-ability to export structured data
-6. Consistency and rigour (this is what supervisors care about)
-You need to make sure your tool produces repeatable coding.
+This is not just reporting. It should translate structured analysis into usable outputs.
 
-So:
+Core Functionality
 
-Define your categories clearly:
+Create a “Bulletin / Report Output” module with the following capabilities:
 
-what counts as “negotiation”
-what counts as “escalation”
-what counts as “isolation”
-Build this into your tool as:
+1. Report Generation Interface
+Add a “Generate Report” or “Create Bulletin” option
+Allow user to select:
+date range
+subset of cases (all / filtered)
+location filter (optional)
+type of report (quick summary vs full bulletin)
+2. Structured Output Sections
+Each generated report should include:
 
-fixed category options (not just free typing)
-definitions accessible while coding
-7. Link everything together (this is the key difference)
-Your tool must connect:
+A. Overview Summary
 
-stage → behaviour → conditions → location
+number of reports included
+time range
+basic distribution (by location type, if available)
+B. Geospatial Output
 
-If these are separate, your method collapses.
+map of incident locations
+if possible: distinguish:
+initial contact locations
+destination locations
+if movement exists:
+simple path or connection (optional, do not over-engineer)
+C. Behavioural Patterns
 
-Each stage should carry:
+most common stage sequences (e.g., contact → negotiation → movement → escalation)
+frequency of escalation points
+notable behavioural indicators (e.g., deception, pressure, sudden escalation)
+D. Situational Conditions
 
-behaviours
-situational conditions
+summary of:
+visibility levels
+guardianship presence/absence
+isolation patterns
+highlight common patterns linked to escalation
+E. Movement / Spatial Dynamics
+
+% of cases involving movement
+common transitions (e.g., public → vehicle → private)
+note any consistent patterns
+F. Case Linkage Indicators
+
+repeated descriptors across cases:
+vehicle
 location
-That’s your analytic unit.
+behaviour pattern
+flag possible links (no automated certainty claims)
+G. Analyst Notes Section
 
-What you do NOT need
-You do not need:
+optional free-text field
+user can add interpretation before export
+3. Output Format
+Export as clean, structured PDF
+Keep design simple:
+headings
+bullet summaries
+embedded map image
+Avoid over-designed visuals
+4. Data Handling Requirements
+Pull only from already coded data
+Do not attempt to “interpret” beyond structured inputs
+If data is missing:
+omit or mark as “not available”
+5. System Integration
+The module must:
 
-machine learning
-predictive modelling
-complex GIS software inside the tool
-a polished interface
-This is about structured analysis, not tech sophistication.
+use existing coded fields (stages, conditions, locations)
+not require re-entry of data
+maintain linkage:
+stage → condition → location
+6. Future-Proofing (important)
+Design so that:
 
-Quick self-check
-If I asked you:
+additional variables can be added later
+report sections can expand without breaking structure
+7. Constraints
+Do NOT:
 
-“Show me 5 cases where escalation occurred after movement into a private location with low guardianship”
+call it “CompStat” in the system
+over-automate interpretation
+introduce predictive or scoring features
+require perfect data completeness
+8. Naming
+Use neutral naming:
 
-Your tool should let you answer that quickly.
+“Generate Bulletin”
+“Analytic Summary Report”
+“Case Pattern Report”
+Avoid:
 
-If it can’t, it’s not ready.
+“Intelligence tool”
+“CompStat”
+“AI analysis”
+9. Goal
+The output should allow a user to quickly answer:
 
-Bottom line
-To make your tool work for your study, it must:
-
-force staged sequencing
-capture behaviour within stages
-code situational conditions per stage
-track movement across locations
-allow cross-case comparison
-That’s it.
+What patterns are emerging?
+Where are incidents occurring?
+How are encounters unfolding?
+Are there repeat behaviours or possible linkages?
+This should feel like a structured analyst briefing, not a dashboard dump.

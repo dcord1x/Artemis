@@ -208,6 +208,16 @@ class CaseLinkage(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class ResearchNote(Base):
+    __tablename__ = "research_notes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    note_text = Column(Text, default="")
+    tagged_report_ids = Column(JSON, default=list)   # list of report_id strings
+    tagged_pattern = Column(String, default="")       # e.g. "stage:escalation visibility:private"
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 def init_db():
     Base.metadata.create_all(bind=engine)
     # Safe migrations: add new columns if they don't exist yet
