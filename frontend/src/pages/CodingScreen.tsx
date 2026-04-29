@@ -888,6 +888,8 @@ export default function CodingScreen() {
   const [savedAgoText, setSavedAgoText] = useState('');
   const [caseList, setCaseList] = useState<string[]>([]);
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Always-current ref so the autosave timer never calls a stale closure
+  const handleSaveRef = useRef<(silent?: boolean) => Promise<void>>(async () => {});
   const toast = useToast();
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
@@ -1005,6 +1007,11 @@ export default function CodingScreen() {
 
   const handleSave = useCallback(async (silent = false) => {
     if (!narrative.trim()) return;
+    // Cancel any pending autosave — prevents stale timer from overwriting this save
+    if (autosaveTimerRef.current) {
+      clearTimeout(autosaveTimerRef.current);
+      autosaveTimerRef.current = null;
+    }
     setSaving(true);
     try {
       localStorage.setItem('analyst_name', analystName);
@@ -1022,14 +1029,19 @@ export default function CodingScreen() {
     } finally { setSaving(false); }
   }, [narrative, isNew, analystName, sourceOrg, dateReceived, fields, cleanedNarrative, analystSummary, provenance, tags, suggestions, flags, nlp, weather, report, navigate, toast]);
 
+  // Keep the ref pointing at the latest handleSave after every render
+  useEffect(() => { handleSaveRef.current = handleSave; });
+
   // ── Autosave: debounce 2s after last field change (existing reports only) ───
+  // Uses handleSaveRef so the timer always calls the freshest save function,
+  // never a stale closure that captured outdated field values.
   const scheduleAutosave = useCallback(() => {
     if (isNew || !report) return;
     if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
     autosaveTimerRef.current = setTimeout(() => {
-      handleSave(true);
+      handleSaveRef.current(true);
     }, 2000);
-  }, [isNew, report, handleSave]);
+  }, [isNew, report]); // handleSave intentionally omitted — ref is always current
 
   const set = useCallback((key: keyof Report, val: string | number | null) => {
     setFields((f) => ({ ...f, [key]: val }));
