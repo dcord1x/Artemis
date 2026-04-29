@@ -36,6 +36,14 @@ export interface Report {
   sexual_assault: string;
   robbery_theft: string;
   stealthing: string;
+  loss_of_consciousness: string;
+  non_consensual_substance: string;
+  substance_administration_notes: string;
+  forced_movement_dragging: string;
+  restraint_confinement: string;
+  weapon_present_used: string;
+  choking_strangulation: string;
+  prevented_exit: string;
   exit_type: string;
 
   movement_present: string;
@@ -103,6 +111,7 @@ export interface Report {
   // Mobility expanded
   movement_completed: string;
   who_controlled_movement: string;
+  unexplained_relocation: string;
   movement_confidence: string;
   movement_notes: string;
 
@@ -446,6 +455,13 @@ export interface BulletinConditions {
   public_private: Record<string, number>;
   deserted: Record<string, number>;
   location_types: { type: string; count: number }[];
+  // Stage-level situational conditions
+  total_stages_coded: number;
+  visibility: Record<string, number>;
+  guardianship: Record<string, number>;
+  isolation_level: Record<string, number>;
+  control_type: Record<string, number>;
+  situational_by_stage: Record<string, any>;
 }
 
 export interface BulletinMovement {
