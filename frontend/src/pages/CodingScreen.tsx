@@ -2070,7 +2070,11 @@ export default function CodingScreen() {
       )}
 
       {showGisMap && (
-        <GisMapModal fields={fields} onClose={() => setShowGisMap(false)} />
+        <GisMapModal
+            fields={fields}
+            onClose={() => setShowGisMap(false)}
+            onGeocode={(updates) => setFields((f) => ({ ...f, ...updates }))}
+          />
       )}
     </div>
   );
