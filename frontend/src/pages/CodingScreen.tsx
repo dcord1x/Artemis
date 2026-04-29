@@ -834,6 +834,8 @@ function SummaryTab({ fields, analystName, analystSummary, tags, reportId }: {
   if (trigger) harmItems.push({ text: `Escalation trigger: ${trigger.slice(0, 100)}`, prov: 'coded' });
   const escPt   = (fields.escalation_point || '').trim();
   if (escPt)   harmItems.push({ text: `Escalation point: ${escPt}`, prov: 'coded' });
+  const tPoint  = (fields.turning_point || '').trim();
+  if (tPoint)  harmItems.push({ text: `Turning point: ${tPoint}`, prov: _prov(fp, 'turning_point') });
   // New harm fields
   const newHarmFields: [string, string][] = [
     ['loss_of_consciousness',    'Loss of consciousness'],
@@ -861,6 +863,8 @@ function SummaryTab({ fields, analystName, analystSummary, tags, reportId }: {
     };
     exitItems.push({ text: exitLabels[exitType] ?? `Exit: ${exitType}`, prov: _prov(fp, 'exit_type') });
   }
+  const resEndpoint = (fields.resolution_endpoint || '').trim();
+  if (resEndpoint) exitItems.push({ text: `Resolution: ${resEndpoint}`, prov: _prov(fp, 'resolution_endpoint') });
 
   const bulletList = (items: SItem[]) => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -926,8 +930,21 @@ function SummaryTab({ fields, analystName, analystSummary, tags, reportId }: {
 
       {/* Encounter sequence */}
       <div style={{ marginBottom: 24 }}>
-        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', letterSpacing: '0.05em',
-          textTransform: 'uppercase', marginBottom: 10 }}>Encounter progression</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 10, flexWrap: 'wrap' }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>Encounter progression</div>
+          {(fields.highest_stage_reached) && (
+            <span style={{ fontSize: 11.5, fontWeight: 700, padding: '3px 10px', borderRadius: 5,
+              background: 'var(--accent-pale)', color: 'var(--accent)', border: '1px solid var(--accent-border)' }}>
+              Highest stage: {fields.highest_stage_reached as string}
+            </span>
+          )}
+          {(fields.turning_point) && (
+            <span style={{ fontSize: 11.5, fontWeight: 600, padding: '3px 10px', borderRadius: 5,
+              background: 'var(--amber-pale)', color: 'var(--amber)', border: '1px solid var(--amber-border)' }}>
+              Turning point: {fields.turning_point as string}
+            </span>
+          )}
+        </div>
         {seqStages.length <= 1 ? (
           <div style={{ fontSize: 12.5, color: 'var(--text-3)', fontStyle: 'italic' }}>
             — code encounter fields to generate sequence
@@ -1009,22 +1026,6 @@ function SummaryTab({ fields, analystName, analystSummary, tags, reportId }: {
 
       {/* Analyst Notes — full width */}
       <SummarySectionBox title="Analyst Notes" accent>
-        {(fields.early_escalation_score || fields.mobility_richness_score) && (
-          <div style={{ display: 'flex', gap: 24, marginBottom: 12, flexWrap: 'wrap' }}>
-            {fields.early_escalation_score && (
-              <div>
-                <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-3)', fontWeight: 600, marginBottom: 2 }}>Early escalation score</div>
-                <span style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-1)', lineHeight: 1 }}>{fields.early_escalation_score}</span>
-              </div>
-            )}
-            {fields.mobility_richness_score && (
-              <div>
-                <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-3)', fontWeight: 600, marginBottom: 2 }}>Mobility richness score</div>
-                <span style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-1)', lineHeight: 1 }}>{fields.mobility_richness_score}</span>
-              </div>
-            )}
-          </div>
-        )}
         {analystSummary && (
           <div style={{ marginBottom: 10 }}>
             <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-3)', marginBottom: 4 }}>Analyst summary</div>
@@ -1060,8 +1061,7 @@ function SummaryTab({ fields, analystName, analystSummary, tags, reportId }: {
           </div>
         )}
         {!analystSummary && !fields.summary_analytic && !fields.key_quotes &&
-          !fields.coder_notes && !fields.uncertainty_notes &&
-          !fields.early_escalation_score && !fields.mobility_richness_score && (
+          !fields.coder_notes && !fields.uncertainty_notes && (
           <div style={{ fontSize: 12, color: 'var(--text-3)', fontStyle: 'italic' }}>— no analyst notes coded</div>
         )}
       </SummarySectionBox>
@@ -1208,7 +1208,7 @@ export default function CodingScreen() {
           'suspect_count','suspect_gender','suspect_description_text','suspect_race_ethnicity',
           'suspect_age_estimate','vehicle_present','vehicle_make','vehicle_model','vehicle_colour',
           'plate_partial','repeat_suspect_flag','repeat_vehicle_flag','early_escalation_score',
-          'mobility_richness_score','escalation_point','summary_analytic','key_quotes','coder_notes','uncertainty_notes',
+          'mobility_richness_score','escalation_point','resolution_endpoint','highest_stage_reached','turning_point','summary_analytic','key_quotes','coder_notes','uncertainty_notes',
           'cleaned_narrative',
           'initial_contact_address_raw','incident_address_raw','destination_address_raw',
           'lat_initial','lon_initial','lat_incident','lon_incident','lat_destination','lon_destination',
@@ -1938,7 +1938,7 @@ export default function CodingScreen() {
               ['encounter', 'Encounter', ['initial_approach_type','negotiation_present','refusal_present','pressure_after_refusal','coercion_present','threats_present','verbal_abuse','physical_force','sexual_assault','robbery_theft','stealthing','exit_type','repeated_pressure','intimidation_present','abrupt_tone_change','verbal_abuse_before_violence']],
               ['mobility', 'Mobility', ['movement_present','movement_attempted','mode_of_movement','entered_vehicle','public_to_private_shift','public_to_secluded_shift','cross_neighbourhood','cross_municipality','cross_city_movement','offender_control_over_movement','movement_completed','who_controlled_movement','movement_confidence']],
               ['suspect', 'Suspect', ['suspect_gender','suspect_age_estimate','vehicle_present','vehicle_make','vehicle_model','vehicle_colour','plate_partial']],
-              ['narrative', 'Narrative', ['early_escalation_score','escalation_point','summary_analytic','key_quotes','coder_notes']],
+              ['narrative', 'Narrative', ['highest_stage_reached','turning_point','escalation_point','resolution_endpoint','summary_analytic','key_quotes','coder_notes']],
               ['gis', 'GIS', ['initial_contact_address_raw','incident_address_raw','initial_contact_confidence','incident_confidence','destination_confidence']],
               ['scoring', 'Scoring', ['physical_force','coercion_present','threats_present','pressure_after_refusal','offender_control_over_movement','sexual_assault','stealthing','refusal_present','robbery_theft','verbal_abuse','negotiation_present','service_discussed','payment_discussed','movement_present','entered_vehicle','public_to_private_shift','public_to_secluded_shift','cross_municipality','cross_neighbourhood','deserted','repeat_suspect_flag','repeat_vehicle_flag']],
               ['summary', 'Summary', ['initial_approach_type','negotiation_present','refusal_present','pressure_after_refusal','coercion_present','threats_present','physical_force','sexual_assault','robbery_theft','exit_type','movement_present','entered_vehicle','public_to_private_shift','public_to_secluded_shift','indoor_outdoor','public_private']],
@@ -2116,6 +2116,7 @@ export default function CodingScreen() {
                   <FieldRow label="Choking / strangulation" value={f('choking_strangulation')} onChange={(v) => set('choking_strangulation', v)} type="yesno-extended" provenance={prov('choking_strangulation')} onMarkReviewed={() => markReviewed('choking_strangulation')} />
                   <FieldRow label="Prevented exit / blocked escape" value={f('prevented_exit')} onChange={(v) => set('prevented_exit', v)} type="yesno-extended" provenance={prov('prevented_exit')} onMarkReviewed={() => markReviewed('prevented_exit')} />
                   <FieldRow label="Exit type" value={f('exit_type')} onChange={(v) => set('exit_type', v)} type="select" options={['completed','escaped','abandoned','interrupted','unknown']} suggested={s('exit_type')} onAcceptSuggestion={() => acceptSuggestion('exit_type')} provenance={prov('exit_type')} onMarkReviewed={() => markReviewed('exit_type')} />
+                  <FieldRow label="Highest stage reached" value={f('highest_stage_reached')} onChange={(v) => set('highest_stage_reached', v)} type="select" options={['no clear escalation','negotiation conflict','coercion / control','physical violence','sexual violence','robbery / theft','mixed severe harm','unknown']} provenance={prov('highest_stage_reached')} onMarkReviewed={() => markReviewed('highest_stage_reached')} />
                 </SectionPanel>
 
                 <SectionPanel title="Early Escalation Detail" fieldKeys={['repeated_pressure','intimidation_present','abrupt_tone_change','verbal_abuse_before_violence','escalation_trigger']} fields={fields} defaultCollapsed>
@@ -2196,14 +2197,9 @@ export default function CodingScreen() {
                 {!isNew && (
                   <ParseViewer narrative={narrative} reportId={report?.report_id} />
                 )}
+                <FieldRow label="Turning point / key shift" value={f('turning_point')} onChange={(v) => set('turning_point', v)} type="select" options={['boundary tested','refusal ignored','pressure increased','deception / agreement shift','movement imposed','isolation increased','threat introduced','exit blocked / control asserted','physical force applied','sexual violence initiated','robbery initiated','other']} provenance={prov('turning_point')} onMarkReviewed={() => markReviewed('turning_point')} />
                 <FieldRow label="Escalation point" value={f('escalation_point')} onChange={(v) => set('escalation_point', v)} type="select" options={['no clear escalation','boundary tested','refusal ignored','pressure increased','verbal aggression escalated','deception or agreement shift','location shift imposed','isolation increased','exit blocked or movement controlled','physical force applied','weapon implied or produced','sexual assault initiated','robbery initiated','other']} suggested={s('escalation_point')} onAcceptSuggestion={() => acceptSuggestion('escalation_point')} provenance={prov('escalation_point')} onMarkReviewed={() => markReviewed('escalation_point')} />
                 <FieldRow label="Resolution / endpoint" value={f('resolution_endpoint')} onChange={(v) => set('resolution_endpoint', v)} type="select" options={['victim escaped','offender left','assault completed','robbery completed','third-party interruption','unknown','other']} provenance={prov('resolution_endpoint')} onMarkReviewed={() => markReviewed('resolution_endpoint')} />
-                <FieldRow label="Early escalation score (1–5)" value={f('early_escalation_score')} onChange={(v) => set('early_escalation_score', v)} type="select" options={['1','2','3','4','5']} suggested={s('early_escalation_score')} onAcceptSuggestion={() => acceptSuggestion('early_escalation_score')} provenance={prov('early_escalation_score')} onMarkReviewed={() => markReviewed('early_escalation_score')}
-                  badge={nlp.escalation?.score && nlp.escalation.score >= 3 ? (
-                    <NlpBadge rank={nlp.escalation.score >= 4 ? 1 : 2} evidence={[`NLP suggests score ${nlp.escalation.score}: ${nlp.escalation.arc}`]} fieldValue={f('early_escalation_score')} />
-                  ) : undefined}
-                />
-                <FieldRow label="Mobility richness score (1–5)" value={f('mobility_richness_score')} onChange={(v) => set('mobility_richness_score', v)} type="select" options={['1','2','3','4','5']} suggested={s('mobility_richness_score')} onAcceptSuggestion={() => acceptSuggestion('mobility_richness_score')} provenance={prov('mobility_richness_score')} onMarkReviewed={() => markReviewed('mobility_richness_score')} />
                 <FieldRow label="Analytic summary (coded)" value={f('summary_analytic')} onChange={(v) => set('summary_analytic', v)} type="textarea" suggested={s('summary_analytic')} onAcceptSuggestion={() => acceptSuggestion('summary_analytic')} placeholder="1–2 sentence analytic summary (coded field — see left panel for interpretive summary)" provenance={prov('summary_analytic')} onMarkReviewed={() => markReviewed('summary_analytic')} />
                 <FieldRow label="Key quotes" value={f('key_quotes')} onChange={(v) => set('key_quotes', v)} type="textarea" suggested={s('key_quotes')} onAcceptSuggestion={() => acceptSuggestion('key_quotes')} provenance={prov('key_quotes')} onMarkReviewed={() => markReviewed('key_quotes')} />
                 <FieldRow label="Coder notes" value={f('coder_notes')} onChange={(v) => set('coder_notes', v)} type="textarea" provenance={prov('coder_notes')} onMarkReviewed={() => markReviewed('coder_notes')} />

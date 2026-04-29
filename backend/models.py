@@ -105,6 +105,9 @@ class Report(Base):
     early_escalation_score = Column(String, default="")
     mobility_richness_score = Column(String, default="")
     escalation_point = Column(String, default="")
+    resolution_endpoint = Column(String, default="")     # victim escaped | offender left | assault completed | robbery completed | third-party interruption | unknown | other
+    highest_stage_reached = Column(String, default="")   # no clear escalation | negotiation conflict | coercion/control | physical violence | sexual violence | robbery/theft | mixed severe harm | unknown
+    turning_point = Column(String, default="")           # boundary tested | refusal ignored | pressure increased | deception/agreement shift | movement imposed | isolation increased | threat introduced | exit blocked/control asserted | physical force applied | sexual violence initiated | robbery initiated | other
     summary_analytic = Column(Text, default="")
     key_quotes = Column(Text, default="")
     coder_notes = Column(Text, default="")
@@ -296,6 +299,9 @@ def init_db():
         ("prevented_exit", "VARCHAR DEFAULT ''"),
         # Mobility expanded
         ("unexplained_relocation", "VARCHAR DEFAULT ''"),
+        ("resolution_endpoint", "VARCHAR DEFAULT ''"),
+        ("highest_stage_reached", "VARCHAR DEFAULT ''"),
+        ("turning_point", "VARCHAR DEFAULT ''"),
     ]
     with engine.connect() as conn:
         for col_name, col_def in _new_columns:

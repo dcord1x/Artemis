@@ -1080,9 +1080,28 @@ def get_stats(db: Session = Depends(get_db)):
                 "lon_incident": r.lon_incident,
                 "lat_destination": r.lat_destination,
                 "lon_destination": r.lon_destination,
+                # harm flags
                 "coercion": r.coercion_present,
+                "physical_force": r.physical_force,
+                "sexual_assault": r.sexual_assault,
+                "robbery_theft": r.robbery_theft,
+                # movement
                 "movement": r.movement_present,
+                "movement_completed": r.movement_completed,
+                "entered_vehicle": r.entered_vehicle,
+                "public_to_private_shift": r.public_to_private_shift,
+                "cross_municipality": r.cross_municipality,
+                # sequence
+                "highest_stage_reached": r.highest_stage_reached,
+                # meta
                 "city": r.city,
+                "incident_date": r.incident_date,
+                "coding_status": r.coding_status,
+                # location confidence
+                "location_certainty": r.location_certainty,
+                "initial_contact_city_confidence": r.initial_contact_city_confidence,
+                "incident_city_confidence": r.incident_city_confidence,
+                "destination_city_confidence": r.destination_city_confidence,
             }
             for r in reports
             if r.lat_initial or r.lat_incident

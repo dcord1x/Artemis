@@ -77,6 +77,8 @@ export interface Report {
   mobility_richness_score: string;
   escalation_point: string;
   resolution_endpoint: string;
+  highest_stage_reached: string;
+  turning_point: string;
   summary_analytic: string;
   key_quotes: string;
   coder_notes: string;
@@ -403,9 +405,28 @@ export interface MapPoint {
   lon_incident: number | null;
   lat_destination: number | null;
   lon_destination: number | null;
+  // harm flags
   coercion: string;
+  physical_force: string;
+  sexual_assault: string;
+  robbery_theft: string;
+  // movement
   movement: string;
+  movement_completed: string;
+  entered_vehicle: string;
+  public_to_private_shift: string;
+  cross_municipality: string;
+  // sequence
+  highest_stage_reached: string;
+  // meta
   city: string;
+  incident_date: string;
+  coding_status: string;
+  // location confidence
+  location_certainty: string;
+  initial_contact_city_confidence: string;
+  incident_city_confidence: string;
+  destination_city_confidence: string;
 }
 
 // ── Research Notes ────────────────────────────────────────────────────────────

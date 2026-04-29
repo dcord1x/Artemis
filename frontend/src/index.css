@@ -188,3 +188,128 @@
 .badge-stone  { background: var(--surface-2); color: var(--text-2); border-color: var(--border); }
 
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Input / Select / Textarea ──────────────────────────────────────────── */
+input[type="text"],
+input[type="number"],
+input[type="date"],
+input[type="email"],
+select,
+textarea {
+  font-family: 'DM Sans', system-ui, sans-serif;
+  font-size: 13px;
+  color: var(--text-1);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 10px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+}
+input[type="text"]:focus,
+input[type="number"]:focus,
+input[type="date"]:focus,
+input[type="email"]:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 3px rgba(11,31,51,0.07);
+}
+select {
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237A8694' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 28px;
+}
+textarea {
+  resize: vertical;
+  min-height: 72px;
+  line-height: 1.55;
+}
+
+/* ── Card refinements ────────────────────────────────────────────────────── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 1px 3px rgba(11,31,51,0.06), 0 1px 2px rgba(11,31,51,0.04);
+  transition: box-shadow 0.2s;
+}
+.card:hover {
+  box-shadow: 0 3px 10px rgba(11,31,51,0.09), 0 1px 3px rgba(11,31,51,0.05);
+}
+
+/* ── Surface depth classes ───────────────────────────────────────────────── */
+.surface-raised {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+.surface-inset {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+/* ── Button refinements ──────────────────────────────────────────────────── */
+.btn-primary {
+  transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
+  box-shadow: 0 1px 3px rgba(11,31,51,0.18);
+}
+.btn-primary:hover {
+  background: var(--navy-2);
+  box-shadow: 0 2px 6px rgba(11,31,51,0.22);
+}
+.btn-ghost {
+  transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
+}
+.btn-ghost:hover {
+  box-shadow: 0 1px 3px rgba(11,31,51,0.08);
+}
+
+/* ── Section label refinement ────────────────────────────────────────────── */
+.section-label {
+  user-select: none;
+}
+
+/* ── Badge refinements ───────────────────────────────────────────────────── */
+.badge {
+  transition: opacity 0.15s;
+  white-space: nowrap;
+}
+
+/* ── Focus ring ──────────────────────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--accent-border);
+  outline-offset: 2px;
+}
+
+/* ── Table ───────────────────────────────────────────────────────────────── */
+table { border-collapse: collapse; width: 100%; }
+th {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  text-align: left;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+td {
+  padding: 7px 12px;
+  font-size: 13px;
+  color: var(--text-1);
+  border-bottom: 1px solid var(--surface-3);
+  vertical-align: top;
+}
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: var(--surface-2); }

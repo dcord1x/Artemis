@@ -89,6 +89,9 @@ class ReportUpdate(BaseModel):
     early_escalation_score: Optional[str] = None
     mobility_richness_score: Optional[str] = None
     escalation_point: Optional[str] = None
+    resolution_endpoint: Optional[str] = None
+    highest_stage_reached: Optional[str] = None
+    turning_point: Optional[str] = None
     summary_analytic: Optional[str] = None
     key_quotes: Optional[str] = None
     coder_notes: Optional[str] = None
@@ -241,6 +244,9 @@ class ReportOut(BaseModel):
     early_escalation_score: str
     mobility_richness_score: str
     escalation_point: str
+    resolution_endpoint: str
+    highest_stage_reached: str
+    turning_point: str
     summary_analytic: str
     key_quotes: str
     coder_notes: str
