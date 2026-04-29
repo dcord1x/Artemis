@@ -446,12 +446,25 @@ async def parse_excel_endpoint(file: UploadFile = File(...)):
     finally:
         os.unlink(tmp_path)
 
+    header_row = rows[0] if rows else ()
     data_rows = rows[1:]  # skip header row
     incidents = []
 
     for row in data_rows:
         def _cell(idx):
             return row[idx] if len(row) > idx else None
+
+        # Build full-row source text for the Source Immutable panel
+        row_source_parts = []
+        for col_idx, cell_val in enumerate(row):
+            header = (
+                str(header_row[col_idx]).strip()
+                if header_row and col_idx < len(header_row) and header_row[col_idx] is not None
+                else f"Column {col_idx + 1}"
+            )
+            val_str = str(cell_val).strip() if cell_val is not None else ""
+            row_source_parts.append(f"{header}: {val_str}")
+        row_source_text = "\n".join(row_source_parts)
 
         synopsis_raw      = _cell(9)
         synopsis = str(synopsis_raw).strip() if synopsis_raw else ""
@@ -513,6 +526,7 @@ async def parse_excel_endpoint(file: UploadFile = File(...)):
             "lat_initial":  lat_initial,
             "lon_initial":  lon_initial,
             "flags": [],
+            "_bulletin_text": row_source_text,
         })
 
     return {"incidents": incidents, "total": len(incidents), "method": "excel"}
