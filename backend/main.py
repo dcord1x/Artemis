@@ -1768,5 +1768,9 @@ if os.path.isdir(_DIST):
 
     @app.get("/{full_path:path}", include_in_schema=False)
     def spa_fallback(full_path: str):
+        # Serve real files that exist in the dist root (logo.png, favicon, etc.)
+        candidate = os.path.join(_DIST, full_path)
+        if os.path.isfile(candidate):
+            return FileResponse(candidate)
         index = os.path.join(_DIST, "index.html")
         return FileResponse(index, headers={"Cache-Control": "no-store"})

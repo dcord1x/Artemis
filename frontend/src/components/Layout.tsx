@@ -23,7 +23,7 @@ export default function Layout({ children }: Props) {
         <div style={{ display: 'flex', alignItems: 'center', marginRight: 32 }}>
           <img
             src="/logo.png"
-            alt="VIRGO logo"
+            alt=""
             style={{ height: 38, objectFit: 'contain' }}
           />
         </div>
