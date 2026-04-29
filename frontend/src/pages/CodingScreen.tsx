@@ -647,34 +647,76 @@ function SequenceChip({ label, prov }: { label: string; prov: 'coded' | 'provisi
   );
 }
 
-function SummarySection({ title, items }: {
-  title: string;
-  items: { text: string; prov: 'coded' | 'provisional' | 'unset' }[];
+
+function SummarySectionBox({ title, children, accent }: {
+  title: string; children: React.ReactNode; accent?: boolean;
 }) {
-  if (items.length === 0) return (
-    <div style={{ marginBottom: 18 }}>
-      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', letterSpacing: '0.05em',
-        textTransform: 'uppercase', marginBottom: 6 }}>{title}</div>
-      <div style={{ fontSize: 12, color: 'var(--text-3)', fontStyle: 'italic' }}>— not coded</div>
-    </div>
-  );
   return (
-    <div style={{ marginBottom: 18 }}>
-      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', letterSpacing: '0.05em',
-        textTransform: 'uppercase', marginBottom: 8 }}>{title}</div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        {items.map((item, i) => (
-          <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 0, fontSize: 12.5, color: 'var(--text-2)', lineHeight: 1.4 }}>
-            <span style={{ marginRight: 6, color: 'var(--text-3)', flexShrink: 0 }}>·</span>
-            <span>{item.text}<ProvenancePill p={item.prov} /></span>
-          </div>
-        ))}
-      </div>
+    <div style={{ borderRadius: 7, border: `1px solid ${accent ? 'var(--accent-border, #bfdbfe)' : 'var(--border)'}`,
+      background: 'var(--surface)', overflow: 'hidden', marginBottom: 16 }}>
+      <div style={{ padding: '5px 12px', fontSize: 10, fontWeight: 700, letterSpacing: '0.07em',
+        textTransform: 'uppercase', color: 'var(--text-3)', background: 'var(--surface-2)',
+        borderBottom: '1px solid var(--border)' }}>{title}</div>
+      <div style={{ padding: '10px 12px' }}>{children}</div>
     </div>
   );
 }
 
-function SummaryTab({ fields }: { fields: Partial<Report> }) {
+function SummaryKVRow({ label, value, prov }: {
+  label: string; value: string; prov: 'coded' | 'provisional' | 'unset';
+}) {
+  if (!value) return null;
+  return (
+    <div style={{ display: 'flex', gap: 8, fontSize: 12.5, lineHeight: 1.4, marginBottom: 4 }}>
+      <span style={{ color: 'var(--text-3)', flexShrink: 0, minWidth: 130 }}>{label}</span>
+      <span style={{ color: 'var(--text-1)', fontWeight: 500 }}>
+        {value}<ProvenancePill p={prov} />
+      </span>
+    </div>
+  );
+}
+
+function GisAddressBlock({ heading, raw, normalized, precision, source, confidence, lat, lon }: {
+  heading: string; raw: string; normalized: string; precision: string;
+  source: string; confidence: string; lat?: number | null; lon?: number | null;
+}) {
+  const hasAnything = raw || normalized || lat != null;
+  if (!hasAnything) return (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase',
+        letterSpacing: '0.05em', marginBottom: 3 }}>{heading}</div>
+      <span style={{ fontSize: 12, color: 'var(--text-3)', fontStyle: 'italic' }}>— not geocoded</span>
+    </div>
+  );
+  const confColor = confidence === 'high' ? 'var(--green)' : confidence === 'medium' ? 'var(--amber)' : confidence === 'low' ? '#c0392b' : 'var(--text-3)';
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase',
+          letterSpacing: '0.05em' }}>{heading}</span>
+        {confidence && <span style={{ fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 3,
+          color: confColor, border: `1px solid ${confColor}`, background: 'var(--surface-2)' }}>{confidence} confidence</span>}
+        {precision && <span style={{ fontSize: 10, color: 'var(--text-3)', fontStyle: 'italic' }}>{precision} precision</span>}
+      </div>
+      {raw && <div style={{ fontSize: 12.5, color: 'var(--text-2)' }}>{raw}</div>}
+      {normalized && normalized !== raw && <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 2 }}>→ {normalized}</div>}
+      {lat != null && lon != null && (
+        <div style={{ fontSize: 11, color: 'var(--text-3)', fontFamily: 'monospace', marginTop: 2 }}>
+          {lat.toFixed(5)}, {lon.toFixed(5)}
+          {source && <span style={{ marginLeft: 6, fontStyle: 'italic', fontFamily: 'inherit' }}>({source})</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SummaryTab({ fields, analystName, analystSummary, tags, reportId }: {
+  fields: Partial<Report>;
+  analystName?: string;
+  analystSummary?: string;
+  tags?: string[];
+  reportId?: string;
+}) {
   const fp = (fields.field_provenance as Record<string, string>) ?? {};
 
   // ── Encounter sequence ───────────────────────────────────────────────────
@@ -754,6 +796,11 @@ function SummaryTab({ fields }: { fields: Partial<Report> }) {
   if (startLoc && destLoc) mobItems.push({ text: `Route: ${startLoc} → ${destLoc}`, prov: 'coded' });
   else if (startLoc)       mobItems.push({ text: `Start: ${startLoc}`, prov: 'coded' });
   else if (destLoc)        mobItems.push({ text: `Destination: ${destLoc}`, prov: 'coded' });
+  const movConf = (fields.movement_confidence || '').trim();
+  if (movConf) addMob(`Movement confidence: ${movConf}`, 'movement_confidence');
+  const movNotes = (fields.movement_notes || '').trim();
+  if (movNotes) addMob(`Notes: ${movNotes.slice(0, 120)}`, 'movement_notes');
+  if (fields.unexplained_relocation === 'yes') addMob('Unexplained relocation', 'unexplained_relocation');
 
   // ── Environment items ─────────────────────────────────────────────────────
   const envItems: SItem[] = [];
@@ -787,6 +834,22 @@ function SummaryTab({ fields }: { fields: Partial<Report> }) {
   if (trigger) harmItems.push({ text: `Escalation trigger: ${trigger.slice(0, 100)}`, prov: 'coded' });
   const escPt   = (fields.escalation_point || '').trim();
   if (escPt)   harmItems.push({ text: `Escalation point: ${escPt}`, prov: 'coded' });
+  // New harm fields
+  const newHarmFields: [string, string][] = [
+    ['loss_of_consciousness',    'Loss of consciousness'],
+    ['non_consensual_substance', 'Non-consensual substance'],
+    ['forced_movement_dragging', 'Forced movement / dragging'],
+    ['restraint_confinement',    'Restraint / confinement'],
+    ['weapon_present_used',      'Weapon present or used'],
+    ['choking_strangulation',    'Choking / strangulation'],
+    ['prevented_exit',           'Exit prevented'],
+  ];
+  for (const [field, label] of newHarmFields) {
+    if (fields[field as keyof Report] === 'yes')
+      harmItems.push({ text: label, prov: _prov(fp, field) });
+  }
+  const subNotes = (fields.substance_administration_notes || '').trim();
+  if (subNotes) harmItems.push({ text: `Substance notes: ${subNotes.slice(0, 120)}`, prov: _prov(fp, 'substance_administration_notes') });
 
   // ── Exit items ────────────────────────────────────────────────────────────
   const exitItems: SItem[] = [];
@@ -798,11 +861,20 @@ function SummaryTab({ fields }: { fields: Partial<Report> }) {
     };
     exitItems.push({ text: exitLabels[exitType] ?? `Exit: ${exitType}`, prov: _prov(fp, 'exit_type') });
   }
-  if (fields.repeat_suspect_flag === 'yes') exitItems.push({ text: 'Repeat suspect flagged', prov: 'coded' });
-  if (fields.repeat_vehicle_flag === 'yes') exitItems.push({ text: 'Repeat vehicle flagged', prov: 'coded' });
+
+  const bulletList = (items: SItem[]) => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      {items.map((item, i) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'flex-start', fontSize: 12.5, color: 'var(--text-2)', lineHeight: 1.4 }}>
+          <span style={{ marginRight: 6, color: 'var(--text-3)', flexShrink: 0 }}>·</span>
+          <span>{item.text}<ProvenancePill p={item.prov} /></span>
+        </div>
+      ))}
+    </div>
+  );
 
   return (
-    <div style={{ padding: '20px 24px', maxWidth: 860 }}>
+    <div style={{ padding: '20px 24px', maxWidth: 920 }}>
 
       {/* Provenance note */}
       {hasProvisional && (
@@ -820,6 +892,37 @@ function SummaryTab({ fields }: { fields: Partial<Report> }) {
           </span>
         </div>
       )}
+
+      {/* Case header */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10,
+        marginBottom: 20, padding: '10px 14px', borderRadius: 7,
+        background: 'var(--surface)', border: '1px solid var(--border)' }}>
+        {reportId && <span style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: 'var(--text-1)' }}>{reportId}</span>}
+        {(() => {
+          const status = (fields.coding_status || 'uncoded') as string;
+          const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.uncoded;
+          return <span style={{ padding: '2px 10px', borderRadius: 20, fontSize: 11, fontWeight: 600,
+            color: cfg.color, background: cfg.bg, border: `1px solid ${cfg.border}` }}>{cfg.label}</span>;
+        })()}
+        {fields.confidence_level && (
+          <span style={{ fontSize: 11.5, color: 'var(--text-2)' }}>Confidence: <strong style={{ color: 'var(--text-1)' }}>{fields.confidence_level}</strong></span>
+        )}
+        {analystName && (
+          <span style={{ fontSize: 11.5, color: 'var(--text-2)' }}>Analyst: <strong style={{ color: 'var(--text-1)' }}>{analystName}</strong></span>
+        )}
+        <span style={{ borderLeft: '1px solid var(--border)', alignSelf: 'stretch', margin: '0 2px' }} />
+        {fields.incident_date && (
+          <span style={{ fontSize: 11.5, color: 'var(--text-2)' }}>
+            {fields.incident_date}
+            {fields.day_of_week && <span style={{ color: 'var(--text-3)', marginLeft: 4 }}>({fields.day_of_week})</span>}
+          </span>
+        )}
+        {fields.city && (
+          <span style={{ fontSize: 11.5, color: 'var(--text-2)' }}>
+            {fields.city}{fields.neighbourhood ? `, ${fields.neighbourhood}` : ''}
+          </span>
+        )}
+      </div>
 
       {/* Encounter sequence */}
       <div style={{ marginBottom: 24 }}>
@@ -843,12 +946,163 @@ function SummaryTab({ fields }: { fields: Partial<Report> }) {
         )}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 32px' }}>
-        <SummarySection title="Harm indicators" items={harmItems} />
-        <SummarySection title="Exit / outcome" items={exitItems} />
-        <SummarySection title="Mobility pathway" items={mobItems} />
-        <SummarySection title="Environment context" items={envItems} />
+      {/* Row A: Harm | Suspect + Vehicle */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
+        <SummarySectionBox title="Harm Indicators">
+          {harmItems.length > 0
+            ? bulletList(harmItems)
+            : <div style={{ fontSize: 12, color: 'var(--text-3)', fontStyle: 'italic' }}>— no harm indicators coded</div>}
+        </SummarySectionBox>
+        <div>
+          <SummarySectionBox title="Suspect">
+            {(['suspect_count','suspect_gender','suspect_age_estimate','suspect_race_ethnicity','suspect_description_text'] as (keyof Report)[]).map((field) => {
+              const labels: Record<string, string> = {
+                suspect_count: 'Count', suspect_gender: 'Gender', suspect_age_estimate: 'Age estimate',
+                suspect_race_ethnicity: 'Race / ethnicity', suspect_description_text: 'Description',
+              };
+              const raw = String(fields[field] || '');
+              const val = field === 'suspect_description_text' && raw.length > 200 ? raw.slice(0, 200) + '…' : raw;
+              return <SummaryKVRow key={field} label={labels[field]} value={val} prov={_prov(fp, field)} />;
+            })}
+          </SummarySectionBox>
+          <SummarySectionBox title="Vehicle">
+            {(['vehicle_present','vehicle_make','vehicle_model','vehicle_colour','plate_partial','vehicle_driver_role'] as (keyof Report)[]).map((field) => {
+              const labels: Record<string, string> = {
+                vehicle_present: 'Present', vehicle_make: 'Make', vehicle_model: 'Model',
+                vehicle_colour: 'Colour', plate_partial: 'Plate (partial)', vehicle_driver_role: 'Driver role',
+              };
+              return <SummaryKVRow key={field} label={labels[field]} value={String(fields[field] || '')} prov={_prov(fp, field)} />;
+            })}
+            {fields.repeat_suspect_flag === 'yes' && (
+              <div style={{ marginTop: 6, fontSize: 12, color: 'var(--amber)', fontWeight: 600 }}>⚑ Repeat suspect flagged</div>
+            )}
+            {fields.repeat_vehicle_flag === 'yes' && (
+              <div style={{ marginTop: 4, fontSize: 12, color: 'var(--amber)', fontWeight: 600 }}>⚑ Repeat vehicle flagged</div>
+            )}
+          </SummarySectionBox>
+        </div>
       </div>
+
+      {/* Row B: Exit/Outcome | Mobility */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
+        <SummarySectionBox title="Exit / Outcome">
+          {exitItems.length > 0
+            ? bulletList(exitItems)
+            : <div style={{ fontSize: 12, color: 'var(--text-3)', fontStyle: 'italic' }}>— not coded</div>}
+        </SummarySectionBox>
+        <SummarySectionBox title="Mobility Pathway">
+          {mobItems.length > 0
+            ? bulletList(mobItems)
+            : <div style={{ fontSize: 12, color: 'var(--text-3)', fontStyle: 'italic' }}>— not coded</div>}
+        </SummarySectionBox>
+      </div>
+
+      {/* Row C: Environment */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
+        <SummarySectionBox title="Environment Context">
+          {envItems.length > 0
+            ? bulletList(envItems)
+            : <div style={{ fontSize: 12, color: 'var(--text-3)', fontStyle: 'italic' }}>— not coded</div>}
+        </SummarySectionBox>
+        <div />
+      </div>
+
+      {/* Analyst Notes — full width */}
+      <SummarySectionBox title="Analyst Notes" accent>
+        {(fields.early_escalation_score || fields.mobility_richness_score) && (
+          <div style={{ display: 'flex', gap: 24, marginBottom: 12, flexWrap: 'wrap' }}>
+            {fields.early_escalation_score && (
+              <div>
+                <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-3)', fontWeight: 600, marginBottom: 2 }}>Early escalation score</div>
+                <span style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-1)', lineHeight: 1 }}>{fields.early_escalation_score}</span>
+              </div>
+            )}
+            {fields.mobility_richness_score && (
+              <div>
+                <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-3)', fontWeight: 600, marginBottom: 2 }}>Mobility richness score</div>
+                <span style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-1)', lineHeight: 1 }}>{fields.mobility_richness_score}</span>
+              </div>
+            )}
+          </div>
+        )}
+        {analystSummary && (
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-3)', marginBottom: 4 }}>Analyst summary</div>
+            <div style={{ fontSize: 13, color: 'var(--text-1)', lineHeight: 1.55, whiteSpace: 'pre-wrap', borderLeft: '2px solid var(--accent)', paddingLeft: 10 }}>{analystSummary}</div>
+          </div>
+        )}
+        {fields.summary_analytic && (
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-3)', marginBottom: 4 }}>Summary analytic</div>
+            <div style={{ fontSize: 12.5, color: 'var(--text-2)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{fields.summary_analytic}</div>
+          </div>
+        )}
+        {fields.key_quotes && (
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-3)', marginBottom: 4 }}>Key quotes</div>
+            <div style={{ fontSize: 12.5, color: 'var(--text-2)', lineHeight: 1.5, fontStyle: 'italic', whiteSpace: 'pre-wrap', borderLeft: '2px solid var(--border)', paddingLeft: 10 }}>{fields.key_quotes}</div>
+          </div>
+        )}
+        {(fields.coder_notes || fields.uncertainty_notes) && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
+            {fields.coder_notes && (
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-3)', marginBottom: 4 }}>Coder notes</div>
+                <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.45, whiteSpace: 'pre-wrap' }}>{fields.coder_notes}</div>
+              </div>
+            )}
+            {fields.uncertainty_notes && (
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-3)', marginBottom: 4 }}>Uncertainty notes</div>
+                <div style={{ fontSize: 12, color: 'var(--amber)', lineHeight: 1.45, whiteSpace: 'pre-wrap' }}>{fields.uncertainty_notes}</div>
+              </div>
+            )}
+          </div>
+        )}
+        {!analystSummary && !fields.summary_analytic && !fields.key_quotes &&
+          !fields.coder_notes && !fields.uncertainty_notes &&
+          !fields.early_escalation_score && !fields.mobility_richness_score && (
+          <div style={{ fontSize: 12, color: 'var(--text-3)', fontStyle: 'italic' }}>— no analyst notes coded</div>
+        )}
+      </SummarySectionBox>
+
+      {/* GIS Summary — full width */}
+      <SummarySectionBox title="GIS — Address Summary">
+        {fields.geocode_status && (
+          <div style={{ marginBottom: 10, fontSize: 11.5 }}>
+            <span style={{ color: 'var(--text-3)', marginRight: 6 }}>Geocode status:</span>
+            <span style={{ fontWeight: 600, color: fields.geocode_status === 'complete' ? 'var(--green)' : fields.geocode_status === 'partial' ? 'var(--amber)' : 'var(--text-2)' }}>{fields.geocode_status}</span>
+          </div>
+        )}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '0 16px' }}>
+          <GisAddressBlock heading="Initial Contact"
+            raw={fields.initial_contact_address_raw || ''} normalized={fields.initial_contact_address_normalized || ''}
+            precision={fields.initial_contact_precision || ''} source={fields.initial_contact_source || ''}
+            confidence={fields.initial_contact_confidence || ''} lat={fields.lat_initial} lon={fields.lon_initial} />
+          <GisAddressBlock heading="Incident"
+            raw={fields.incident_address_raw || ''} normalized={fields.incident_address_normalized || ''}
+            precision={fields.incident_precision || ''} source={fields.incident_source || ''}
+            confidence={fields.incident_confidence || ''} lat={fields.lat_incident} lon={fields.lon_incident} />
+          <GisAddressBlock heading="Destination"
+            raw={fields.destination_address_raw || ''} normalized={fields.destination_address_normalized || ''}
+            precision={fields.destination_precision || ''} source={fields.destination_source || ''}
+            confidence={fields.destination_confidence || ''} lat={fields.lat_destination} lon={fields.lon_destination} />
+        </div>
+      </SummarySectionBox>
+
+      {/* Tags */}
+      {tags && tags.length > 0 && (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center',
+          paddingTop: 14, marginTop: 6, borderTop: '1px solid var(--border)' }}>
+          <span style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase',
+            letterSpacing: '0.05em', color: 'var(--text-3)', marginRight: 4 }}>Tags</span>
+          {tags.map((t) => (
+            <span key={t} style={{ padding: '2px 9px', borderRadius: 20,
+              border: '1px solid var(--border)', background: 'var(--surface-2)',
+              color: 'var(--text-2)', fontSize: 11.5 }}>{t}</span>
+          ))}
+        </div>
+      )}
 
     </div>
   );
@@ -971,6 +1225,10 @@ export default function CodingScreen() {
           'incident_city','incident_city_confidence',
           'destination_city','destination_city_confidence',
           'cross_city_movement',
+          // New harm fields
+          'loss_of_consciousness','non_consensual_substance','substance_administration_notes',
+          'forced_movement_dragging','restraint_confinement','weapon_present_used',
+          'choking_strangulation','prevented_exit','unexplained_relocation','geocode_status',
         ];
         const f: Partial<Report> = {};
         for (const k of fieldKeys) f[k] = r[k] as any;
@@ -2054,7 +2312,15 @@ export default function CodingScreen() {
             )}
 
             {activeTab === 'scoring' && <ScoringTab />}
-            {activeTab === 'summary' && <SummaryTab fields={fields} />}
+            {activeTab === 'summary' && (
+              <SummaryTab
+                fields={fields}
+                analystName={analystName}
+                analystSummary={analystSummary}
+                tags={tags}
+                reportId={report?.report_id}
+              />
+            )}
           </div>
         </div>
       </div>
