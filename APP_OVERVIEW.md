@@ -20,6 +20,8 @@
 12. [Data Flow — End to End](#12-data-flow--end-to-end)
 13. [File Structure](#13-file-structure)
 
+> **Last updated: 2026-04-28** — Extended harm fields, GIS modal geocoding, MapView GIS overhaul (heatmap/clustering/draw-filter), Bulletin page, Research Notes, linkage patterns, `logo.png`.
+
 ---
 
 ## 1. What the App Does
@@ -89,7 +91,7 @@ The frontend is a **pre-built static bundle** served directly by the FastAPI bac
 | Routing | React Router v7 |
 | Styling | Tailwind CSS 4 |
 | Icons | Lucide React |
-| Mapping | Google Maps JavaScript API (`@react-google-maps/api`) |
+| Mapping | Google Maps JavaScript API (`@react-google-maps/api`, `@googlemaps/markerclusterer`) |
 | Backend framework | FastAPI (Python) |
 | ORM | SQLAlchemy 2 |
 | Database | SQLite (`redlight.db`) |
@@ -129,11 +131,11 @@ cd frontend && npm run dev    # runs on :5173, proxies /api → :8000
 
 ## 5. Data Model
 
-All data lives in a single SQLite file: `redlight.db`. Three tables.
+All data lives in a single SQLite file: `redlight.db`. Four tables.
 
 ### `reports` table
 
-Each row is one coded incident report. ~150 fields organized by purpose:
+Each row is one coded incident report. ~160+ fields organized by purpose:
 
 | Group | Sample Fields | Purpose |
 |-------|--------------|---------|
@@ -142,8 +144,9 @@ Each row is one coded incident report. ~150 fields organized by purpose:
 | **Location stages** | `initial_contact_location/city`, `incident_location_primary/city`, `destination_city` | Three-point location model |
 | **Environment** | `indoor_outdoor`, `public_private`, `deserted` | Physical context |
 | **Encounter sequence** | `negotiation_present`, `refusal_present`, `coercion_present`, `physical_force`, `sexual_assault`, `exit_type` | Step-by-step events |
+| **Extended harm** | `loss_of_consciousness`, `non_consensual_substance`, `substance_administration_notes`, `forced_movement_dragging`, `restraint_confinement`, `weapon_present_used`, `choking_strangulation`, `prevented_exit` | Detailed harm indicators (new) |
 | **Early escalation** | `repeated_pressure`, `intimidation_present`, `abrupt_tone_change`, `escalation_trigger` | How situation escalated |
-| **Mobility** | `movement_present`, `mode_of_movement`, `entered_vehicle`, `public_to_private_shift`, `offender_control_over_movement` | Movement and control |
+| **Mobility** | `movement_present`, `mode_of_movement`, `entered_vehicle`, `public_to_private_shift`, `offender_control_over_movement`, `unexplained_relocation` | Movement and control |
 | **Suspect/vehicle** | `suspect_count`, `suspect_gender`, `vehicle_make/model/colour`, `plate_partial` | Offender description |
 | **Narrative coding** | `early_escalation_score`, `escalation_point`, `resolution_endpoint`, `summary_analytic`, `key_quotes`, `coder_notes` | Analyst interpretation |
 | **GIS** | `*_address_raw/normalized`, `lat_*/lon_*`, `*_precision/source/confidence` | Three geocoded points with metadata |
@@ -183,6 +186,12 @@ Analyst verdicts on case pairs:
 - `analyst_status`: `possible_link` | `unlikely_link` | `needs_review`
 - `analyst_notes` (free text)
 
+### `research_notes` table
+
+Analyst-written analytic notes saved from the Research tab:
+- `id`, `analyst_name`, `note_text`, `created_at`
+- Managed via `GET/POST/DELETE /research/notes`
+
 ---
 
 ## 6. Backend — API & Logic
@@ -215,8 +224,13 @@ Analyst verdicts on case pairs:
 |--------|----------|-------------|
 | `GET` | `/research/aggregate` | Cross-case sequences, mobility, environment aggregates |
 | `GET` | `/research/stage-patterns` | Stage-level cross-case analysis with filter params (`stage_type`, `visibility`, `guardianship`) |
+| `GET` | `/research/linkage-patterns` | Repeated vehicles, locations, behaviours across cases |
+| `GET/POST/DELETE` | `/research/notes` | Analyst research notes (create, list, delete) |
+| `GET` | `/export/bulletin-data` | Structured data bundle for the Bulletin page |
 
 **Other key endpoints:** `/suggest`, `/reports/:id/analyze`, `/stats`, `/parse-bulletin`, `/parse-excel`, `/check-duplicates`, `/bulk-save`, `/reports/:id/similar`, `/linkage`, `/export/csv`, `/export/geojson`
+
+**Excel import (`/parse-excel`)** — now builds a `_bulletin_text` field per row: every column is serialized as `Header: Value` newline-delimited text, providing a human-readable source for the Source Immutable panel.
 
 ### `models.py` — Database
 
@@ -250,15 +264,21 @@ Split layout: narrative on the left (dark panel, immutable), coding fields on th
 
 ### ResearchOutputs.tsx
 
-Research-oriented aggregate analysis. Five tabs:
+Research-oriented aggregate analysis. Seven tabs + Research Notes panel:
 
 | Tab | Contents |
 |-----|---------|
-| **Stage Patterns** *(new, default)* | Stage type frequency, stage sequence patterns, behaviour/response frequencies, conditions-by-stage cross-tab, filter panel for targeted queries |
+| **Stage Patterns** *(default)* | Stage type frequency, stage sequence patterns, behaviour/response frequencies, conditions-by-stage cross-tab, isolation + date range filter panel |
 | **Encounter Sequences** | NLP-derived encounter sequence frequencies (bigrams, escalation pathways) |
 | **Mobility Pathways** | Movement and route pattern aggregates |
 | **Environmental Patterns** | Indoor/outdoor, public/private, deserted distributions with violence cross-tabs |
+| **Spatial Overview** | Embedded Google Maps overview of all geocoded points |
+| **Case Linkage View** | Repeated vehicles, locations, and behaviours across cases |
 | **Case Sequence Table** | Per-case encounter sequence with provenance flags |
+
+Includes a **Research Notes** side panel — save, view, and delete analyst notes with `POST/GET/DELETE /research/notes`.
+
+Also includes a **"Generate Bulletin"** button linking to `/bulletin`.
 
 ### Other pages
 
@@ -266,21 +286,23 @@ Research-oriented aggregate analysis. Five tabs:
 |------|---------|
 | `CaseList.tsx` | Filterable case browser with status, violence flags, date range, NLP signal filters |
 | `Analysis.tsx` | KPI dashboard — stat cards, NLP bars, year/city/vehicle breakdowns |
-| `MapView.tsx` | Google Maps with movement polylines, Street View, coercion filter |
+| `MapView.tsx` | Full GIS workstation (see Section 11) |
 | `ImportBulletin.tsx` | PDF/Excel upload, duplicate detection, bulk save |
 | `SimilarCasesPage.tsx` | Similarity engine ranked results |
 | `LinkageScreen.tsx` | Side-by-side case comparison with analyst verdict |
+| `BulletinOutput.tsx` | Analytic Summary Report — structured brief sections A–G, filters, embedded map, browser print-to-PDF |
 
 ### Components
 
 | Component | Purpose |
 |-----------|---------|
-| `StageSequencer.tsx` *(new)* | Full stage coding UI — add/reorder/delete stages; per-stage behaviours, conditions, location; definition tooltips; sequence summary strip |
+| `StageSequencer.tsx` | Full stage coding UI — add/reorder/delete stages; per-stage behaviours, conditions, location; definition tooltips; sequence summary strip |
+| `Layout.tsx` | App shell with nav bar; uses `/logo.png` image (38px) instead of inline SVG |
 | `FieldRow.tsx` | Single field with label, input, provenance border, AI chip, NLP badge |
 | `SectionPanel.tsx` | Collapsible group with progress bar |
 | `TimelineStrip.tsx` | Visual field-state overview strip |
 | `Toast.tsx` | Auto-dismissing notification system |
-| `GisMapModal.tsx` | Inline map for reviewing geocoded points |
+| `GisMapModal.tsx` | Geocoded points map modal with click-to-place, geocode-from-address, Places Autocomplete (see Section 11) |
 | `DupReviewModal.tsx` | Pre-save duplicate review with Skip / Import controls |
 
 ---
@@ -400,13 +422,42 @@ Each report has **three geocoded points**: initial contact, primary incident, de
 
 Each point has full metadata: `address_raw`, `address_normalized`, `lat/lon`, `precision` (exact/approximate/unknown), `source` (stated/inferred/unclear), `confidence` (high/medium/low/none), `analyst_notes`.
 
-**MapView** renders:
-- Color-coded circle markers (red / orange / indigo)
+### MapView (`/map`) — full GIS workstation
+
+Loaded libraries: `places`, `visualization`, `drawing`, `geometry`.
+
+**Layer toggles:**
+- Color-coded circle markers (red / orange / indigo) with show/hide per point type
 - Dashed polylines showing victim movement trajectories
+- **Heatmap layer** (`HeatmapLayer`) — density visualization of all incident points
+- **Marker clustering** (`MarkerClusterer` from `@googlemaps/markerclusterer`) — groups nearby markers at low zoom
+- **Map type switcher** — roadmap / satellite / terrain
+
+**Draw-to-filter:**
+- `DrawingManager` lets analyst draw a polygon or circle on the map
+- `filteredPoints` memo uses `google.maps.geometry.poly.containsLocation` (polygon) or `spherical.computeDistanceBetween` (circle) to spatially filter all displayed points and stats to the drawn shape
+
+**Boundary layer:**
+- Upload a GeoJSON file to overlay named boundaries (neighbourhoods, policing areas, etc.)
+
+**Other:**
 - Click popups with case summary + "Open report" and "Street View"
 - Google Places Autocomplete address search
+- Bounds fit fires only once on initial load (`hasFitRef`)
 
-**GeoJSON export** (`/export/geojson`) produces a standard FeatureCollection importable into QGIS.
+### GisMapModal — coding-screen map modal
+
+Opened from the GIS tab in CodingScreen. Now supports interactive coordinate editing:
+
+- **`onGeocode` prop** — callback that writes updated lat/lon (and optionally normalized address) back to the report fields
+- **Click-to-place** — analyst selects a point type (initial / incident / destination), clicks the map; coordinates are reverse-geocoded and returned via `onGeocode`
+- **Geocode-from-address** — button next to each point resolves the existing normalized address string to lat/lon via Google Geocoder
+- **Places Autocomplete** — search bar pans the map to a searched address without affecting coded fields
+- **Escape key** — dismisses place-selection mode first, then closes modal
+
+### GeoJSON export
+
+`GET /export/geojson` produces a standard FeatureCollection importable into QGIS.
 
 ---
 
@@ -441,8 +492,14 @@ Each point has full metadata: `address_raw`, `address_normalized`, `lat/lon`, `p
    GET /stats → Analysis dashboard (case-level)
    GET /research/stage-patterns → Stage Patterns tab (stage-level cross-case)
    GET /research/aggregate → Encounter sequences, mobility, environment tabs
+   GET /research/linkage-patterns → Case Linkage View tab
+   GET/POST/DELETE /research/notes → Research Notes panel
 
-7. EXPORT
+7. BULLETIN
+   GET /export/bulletin-data → structured data bundle
+   /bulletin → BulletinOutput page (sections A–G, filters, map, print-to-PDF)
+
+8. EXPORT
    GET /export/csv → full dataset
    GET /export/geojson → geocoded points for QGIS
    GET /export/research-tables → ZIP of all research CSVs
@@ -494,11 +551,12 @@ Red Light Alert/
             ├── CodingScreen.tsx      ← Main coding workspace (8 tabs)
             ├── CaseList.tsx          ← Case browser + filtering
             ├── Analysis.tsx          ← KPI statistics dashboard
-            ├── MapView.tsx           ← GIS / Google Maps view
+            ├── MapView.tsx           ← Full GIS workstation (heatmap, cluster, draw-filter)
             ├── ImportBulletin.tsx    ← PDF/Excel import
             ├── SimilarCasesPage.tsx  ← Similarity search results
             ├── LinkageScreen.tsx     ← Side-by-side case comparison
-            └── ResearchOutputs.tsx   ← Stage patterns + research aggregates
+            ├── ResearchOutputs.tsx   ← Stage patterns + research aggregates (7 tabs + notes)
+            └── BulletinOutput.tsx    ← Analytic Summary Report (sections A–G, PDF export)
 
 ---
 
