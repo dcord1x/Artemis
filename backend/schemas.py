@@ -47,6 +47,14 @@ class ReportUpdate(BaseModel):
     sexual_assault: Optional[str] = None
     robbery_theft: Optional[str] = None
     stealthing: Optional[str] = None
+    loss_of_consciousness: Optional[str] = None
+    non_consensual_substance: Optional[str] = None
+    substance_administration_notes: Optional[str] = None
+    forced_movement_dragging: Optional[str] = None
+    restraint_confinement: Optional[str] = None
+    weapon_present_used: Optional[str] = None
+    choking_strangulation: Optional[str] = None
+    prevented_exit: Optional[str] = None
     exit_type: Optional[str] = None
 
     # Mobility
@@ -114,6 +122,7 @@ class ReportUpdate(BaseModel):
     # Mobility expanded
     movement_completed: Optional[str] = None
     who_controlled_movement: Optional[str] = None
+    unexplained_relocation: Optional[str] = None
     movement_confidence: Optional[str] = None
     movement_notes: Optional[str] = None
 
@@ -193,6 +202,14 @@ class ReportOut(BaseModel):
     sexual_assault: str
     robbery_theft: str
     stealthing: str
+    loss_of_consciousness: str
+    non_consensual_substance: str
+    substance_administration_notes: str
+    forced_movement_dragging: str
+    restraint_confinement: str
+    weapon_present_used: str
+    choking_strangulation: str
+    prevented_exit: str
     exit_type: str
 
     movement_present: str
@@ -258,6 +275,7 @@ class ReportOut(BaseModel):
     # Mobility expanded
     movement_completed: str
     who_controlled_movement: str
+    unexplained_relocation: str
     movement_confidence: str
     movement_notes: str
 

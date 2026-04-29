@@ -498,7 +498,7 @@ async def parse_excel_endpoint(file: UploadFile = File(...)):
             "incident_location_primary":  locs["incident"],
             # Violence fields intentionally blank — researcher codes these
             "coercion_present": "", "threats_present": "", "physical_force": "",
-            "sexual_assault":   "", "robbery_theft":   "", "stealthing":     "",
+            "sexual_assault":   "", "robbery_theft":   "", "stealthing":     "", "loss_of_consciousness": "",
             "movement_present": "", "entered_vehicle":  "",
             "suspect_count":              parse_suspect_count(description),
             "suspect_gender":             parse_gender(description),
@@ -694,6 +694,7 @@ def bulk_save(data: BulkSaveRequest, db: Session = Depends(get_db)):
             sexual_assault=inc.get("sexual_assault", ""),
             robbery_theft=inc.get("robbery_theft", ""),
             stealthing=inc.get("stealthing", ""),
+            loss_of_consciousness=inc.get("loss_of_consciousness", ""),
             exit_type=inc.get("exit_type", ""),
             movement_present=inc.get("movement_present", ""),
             movement_attempted=inc.get("movement_attempted", ""),
@@ -1492,11 +1493,44 @@ def get_bulletin_data(
     }
 
     env_data = aggregate_environment(reports)
+
+    # Stage-level situational aggregates
+    from collections import defaultdict
+    report_ids = [r.report_id for r in reports]
+    stages_q = db.query(ReportStage).filter(ReportStage.report_id.in_(report_ids)).all() if report_ids else []
+    _sit_fields = ("visibility", "guardianship", "isolation_level", "control_type")
+    sit_overall: dict = {f: Counter() for f in _sit_fields}
+    sit_by_stage: dict = {f: defaultdict(Counter) for f in _sit_fields}
+    for s in stages_q:
+        t = s.stage_type or "unknown"
+        for f in _sit_fields:
+            val = getattr(s, f, None)
+            if val:
+                sit_overall[f][val] += 1
+                sit_by_stage[f][t][val] += 1
+    # Collapse to plain dicts; by_stage → {stage_type: {field: top_value, field_count: n}}
+    sit_by_stage_summary: dict = {}
+    for stype in ["initial_contact", "negotiation", "movement", "escalation", "outcome"]:
+        row: dict = {}
+        for f in _sit_fields:
+            top = sit_by_stage[f][stype].most_common(1)
+            if top:
+                row[f] = top[0][0]
+                row[f + "_count"] = top[0][1]
+        if row:
+            sit_by_stage_summary[stype] = row
+
     conditions = {
         "indoor_outdoor": env_data["indoor_outdoor"],
         "public_private": env_data["public_private"],
         "deserted": env_data["deserted"],
         "location_types": env_data["location_types"][:8],
+        "visibility": dict(sit_overall["visibility"]),
+        "guardianship": dict(sit_overall["guardianship"]),
+        "isolation_level": dict(sit_overall["isolation_level"]),
+        "control_type": dict(sit_overall["control_type"]),
+        "situational_by_stage": sit_by_stage_summary,
+        "total_stages_coded": len(stages_q),
     }
 
     mob_data = aggregate_mobility(reports)

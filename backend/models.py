@@ -63,6 +63,14 @@ class Report(Base):
     sexual_assault = Column(String, default="")
     robbery_theft = Column(String, default="")
     stealthing = Column(String, default="")
+    loss_of_consciousness = Column(String, default="")
+    non_consensual_substance = Column(String, default="")
+    substance_administration_notes = Column(Text, default="")
+    forced_movement_dragging = Column(String, default="")
+    restraint_confinement = Column(String, default="")
+    weapon_present_used = Column(String, default="")
+    choking_strangulation = Column(String, default="")
+    prevented_exit = Column(String, default="")
     exit_type = Column(String, default="")  # completed, escaped, abandoned, interrupted, unknown
 
     # Mobility
@@ -126,6 +134,7 @@ class Report(Base):
     # Mobility — expanded
     movement_completed = Column(String, default="")       # yes/no/unclear
     who_controlled_movement = Column(String, default="")  # offender/victim/shared/unclear
+    unexplained_relocation = Column(String, default="")
     movement_confidence = Column(String, default="")      # high/medium/low/unclear
     movement_notes = Column(Text, default="")
 
@@ -276,6 +285,17 @@ def init_db():
         # PDF provenance
         ("source_bulletin_text", "TEXT DEFAULT ''"),
         ("source_bulletin_session_id", "VARCHAR DEFAULT ''"),
+        # Violence indicators
+        ("loss_of_consciousness", "VARCHAR DEFAULT ''"),
+        ("non_consensual_substance", "VARCHAR DEFAULT ''"),
+        ("substance_administration_notes", "TEXT DEFAULT ''"),
+        ("forced_movement_dragging", "VARCHAR DEFAULT ''"),
+        ("restraint_confinement", "VARCHAR DEFAULT ''"),
+        ("weapon_present_used", "VARCHAR DEFAULT ''"),
+        ("choking_strangulation", "VARCHAR DEFAULT ''"),
+        ("prevented_exit", "VARCHAR DEFAULT ''"),
+        # Mobility expanded
+        ("unexplained_relocation", "VARCHAR DEFAULT ''"),
     ]
     with engine.connect() as conn:
         for col_name, col_def in _new_columns:

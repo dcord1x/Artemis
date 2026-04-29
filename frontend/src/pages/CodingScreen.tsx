@@ -424,18 +424,24 @@ const STAGE_COLOR: Record<string, string> = {
 };
 
 /** Horizontal escalation arc strip shown in the Narrative Coding section. */
-function EscalationArc({ esc }: { esc: Record<string, any> }) {
+const ALL_PATTERNS: Record<string, string> = {
+  condom_refusal: 'Condom refusal',
+  payment_dispute: 'Payment dispute',
+  bait_and_switch: 'Bait-and-switch',
+  rapid_escalation: 'Rapid escalation',
+  weapon_present: 'Weapon present',
+  multi_suspect: 'Multiple suspects',
+  online_lure: 'Online lure',
+  drugging_intoxication: 'Drugging / intoxication',
+  confinement: 'Confinement',
+};
+
+function EscalationArc({ esc, onTogglePattern }: { esc: Record<string, any>; onTogglePattern?: (p: string) => void }) {
   if (!esc || !esc.stages || esc.stages.length === 0) return null;
   const score: number = esc.score ?? 1;
   const scoreColor = score >= 5 ? '#7F1D1D' : score >= 4 ? '#B91C1C' : score >= 3 ? '#EA580C' : '#D97706';
   const patterns: string[] = esc.patterns ?? [];
-  const PATTERN_LABELS: Record<string, string> = {
-    condom_refusal: 'Condom refusal', payment_dispute: 'Payment dispute',
-    bait_and_switch: 'Bait-and-switch', rapid_escalation: 'Rapid escalation',
-    weapon_present: 'Weapon present', multi_suspect: 'Multiple suspects',
-    online_lure: 'Online lure', drugging_intoxication: 'Drugging / intoxication',
-    confinement: 'Confinement',
-  };
+  const PATTERN_LABELS = ALL_PATTERNS;
 
   return (
     <div style={{
@@ -450,7 +456,7 @@ function EscalationArc({ esc }: { esc: Record<string, any> }) {
           color: scoreColor, minWidth: 18, textAlign: 'center',
         }}>{score}</span>
         <span style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 500, letterSpacing: '0.05em', textTransform: 'uppercase' }}>Escalation score / 5</span>
-        {patterns.length > 0 && (
+        {patterns.length > 0 && !onTogglePattern && (
           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginLeft: 4 }}>
             {patterns.map(p => (
               <span key={p} style={{
@@ -470,6 +476,38 @@ function EscalationArc({ esc }: { esc: Record<string, any> }) {
         {score === 4 && 'Threats or physical force detected in narrative.'}
         {score === 5 && 'Sexual violence or robbery detected — or multiple high-severity stages co-occur.'}
       </div>
+
+      {/* Pattern toggles (editable) */}
+      {onTogglePattern && (
+        <div style={{ marginBottom: 8 }}>
+          <div style={{ fontSize: 10, color: 'var(--text-3)', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 4 }}>
+            Patterns — click to toggle
+          </div>
+          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+            {Object.entries(ALL_PATTERNS).map(([key, label]) => {
+              const active = patterns.includes(key);
+              return (
+                <button
+                  key={key}
+                  onClick={() => onTogglePattern(key)}
+                  title={active ? 'Click to remove' : 'Click to add'}
+                  style={{
+                    fontSize: 10.5, padding: '2px 8px', borderRadius: 3,
+                    border: active ? `1px solid ${scoreColor}80` : '1px solid var(--border)',
+                    background: active ? `${scoreColor}18` : 'var(--surface-2)',
+                    color: active ? scoreColor : 'var(--text-3)',
+                    fontWeight: active ? 600 : 400,
+                    cursor: 'pointer', fontFamily: 'DM Sans, sans-serif',
+                    transition: 'all 0.1s',
+                  }}
+                >
+                  {active ? '✓ ' : '+ '}{label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Stage bubbles */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 0, flexWrap: 'wrap' }}>
@@ -1791,14 +1829,22 @@ export default function CodingScreen() {
                   <FieldRow label="Pressure after refusal" value={f('pressure_after_refusal')} onChange={(v) => set('pressure_after_refusal', v)} type="yesno" suggested={s('pressure_after_refusal')} onAcceptSuggestion={() => acceptSuggestion('pressure_after_refusal')} provenance={prov('pressure_after_refusal')} onMarkReviewed={() => markReviewed('pressure_after_refusal')} />
                 </SectionPanel>
 
-                <SectionPanel title="Violence Indicators" fieldKeys={['coercion_present','threats_present','verbal_abuse','physical_force','sexual_assault','robbery_theft','stealthing','exit_type']} fields={fields}>
+                <SectionPanel title="Violence Indicators" fieldKeys={['coercion_present','threats_present','verbal_abuse','physical_force','non_consensual_substance','substance_administration_notes','sexual_assault','robbery_theft','stealthing','loss_of_consciousness','forced_movement_dragging','restraint_confinement','weapon_present_used','choking_strangulation','prevented_exit','exit_type']} fields={fields}>
                   <FieldRow label="Coercion present" value={f('coercion_present')} onChange={(v) => set('coercion_present', v)} type="yesno-extended" suggested={s('coercion_present')} onAcceptSuggestion={() => acceptSuggestion('coercion_present')} provenance={prov('coercion_present')} onMarkReviewed={() => markReviewed('coercion_present')} badge={showNlpChips ? <NlpBadge rank={nlp.coercion_rank ?? 3} evidence={nlp.coercion_evidence ?? []} fieldValue={f('coercion_present')} /> : undefined} />
                   <FieldRow label="Threats present" value={f('threats_present')} onChange={(v) => set('threats_present', v)} type="yesno" suggested={s('threats_present')} onAcceptSuggestion={() => acceptSuggestion('threats_present')} provenance={prov('threats_present')} onMarkReviewed={() => markReviewed('threats_present')} badge={showNlpChips ? <NlpBadge rank={nlp.weapon_rank ?? 3} evidence={nlp.weapon_evidence ?? []} fieldValue={f('threats_present')} /> : undefined} />
                   <FieldRow label="Verbal abuse" value={f('verbal_abuse')} onChange={(v) => set('verbal_abuse', v)} type="yesno" suggested={s('verbal_abuse')} onAcceptSuggestion={() => acceptSuggestion('verbal_abuse')} provenance={prov('verbal_abuse')} onMarkReviewed={() => markReviewed('verbal_abuse')} />
                   <FieldRow label="Physical force" value={f('physical_force')} onChange={(v) => set('physical_force', v)} type="yesno-extended" suggested={s('physical_force')} onAcceptSuggestion={() => acceptSuggestion('physical_force')} provenance={prov('physical_force')} onMarkReviewed={() => markReviewed('physical_force')} badge={showNlpChips ? <NlpBadge rank={nlp.physical_rank ?? 3} evidence={nlp.physical_evidence ?? []} fieldValue={f('physical_force')} /> : undefined} />
+                  <FieldRow label="Non-consensual substance administration" value={f('non_consensual_substance')} onChange={(v) => set('non_consensual_substance', v)} type="yesno-extended" provenance={prov('non_consensual_substance')} onMarkReviewed={() => markReviewed('non_consensual_substance')} />
+                  <FieldRow label="Substance administration notes" value={f('substance_administration_notes')} onChange={(v) => set('substance_administration_notes', v)} type="textarea" placeholder='e.g. "drink tasted strange," "woke up later," "felt drugged," "client gave her something," "blackout," "unknown pill"' provenance={prov('substance_administration_notes')} onMarkReviewed={() => markReviewed('substance_administration_notes')} />
                   <FieldRow label="Sexual assault" value={f('sexual_assault')} onChange={(v) => set('sexual_assault', v)} type="yesno-extended" suggested={s('sexual_assault')} onAcceptSuggestion={() => acceptSuggestion('sexual_assault')} provenance={prov('sexual_assault')} onMarkReviewed={() => markReviewed('sexual_assault')} badge={showNlpChips ? <NlpBadge rank={nlp.sexual_rank ?? 3} evidence={nlp.sexual_evidence ?? []} fieldValue={f('sexual_assault')} /> : undefined} />
                   <FieldRow label="Robbery / theft" value={f('robbery_theft')} onChange={(v) => set('robbery_theft', v)} type="yesno" suggested={s('robbery_theft')} onAcceptSuggestion={() => acceptSuggestion('robbery_theft')} provenance={prov('robbery_theft')} onMarkReviewed={() => markReviewed('robbery_theft')} />
                   <FieldRow label="Stealthing / condom refusal" value={f('stealthing')} onChange={(v) => set('stealthing', v)} type="yesno" suggested={s('stealthing')} onAcceptSuggestion={() => acceptSuggestion('stealthing')} provenance={prov('stealthing')} onMarkReviewed={() => markReviewed('stealthing')} />
+                  <FieldRow label="Loss of consciousness / blackout / memory gap" value={f('loss_of_consciousness')} onChange={(v) => set('loss_of_consciousness', v)} type="yesno" provenance={prov('loss_of_consciousness')} onMarkReviewed={() => markReviewed('loss_of_consciousness')} />
+                  <FieldRow label="Forced movement / dragging" value={f('forced_movement_dragging')} onChange={(v) => set('forced_movement_dragging', v)} type="yesno-extended" provenance={prov('forced_movement_dragging')} onMarkReviewed={() => markReviewed('forced_movement_dragging')} />
+                  <FieldRow label="Restraint / confinement" value={f('restraint_confinement')} onChange={(v) => set('restraint_confinement', v)} type="yesno-extended" provenance={prov('restraint_confinement')} onMarkReviewed={() => markReviewed('restraint_confinement')} />
+                  <FieldRow label="Weapon present / used" value={f('weapon_present_used')} onChange={(v) => set('weapon_present_used', v)} type="yesno-extended" provenance={prov('weapon_present_used')} onMarkReviewed={() => markReviewed('weapon_present_used')} />
+                  <FieldRow label="Choking / strangulation" value={f('choking_strangulation')} onChange={(v) => set('choking_strangulation', v)} type="yesno-extended" provenance={prov('choking_strangulation')} onMarkReviewed={() => markReviewed('choking_strangulation')} />
+                  <FieldRow label="Prevented exit / blocked escape" value={f('prevented_exit')} onChange={(v) => set('prevented_exit', v)} type="yesno-extended" provenance={prov('prevented_exit')} onMarkReviewed={() => markReviewed('prevented_exit')} />
                   <FieldRow label="Exit type" value={f('exit_type')} onChange={(v) => set('exit_type', v)} type="select" options={['completed','escaped','abandoned','interrupted','unknown']} suggested={s('exit_type')} onAcceptSuggestion={() => acceptSuggestion('exit_type')} provenance={prov('exit_type')} onMarkReviewed={() => markReviewed('exit_type')} />
                 </SectionPanel>
 
@@ -1814,13 +1860,14 @@ export default function CodingScreen() {
 
             {activeTab === 'mobility' && (
               <div style={{ marginBottom: 12 }}>
-                <SectionPanel title="Movement" fieldKeys={['movement_present','mode_of_movement','entered_vehicle','vehicle_driver_role','who_controlled_movement']} fields={fields}>
+                <SectionPanel title="Movement" fieldKeys={['movement_present','mode_of_movement','entered_vehicle','vehicle_driver_role','who_controlled_movement','unexplained_relocation']} fields={fields}>
                   <FieldRow label="Movement present" value={f('movement_present')} onChange={(v) => set('movement_present', v)} type="yesno-extended" suggested={s('movement_present')} onAcceptSuggestion={() => acceptSuggestion('movement_present')} provenance={prov('movement_present')} onMarkReviewed={() => markReviewed('movement_present')} badge={showNlpChips ? <NlpBadge rank={nlp.movement_rank ?? 3} evidence={nlp.movement_evidence ?? []} fieldValue={f('movement_present')} /> : undefined} />
                   <FieldRow label="Movement count" value={f('movement_count')} onChange={(v) => set('movement_count', v)} type="text" placeholder="Number of distinct movements" provenance={prov('movement_count')} onMarkReviewed={() => markReviewed('movement_count')} />
                   <FieldRow label="Mode of movement" value={f('mode_of_movement')} onChange={(v) => set('mode_of_movement', v)} type="select" options={['on foot','personal vehicle','offender vehicle','rideshare / taxi','public transit','bicycle','motorcycle','boat','unknown','other']} suggested={s('mode_of_movement')} onAcceptSuggestion={() => acceptSuggestion('mode_of_movement')} provenance={prov('mode_of_movement')} onMarkReviewed={() => markReviewed('mode_of_movement')} />
                   <FieldRow label="Entered vehicle" value={f('entered_vehicle')} onChange={(v) => set('entered_vehicle', v)} type="yesno" suggested={s('entered_vehicle')} onAcceptSuggestion={() => acceptSuggestion('entered_vehicle')} provenance={prov('entered_vehicle')} onMarkReviewed={() => markReviewed('entered_vehicle')} />
                   <FieldRow label="Vehicle driver role" value={f('vehicle_driver_role')} onChange={(v) => set('vehicle_driver_role', v)} provenance={prov('vehicle_driver_role')} onMarkReviewed={() => markReviewed('vehicle_driver_role')} />
                   <FieldRow label="Who controlled movement" value={f('who_controlled_movement')} onChange={(v) => set('who_controlled_movement', v)} type="select" options={['offender','victim','shared','unclear']} provenance={prov('who_controlled_movement')} onMarkReviewed={() => markReviewed('who_controlled_movement')} />
+                  <FieldRow label="Unexplained relocation / woke in unknown location" value={f('unexplained_relocation')} onChange={(v) => set('unexplained_relocation', v)} type="yesno" provenance={prov('unexplained_relocation')} onMarkReviewed={() => markReviewed('unexplained_relocation')} />
                 </SectionPanel>
 
                 <SectionPanel title="Geography" fieldKeys={['start_location_type','destination_location_type','public_to_private_shift','public_to_secluded_shift','cross_neighbourhood','cross_municipality','cross_city_movement','offender_control_over_movement']} fields={fields}>
@@ -1866,7 +1913,15 @@ export default function CodingScreen() {
             {activeTab === 'narrative' && (
               <div style={{ marginBottom: 12 }}>
                 <NlpSignalsPanel nlp={nlp} onSetField={(field, value) => set(field as keyof Report, value)} reportId={report?.report_id} getFieldValue={(field) => f(field as keyof Report)} />
-                <EscalationArc esc={nlp.escalation ?? {}} />
+                <EscalationArc esc={nlp.escalation ?? {}} onTogglePattern={(p) => {
+                  setNlp(prev => {
+                    const esc = prev.escalation ?? {};
+                    const cur: string[] = esc.patterns ?? [];
+                    const next = cur.includes(p) ? cur.filter((x: string) => x !== p) : [...cur, p];
+                    return { ...prev, escalation: { ...esc, patterns: next } };
+                  });
+                  scheduleAutosave();
+                }} />
                 <WeatherCard w={weather} />
                 {!isNew && (
                   <ParseViewer narrative={narrative} reportId={report?.report_id} />

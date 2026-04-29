@@ -418,13 +418,61 @@ export default function BulletinOutput() {
 
               {/* D. Situational Conditions */}
               <BulletinSection letter="D" title="Situational Conditions">
-                {Object.keys(conditions.indoor_outdoor || {}).length > 0 ? (
+                {/* Legacy report-level environment fields */}
+                {Object.keys(conditions.indoor_outdoor || {}).length > 0 && (
                   <>
                     <ConditionTable label="Indoor / Outdoor" data={conditions.indoor_outdoor} total={overview.case_count} />
                     <ConditionTable label="Public / Private" data={conditions.public_private} total={overview.case_count} style={{ marginTop: 12 }} />
                     <ConditionTable label="Deserted context" data={conditions.deserted} total={overview.case_count} style={{ marginTop: 12 }} />
                   </>
-                ) : <NotAvailable />}
+                )}
+
+                {/* Stage-level situational conditions */}
+                {conditions.total_stages_coded > 0 ? (
+                  <div style={{ marginTop: Object.keys(conditions.indoor_outdoor || {}).length > 0 ? 18 : 0 }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 10 }}>
+                      Stage-Level Situational Conditions ({conditions.total_stages_coded} stages coded)
+                    </div>
+                    <ConditionTable label="Visibility" data={conditions.visibility} total={conditions.total_stages_coded} />
+                    <ConditionTable label="Guardianship" data={conditions.guardianship} total={conditions.total_stages_coded} style={{ marginTop: 10 }} />
+                    <ConditionTable label="Isolation level" data={conditions.isolation_level} total={conditions.total_stages_coded} style={{ marginTop: 10 }} />
+                    <ConditionTable label="Space / movement control" data={conditions.control_type} total={conditions.total_stages_coded} style={{ marginTop: 10 }} />
+
+                    {/* By-stage breakdown table */}
+                    {Object.keys(conditions.situational_by_stage || {}).length > 0 && (
+                      <div style={{ marginTop: 16 }}>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>
+                          Dominant conditions by stage type
+                        </div>
+                        <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: 11.5 }}>
+                          <thead>
+                            <tr style={{ borderBottom: '2px solid var(--border)' }}>
+                              {['Stage', 'Visibility', 'Guardianship', 'Isolation', 'Control'].map(h => (
+                                <th key={h} style={{ textAlign: 'left', padding: '4px 8px', color: 'var(--text-3)', fontWeight: 600, fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {Object.entries(conditions.situational_by_stage).map(([stype, row]: [string, any]) => (
+                              <tr key={stype} style={{ borderBottom: '1px solid var(--border)' }}>
+                                <td style={{ padding: '5px 8px', fontWeight: 600, color: 'var(--text-1)', fontSize: 11.5 }}>
+                                  {stype.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                                </td>
+                                {(['visibility','guardianship','isolation_level','control_type'] as const).map(f => (
+                                  <td key={f} style={{ padding: '5px 8px', color: 'var(--text-2)', fontSize: 11.5 }}>
+                                    {row[f] ? `${(row[f] as string).replace(/_/g, ' ')} (${row[f + '_count']})` : '—'}
+                                  </td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  Object.keys(conditions.indoor_outdoor || {}).length === 0 && <NotAvailable />
+                )}
               </BulletinSection>
 
               {/* E. Movement / Spatial Dynamics */}
