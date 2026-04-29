@@ -21,14 +21,11 @@ export default function Layout({ children }: Props) {
       }}>
         {/* Logo */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginRight: 32 }}>
-          <div style={{
-            width: 28, height: 28,
-            background: 'var(--accent)',
-            borderRadius: 6,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#fff' }} />
-          </div>
+          <img
+            src="/logo.png"
+            alt="VIRGO logo"
+            style={{ width: 32, height: 32, objectFit: 'contain', borderRadius: 4 }}
+          />
           <div>
             <div style={{
               fontFamily: 'Lora, Georgia, serif',
