@@ -1,17 +1,17 @@
 type ProvenanceState = 'unset' | 'ai_suggested' | 'analyst_filled' | 'reviewed';
 
+const PROVENANCE_DOT: Record<ProvenanceState, { color: string; label: string } | null> = {
+  unset:          null,
+  ai_suggested:   { color: '#D97706', label: 'AI' },
+  analyst_filled: { color: '#1E5A8F', label: 'Analyst' },
+  reviewed:       { color: '#2F8F5B', label: 'Reviewed' },
+};
+
 const PROVENANCE_BORDER: Record<ProvenanceState, string> = {
   unset:          'transparent',
   ai_suggested:   '#D97706',
-  analyst_filled: '#2563EB',
-  reviewed:       '#16A34A',
-};
-
-const PROVENANCE_LABEL: Record<ProvenanceState, { text: string; color: string; bg: string; border: string } | null> = {
-  unset:          null,
-  ai_suggested:   { text: 'AI suggest', color: '#92400E', bg: '#FEF3C7', border: '#FDE68A' },
-  analyst_filled: { text: 'Analyst',    color: '#1D4ED8', bg: '#EFF6FF', border: '#BFDBFE' },
-  reviewed:       { text: 'Reviewed',   color: '#166534', bg: '#F0FDF4', border: '#86EFAC' },
+  analyst_filled: '#1E5A8F',
+  reviewed:       '#2F8F5B',
 };
 
 interface Props {
@@ -57,43 +57,44 @@ export default function FieldRow({
   const hasSuggestion = suggested && suggested !== value && suggested !== '';
   const borderColor = provenance ? PROVENANCE_BORDER[provenance] : 'transparent';
   const showReviewBtn = provenance === 'analyst_filled' && !!onMarkReviewed;
+  const provDot = provenance ? PROVENANCE_DOT[provenance] : null;
 
   return (
     <div style={{
       display: 'grid',
-      gridTemplateColumns: span ? '1fr' : '140px 1fr',
+      gridTemplateColumns: span ? '1fr' : '150px 1fr',
       gap: span ? 4 : 8,
       alignItems: type === 'textarea' ? 'flex-start' : 'center',
-      padding: '5px 0',
+      padding: '7px 0',
       borderBottom: '1px solid var(--border)',
       borderLeft: `3px solid ${borderColor}`,
-      paddingLeft: provenance ? 6 : 0,
+      paddingLeft: provenance ? 8 : 2,
     }}>
+      {/* Label + provenance dot */}
       <div style={{
-        display: 'flex', flexDirection: 'column', gap: 2,
+        display: 'flex', alignItems: 'center', gap: 5,
         paddingTop: type === 'textarea' ? 2 : 0,
       }}>
         <label style={{
-          fontSize: 12,
-          color: 'var(--text-3)',
-          fontWeight: 400,
+          fontSize: 12.5,
+          color: 'var(--text-2)',
+          fontWeight: 500,
           lineHeight: 1.3,
+          flex: 1,
         }}>
           {label}
         </label>
-        {provenance && value && PROVENANCE_LABEL[provenance] && (() => {
-          const lbl = PROVENANCE_LABEL[provenance]!;
-          return (
-            <span style={{
-              fontSize: 9, fontWeight: 700, letterSpacing: '0.04em',
-              color: lbl.color, background: lbl.bg, border: `1px solid ${lbl.border}`,
-              padding: '0px 4px', borderRadius: 3, alignSelf: 'flex-start',
-              lineHeight: 1.5,
-            }}>
-              {lbl.text}
-            </span>
-          );
-        })()}
+        {/* Compact provenance dot — only when field has a value */}
+        {provDot && value && (
+          <span
+            title={provDot.label}
+            style={{
+              width: 6, height: 6, borderRadius: '50%',
+              background: provDot.color,
+              flexShrink: 0, display: 'inline-block',
+            }}
+          />
+        )}
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
@@ -120,12 +121,12 @@ export default function FieldRow({
             value={value}
             onChange={(e) => onChange(e.target.value)}
             style={{
-              flex: 1, minWidth: 0, padding: '3px 8px', borderRadius: 5,
+              flex: 1, minWidth: 0, padding: '4px 8px', borderRadius: 5,
               border: '1px solid var(--border)', background: 'var(--surface)',
-              color: value ? 'var(--text-1)' : 'var(--text-3)', fontSize: 12.5,
+              color: value ? 'var(--text-1)' : 'var(--text-3)', fontSize: 13,
               fontFamily: 'DM Sans, sans-serif', outline: 'none', cursor: 'pointer', appearance: 'auto',
             }}
-            onFocus={(e) => (e.target.style.borderColor = 'var(--accent)')}
+            onFocus={(e) => (e.target.style.borderColor = 'var(--accent-border)')}
             onBlur={(e) => (e.target.style.borderColor = 'var(--border)')}
           >
             <option value="">—</option>
@@ -138,11 +139,11 @@ export default function FieldRow({
             placeholder={placeholder}
             rows={2}
             style={{
-              flex: 1, padding: '5px 8px', borderRadius: 5, border: '1px solid var(--border)',
-              background: 'var(--surface)', color: 'var(--text-1)', fontSize: 12.5,
+              flex: 1, padding: '6px 8px', borderRadius: 5, border: '1px solid var(--border)',
+              background: 'var(--surface)', color: 'var(--text-1)', fontSize: 13,
               fontFamily: 'DM Sans, sans-serif', lineHeight: 1.5, resize: 'vertical', outline: 'none',
             }}
-            onFocus={(e) => (e.target.style.borderColor = 'var(--accent)')}
+            onFocus={(e) => (e.target.style.borderColor = 'var(--accent-border)')}
             onBlur={(e) => (e.target.style.borderColor = 'var(--border)')}
           />
         ) : (
@@ -152,15 +153,16 @@ export default function FieldRow({
             onChange={(e) => onChange(e.target.value)}
             placeholder={placeholder || '—'}
             style={{
-              flex: 1, minWidth: 0, padding: '3px 8px', borderRadius: 5,
+              flex: 1, minWidth: 0, padding: '4px 8px', borderRadius: 5,
               border: '1px solid var(--border)', background: 'var(--surface)',
-              color: 'var(--text-1)', fontSize: 12.5, fontFamily: 'DM Sans, sans-serif', outline: 'none',
+              color: 'var(--text-1)', fontSize: 13, fontFamily: 'DM Sans, sans-serif', outline: 'none',
             }}
-            onFocus={(e) => (e.target.style.borderColor = 'var(--accent)')}
+            onFocus={(e) => (e.target.style.borderColor = 'var(--accent-border)')}
             onBlur={(e) => (e.target.style.borderColor = 'var(--border)')}
           />
         )}
 
+        {/* AI suggestion chip */}
         {hasSuggestion && (
           <button
             onClick={onAcceptSuggestion}
@@ -177,14 +179,15 @@ export default function FieldRow({
           </button>
         )}
 
+        {/* Review button */}
         {showReviewBtn && (
           <button
             onClick={onMarkReviewed}
             title="Mark as reviewed"
             style={{
               flexShrink: 0, padding: '2px 6px', borderRadius: 4, fontSize: 11,
-              cursor: 'pointer', border: '1px solid #86EFAC',
-              background: '#F0FDF4', color: '#16A34A', transition: 'all 0.12s',
+              cursor: 'pointer', border: '1px solid var(--green-border)',
+              background: 'var(--green-pale)', color: 'var(--green)', transition: 'all 0.12s',
             }}
           >✓</button>
         )}

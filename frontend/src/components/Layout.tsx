@@ -1,6 +1,6 @@
 import { type ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
-import { FilePlus, Upload, LayoutList, BarChart2, Map, FlaskConical, FileText } from 'lucide-react';
+import { Upload, LayoutList, BarChart2, Map, FlaskConical, FileText, Code2 } from 'lucide-react';
 
 interface Props { children: ReactNode; }
 
@@ -11,36 +11,43 @@ export default function Layout({ children }: Props) {
         display: 'flex',
         alignItems: 'center',
         gap: 0,
-        padding: '0 24px',
-        height: 52,
-        background: 'var(--surface)',
-        borderBottom: '1px solid var(--border)',
-        boxShadow: 'var(--shadow-sm)',
+        padding: '0 20px',
+        height: 50,
+        background: '#0B1F33',
+        borderBottom: '1px solid #0F2742',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.20)',
         flexShrink: 0,
         zIndex: 10,
       }}>
         {/* Logo */}
-        <div style={{ display: 'flex', alignItems: 'center', marginRight: 32 }}>
+        <div style={{ display: 'flex', alignItems: 'center', marginRight: 28 }}>
           <img
             src="/logo.png"
             alt=""
-            style={{ height: 38, objectFit: 'contain' }}
+            style={{ height: 34, objectFit: 'contain', filter: 'brightness(1.05)' }}
           />
         </div>
 
         {/* Nav */}
-        <nav style={{ display: 'flex', gap: 2, flex: 1 }}>
-          <NavItem to="/" icon={<FilePlus size={14} />} label="New Report" exact />
-          <NavItem to="/import" icon={<Upload size={14} />} label="Import Bulletin" />
-          <NavItem to="/cases" icon={<LayoutList size={14} />} label="Cases" />
-          <NavItem to="/analysis" icon={<BarChart2 size={14} />} label="Analysis" />
-          <NavItem to="/map" icon={<Map size={14} />} label="Map" />
-          <NavItem to="/research" icon={<FlaskConical size={14} />} label="Research" />
-          <NavItem to="/bulletin" icon={<FileText size={14} />} label="Bulletin" />
+        <nav style={{ display: 'flex', gap: 1, flex: 1 }}>
+          <NavItem to="/import" icon={<Upload size={13} />} label="Import" />
+          <NavItem to="/cases" icon={<LayoutList size={13} />} label="Cases" />
+          <NavItem to="/" icon={<Code2 size={13} />} label="Code" exact />
+          <NavItem to="/map" icon={<Map size={13} />} label="Map" />
+          <NavItem to="/analysis" icon={<BarChart2 size={13} />} label="Analysis" />
+          <NavItem to="/research" icon={<FlaskConical size={13} />} label="Research" />
+          <NavItem to="/bulletin" icon={<FileText size={13} />} label="Bulletin" />
         </nav>
 
         {/* Right tagline */}
-        <div style={{ fontSize: 11, color: 'var(--text-3)', marginLeft: 'auto', whiteSpace: 'nowrap' }}>
+        <div style={{
+          fontSize: 10.5,
+          color: 'rgba(255,255,255,0.35)',
+          marginLeft: 'auto',
+          whiteSpace: 'nowrap',
+          letterSpacing: '0.02em',
+          fontStyle: 'italic',
+        }}>
           human-led · auditable · privacy-conscious
         </div>
       </header>
@@ -62,29 +69,31 @@ function NavItem({ to, icon, label, exact }: {
       style={({ isActive }) => ({
         display: 'flex',
         alignItems: 'center',
-        gap: 6,
-        padding: '5px 12px',
-        borderRadius: 6,
-        fontSize: 13,
-        fontWeight: isActive ? 500 : 400,
-        color: isActive ? 'var(--accent)' : 'var(--text-2)',
-        background: isActive ? 'var(--accent-pale)' : 'transparent',
+        gap: 5,
+        padding: '5px 11px',
+        borderRadius: 5,
+        fontSize: 12.5,
+        fontWeight: isActive ? 600 : 400,
+        color: isActive ? '#FFFFFF' : 'rgba(255,255,255,0.58)',
+        background: isActive ? 'rgba(179,139,89,0.22)' : 'transparent',
+        borderBottom: isActive ? '2px solid #B38B59' : '2px solid transparent',
         textDecoration: 'none',
         transition: 'all 0.15s',
         whiteSpace: 'nowrap' as const,
+        lineHeight: 1,
       })}
       onMouseEnter={(e) => {
         const el = e.currentTarget;
         if (!el.getAttribute('aria-current')) {
-          el.style.background = 'var(--surface-2)';
-          el.style.color = 'var(--text-1)';
+          el.style.background = 'rgba(255,255,255,0.08)';
+          el.style.color = 'rgba(255,255,255,0.85)';
         }
       }}
       onMouseLeave={(e) => {
         const el = e.currentTarget;
         if (!el.getAttribute('aria-current')) {
           el.style.background = 'transparent';
-          el.style.color = 'var(--text-2)';
+          el.style.color = 'rgba(255,255,255,0.58)';
         }
       }}
     >

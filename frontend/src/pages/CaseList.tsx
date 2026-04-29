@@ -554,7 +554,7 @@ export default function CaseList() {
         <button className="btn-ghost" onClick={() => api.exportCsv()} style={{ fontSize: 12.5 }}><Download size={13} /> CSV</button>
         <button className="btn-ghost" onClick={() => api.exportGeoJson()} style={{ fontSize: 12.5 }}><Download size={13} /> GeoJSON</button>
         {reports.length > 0 && (
-          <button className="btn-ghost" onClick={handleDeleteAll} style={{ fontSize: 12.5, color: 'var(--accent)' }} title="Delete all currently visible reports">
+          <button className="btn-ghost" onClick={handleDeleteAll} style={{ fontSize: 12.5, color: 'var(--critical-red, #A51F1F)', borderColor: 'var(--critical-red-border, #F5C6C6)' }} title="Delete all currently visible reports">
             <Trash2 size={13} /> Delete All
           </button>
         )}
@@ -585,7 +585,7 @@ export default function CaseList() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '7px 20px', background: 'var(--blue-pale)', borderBottom: '1px solid var(--blue-border)', flexShrink: 0 }}>
           <CheckSquare size={14} style={{ color: 'var(--blue)' }} />
           <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--blue)' }}>{selected.size} selected</span>
-          <button onClick={handleDeleteSelected} style={{ fontSize: 12.5, display: 'flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 5, border: '1px solid var(--accent)', background: 'none', color: 'var(--accent)', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>
+          <button onClick={handleDeleteSelected} style={{ fontSize: 12.5, display: 'flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 5, border: '1px solid var(--critical-red-border, #F5C6C6)', background: 'var(--critical-red-pale, #FDF2F2)', color: 'var(--critical-red, #A51F1F)', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>
             <Trash2 size={12} /> Delete Selected
           </button>
           <button onClick={() => setSelected(new Set())} style={{ fontSize: 12, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', fontFamily: 'DM Sans, sans-serif', textDecoration: 'underline' }}>

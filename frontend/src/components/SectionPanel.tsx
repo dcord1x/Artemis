@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight } from 'lucide-react';
 
 interface Props {
   title: string;
+  description?: string;
   fieldKeys: string[];
   fields: Record<string, any>;
   children: ReactNode;
@@ -13,28 +14,28 @@ function isFilled(v: any): boolean {
   return v !== null && v !== undefined && String(v).trim() !== '';
 }
 
-export default function SectionPanel({ title, fieldKeys, fields, children, defaultCollapsed = false }: Props) {
+export default function SectionPanel({ title, description, fieldKeys, fields, children, defaultCollapsed = false }: Props) {
   const filled = fieldKeys.filter(k => isFilled(fields[k])).length;
   const total = fieldKeys.length;
   const complete = filled === total && total > 0;
 
   const [open, setOpen] = useState(!defaultCollapsed && !complete);
 
-  // Auto-collapse when section becomes fully filled
   useEffect(() => {
     if (complete) setOpen(false);
   }, [complete]);
 
   const pct = total > 0 ? Math.round((filled / total) * 100) : 0;
-  const barColor = complete ? 'var(--green)' : pct > 0 ? 'var(--amber)' : 'var(--border-mid)';
+  const barColor = complete ? 'var(--green)' : pct > 0 ? 'var(--gold)' : 'var(--border-mid)';
 
   return (
     <div style={{
-      marginBottom: 10,
+      marginBottom: 12,
       border: '1px solid var(--border)',
       borderRadius: 'var(--radius-lg)',
       overflow: 'hidden',
       background: 'var(--surface)',
+      boxShadow: '0 1px 3px rgba(11,31,51,0.05)',
     }}>
       {/* Header */}
       <button
@@ -42,8 +43,8 @@ export default function SectionPanel({ title, fieldKeys, fields, children, defau
         style={{
           width: '100%', textAlign: 'left',
           display: 'flex', alignItems: 'center', gap: 10,
-          padding: '8px 14px',
-          background: complete ? 'var(--green-pale)' : 'var(--surface-2)',
+          padding: '9px 14px',
+          background: complete ? '#F0FDF4' : '#F7F4EF',
           border: 'none',
           cursor: 'pointer',
           borderBottom: open ? '1px solid var(--border)' : 'none',
@@ -55,26 +56,40 @@ export default function SectionPanel({ title, fieldKeys, fields, children, defau
           : <ChevronRight size={13} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
         }
 
-        <span style={{
-          fontFamily: 'Lora, Georgia, serif',
-          fontSize: 12.5,
-          fontWeight: 600,
-          color: complete ? 'var(--green)' : 'var(--text-2)',
-          flex: 1,
-        }}>
-          {title}
-        </span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <span style={{
+            fontSize: 13,
+            fontWeight: 600,
+            color: complete ? 'var(--green)' : 'var(--accent)',
+            display: 'block',
+            lineHeight: 1.3,
+          }}>
+            {title}
+          </span>
+          {description && !complete && (
+            <span style={{
+              fontSize: 11,
+              color: 'var(--text-3)',
+              display: 'block',
+              lineHeight: 1.3,
+              marginTop: 1,
+            }}>
+              {description}
+            </span>
+          )}
+        </div>
 
-        {/* Fields coded pill */}
+        {/* Progress pill */}
         <span style={{
           fontSize: 10.5,
           fontWeight: 600,
-          color: complete ? 'var(--green)' : pct > 0 ? 'var(--amber)' : 'var(--text-3)',
-          background: complete ? 'var(--green-pale)' : pct > 0 ? 'var(--amber-pale)' : 'var(--surface-3)',
-          border: `1px solid ${complete ? 'var(--green-border)' : pct > 0 ? 'var(--amber-border)' : 'var(--border)'}`,
+          color: complete ? 'var(--green)' : pct > 0 ? 'var(--gold)' : 'var(--text-3)',
+          background: complete ? 'var(--green-pale)' : pct > 0 ? 'var(--gold-pale)' : 'var(--surface-3)',
+          border: `1px solid ${complete ? 'var(--green-border)' : pct > 0 ? 'var(--gold-border)' : 'var(--border)'}`,
           borderRadius: 20,
           padding: '1px 8px',
           whiteSpace: 'nowrap',
+          flexShrink: 0,
         }}>
           {filled}/{total}{complete ? ' ✓' : ''}
         </span>
@@ -92,7 +107,7 @@ export default function SectionPanel({ title, fieldKeys, fields, children, defau
 
       {/* Content */}
       {open && (
-        <div style={{ padding: '8px 4px 4px' }}>
+        <div style={{ padding: '10px 6px 6px' }}>
           {children}
         </div>
       )}

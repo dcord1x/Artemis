@@ -7,10 +7,7 @@ import { MarkerClusterer } from '@googlemaps/markerclusterer';
 import { api } from '../api';
 import type { Stats, MapPoint } from '../types';
 import { useNavigate } from 'react-router-dom';
-
-const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string;
-const LIBRARIES: ['places', 'visualization', 'drawing', 'geometry'] =
-  ['places', 'visualization', 'drawing', 'geometry'];
+import { GOOGLE_MAPS_API_KEY, LIBRARIES } from '../mapsConfig';
 
 type InfoWindowKey = { reportId: string; type: 'initial' | 'incident' | 'destination' };
 type MapType = 'roadmap' | 'satellite' | 'terrain';

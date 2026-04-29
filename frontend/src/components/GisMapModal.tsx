@@ -1,10 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { GoogleMap, useJsApiLoader, Marker, InfoWindow, Autocomplete } from '@react-google-maps/api';
 import type { Report } from '../types';
-
-const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string;
-const LIBRARIES: ['places', 'visualization', 'drawing', 'geometry'] =
-  ['places', 'visualization', 'drawing', 'geometry'];
+import { GOOGLE_MAPS_API_KEY, LIBRARIES } from '../mapsConfig';
 
 type PlaceMode = 'initial' | 'incident' | 'destination' | null;
 

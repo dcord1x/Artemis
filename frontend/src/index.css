@@ -1,32 +1,49 @@
 @import "tailwindcss";
 
 :root {
-  --bg:           #FAF9F6;
+  --bg:           #F7F4EF;
   --surface:      #FFFFFF;
   --surface-2:    #F4F2EE;
   --surface-3:    #EDEBE6;
-  --border:       #E2DDD6;
-  --border-mid:   #CEC8BF;
-  --border-strong:#B5ADA1;
+  --border:       #D8D0C3;
+  --border-mid:   #C8BFB1;
+  --border-strong:#B0A898;
   --text-1:       #1A1714;
-  --text-2:       #5C574F;
-  --text-3:       #9A9188;
-  --accent:       #9B1D1D;
-  --accent-dark:  #7A1515;
-  --accent-pale:  #FDF2F2;
-  --accent-border:#F5C6C6;
+  --text-2:       #2F3A45;
+  --text-3:       #7A8694;
+  /* Navy accent — primary brand colour */
+  --accent:       #0B1F33;
+  --accent-dark:  #07182A;
+  --accent-pale:  #EAF3FA;
+  --accent-border:#7FAFD0;
+  /* Gold accent — secondary highlight */
+  --gold:         #B38B59;
+  --gold-pale:    #FAF3E8;
+  --gold-border:  #DFC898;
+  /* Critical red — danger / destructive actions ONLY */
+  --critical-red:       #A51F1F;
+  --critical-red-dark:  #7A1515;
+  --critical-red-pale:  #FDF2F2;
+  --critical-red-border:#F5C6C6;
+  /* Keep amber / green / blue */
   --amber:        #92400E;
   --amber-pale:   #FFFBEB;
   --amber-border: #FDE68A;
-  --green:        #14532D;
+  --green:        #2F8F5B;
   --green-pale:   #F0FDF4;
   --green-border: #BBF7D0;
-  --blue:         #1E3A5F;
+  --blue:         #1E5A8F;
   --blue-pale:    #EFF6FF;
   --blue-border:  #BFDBFE;
-  --shadow-sm:    0 1px 3px rgba(26,23,20,0.07), 0 1px 2px rgba(26,23,20,0.05);
-  --shadow:       0 4px 12px rgba(26,23,20,0.08), 0 2px 4px rgba(26,23,20,0.05);
-  --shadow-lg:    0 8px 24px rgba(26,23,20,0.10), 0 4px 8px rgba(26,23,20,0.06);
+  /* Navy panel colours */
+  --navy:         #0B1F33;
+  --navy-2:       #12324D;
+  --panel-navy:   #172A3A;
+  --nav-navy:     #0F2742;
+  /* Shadows */
+  --shadow-sm:    0 1px 3px rgba(11,31,51,0.08), 0 1px 2px rgba(11,31,51,0.05);
+  --shadow:       0 4px 12px rgba(11,31,51,0.10), 0 2px 4px rgba(11,31,51,0.05);
+  --shadow-lg:    0 8px 24px rgba(11,31,51,0.12), 0 4px 8px rgba(11,31,51,0.07);
   --radius:       6px;
   --radius-lg:    10px;
 }
@@ -71,7 +88,7 @@
 
 /* ── Narrative selection highlight ──────────────────── */
 .narrative-text ::selection {
-  background: rgba(155, 29, 29, 0.15);
+  background: rgba(11, 31, 51, 0.18);
 }
 
 
@@ -88,7 +105,7 @@
   align-items: center;
   gap: 6px;
   padding: 6px 14px;
-  background: var(--accent);
+  background: var(--navy);
   color: #fff;
   border: none;
   border-radius: var(--radius);
@@ -98,9 +115,28 @@
   cursor: pointer;
   transition: background 0.15s, transform 0.1s;
 }
-.btn-primary:hover { background: var(--accent-dark); }
+.btn-primary:hover { background: var(--navy-2); }
 .btn-primary:active { transform: scale(0.98); }
 .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.btn-danger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: var(--critical-red);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+.btn-danger:hover { background: var(--critical-red-dark); }
+.btn-danger:active { transform: scale(0.98); }
+.btn-danger:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .btn-ghost {
   display: inline-flex;
@@ -143,7 +179,9 @@
   font-weight: 500;
   border: 1px solid;
 }
-.badge-red    { background: var(--accent-pale); color: var(--accent); border-color: var(--accent-border); }
+.badge-red    { background: var(--critical-red-pale); color: var(--critical-red); border-color: var(--critical-red-border); }
+.badge-navy   { background: var(--accent-pale); color: var(--accent); border-color: var(--accent-border); }
+.badge-gold   { background: var(--gold-pale); color: var(--gold); border-color: var(--gold-border); }
 .badge-amber  { background: var(--amber-pale); color: var(--amber); border-color: var(--amber-border); }
 .badge-green  { background: var(--green-pale); color: var(--green); border-color: var(--green-border); }
 .badge-blue   { background: var(--blue-pale); color: var(--blue); border-color: var(--blue-border); }

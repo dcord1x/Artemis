@@ -1028,7 +1028,7 @@ function SummaryTab({ fields, analystName, analystSummary, tags, reportId }: {
         {analystSummary && (
           <div style={{ marginBottom: 10 }}>
             <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-3)', marginBottom: 4 }}>Analyst summary</div>
-            <div style={{ fontSize: 13, color: 'var(--text-1)', lineHeight: 1.55, whiteSpace: 'pre-wrap', borderLeft: '2px solid var(--accent)', paddingLeft: 10 }}>{analystSummary}</div>
+            <div style={{ fontSize: 13, color: 'var(--text-1)', lineHeight: 1.55, whiteSpace: 'pre-wrap', borderLeft: '2px solid var(--gold, #B38B59)', paddingLeft: 10 }}>{analystSummary}</div>
           </div>
         )}
         {fields.summary_analytic && (
@@ -1588,7 +1588,7 @@ export default function CodingScreen() {
           width: `${leftWidth}%`, minWidth: 240,
           display: 'flex', flexDirection: 'column',
           overflow: 'hidden',
-          background: isNew ? 'var(--surface)' : '#1A1B2E',
+          background: isNew ? 'var(--surface)' : '#172A3A',
           flexShrink: 0,
         }}>
           {/* Meta */}
@@ -1951,13 +1951,13 @@ export default function CodingScreen() {
                   style={{
                     padding: '10px 14px',
                     border: 'none',
-                    borderBottom: activeTab === sec ? '2px solid var(--accent)' : '2px solid transparent',
-                    background: 'transparent',
-                    color: activeTab === sec ? 'var(--accent)' : 'var(--text-3)',
+                    borderBottom: activeTab === sec ? '2px solid #B38B59' : '2px solid transparent',
+                    background: activeTab === sec ? 'rgba(179,139,89,0.07)' : 'transparent',
+                    color: activeTab === sec ? '#0B1F33' : 'var(--text-3)',
                     fontFamily: 'DM Sans, sans-serif', fontSize: 12,
                     fontWeight: activeTab === sec ? 600 : 400,
                     cursor: 'pointer', whiteSpace: 'nowrap',
-                    transition: 'color 0.15s, border-color 0.15s',
+                    transition: 'color 0.15s, border-color 0.15s, background 0.15s',
                   }}
                 >
                   {label}
