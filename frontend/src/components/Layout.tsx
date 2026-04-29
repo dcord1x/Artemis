@@ -20,24 +20,12 @@ export default function Layout({ children }: Props) {
         zIndex: 10,
       }}>
         {/* Logo */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginRight: 32 }}>
+        <div style={{ display: 'flex', alignItems: 'center', marginRight: 32 }}>
           <img
             src="/logo.png"
             alt="VIRGO logo"
-            style={{ width: 32, height: 32, objectFit: 'contain', borderRadius: 4 }}
+            style={{ height: 38, objectFit: 'contain' }}
           />
-          <div>
-            <div style={{
-              fontFamily: 'Lora, Georgia, serif',
-              fontWeight: 600,
-              fontSize: 14,
-              color: 'var(--text-1)',
-              letterSpacing: '-0.01em',
-              lineHeight: 1.1,
-            }}>
-              VIRGO
-            </div>
-          </div>
         </div>
 
         {/* Nav */}
