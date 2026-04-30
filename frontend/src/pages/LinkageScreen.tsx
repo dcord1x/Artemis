@@ -142,11 +142,6 @@ function sanitizeLocDisplay(fieldKey: string, val: string): string {
 
 // ── Pure helper functions ─────────────────────────────────────────────────────
 
-function classifySimilarity(score: number): { label: string; color: string; bg: string; border: string } {
-  if (score >= 60) return { label: 'High similarity',      color: C.navy,  bg: C.navyPale,  border: C.navyBorder };
-  if (score >= 35) return { label: 'Moderate similarity',  color: C.amber, bg: C.amberPale, border: C.amberBorder };
-  return              { label: 'Low similarity',           color: C.grey,  bg: C.greyPale,  border: C.greyBorder };
-}
 
 function generateExplanation(sim: SimilarityResult): string {
   const spatial  = sim.dimensions['spatial'];
@@ -213,13 +208,7 @@ function generateSummary(sim: SimilarityResult, _a: Report, _b: Report): string 
     parts.push(`Behavioural overlap is limited because ${uncoded.join(', ')} ${uncoded.length === 1 ? 'is' : 'are'} missing or not yet coded.`);
   }
 
-  if (sim.score < 35) {
-    parts.push('This pair should be treated as a review candidate, not a confirmed linkage.');
-  } else if (sim.score < 60) {
-    parts.push('This pair warrants analyst review. Similarity is moderate but requires further assessment.');
-  } else {
-    parts.push('This pair shows multiple indicators of possible linkage. Analyst review is strongly recommended.');
-  }
+  parts.push('Analyst review is required before drawing any linkage conclusions.');
 
   return parts.join(' ');
 }
@@ -1169,7 +1158,6 @@ export default function LinkageScreen() {
 
   const { report_a, report_b, similarity } = result;
   const matchedFields   = new Set(similarity.matched_fields);
-  const classification  = classifySimilarity(similarity.score);
   const explanation     = generateExplanation(similarity);
   const summary         = generateSummary(similarity, report_a, report_b);
 
@@ -1219,26 +1207,6 @@ export default function LinkageScreen() {
             </div>
           </div>
 
-          {/* Score + classification */}
-          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 14 }}>
-            <div style={{
-              background: `${classification.bg}22`,
-              border: `1px solid ${classification.border}66`,
-              borderRadius: 8, padding: '8px 14px', textAlign: 'center',
-            }}>
-              <div style={{ fontSize: 18, fontWeight: 800, color: '#fff', lineHeight: 1 }}>
-                {Math.round(similarity.score)}
-                <span style={{ fontSize: 11, fontWeight: 400, color: 'rgba(255,255,255,0.5)', marginLeft: 2 }}>/100</span>
-              </div>
-              <div style={{
-                fontSize: 11, fontWeight: 600, color: classification.color,
-                background: classification.bg, borderRadius: 4,
-                padding: '2px 8px', marginTop: 4, display: 'inline-block',
-              }}>
-                {classification.label}
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* Plain-language explanation */}

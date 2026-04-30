@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Save, Sparkles, AlertTriangle, Download, Tag, X, GitCompare, ScanSearch, Lock, ChevronLeft, ChevronRight, ExternalLink, FileText, ChevronDown } from 'lucide-react';
+import { Save, Sparkles, Download, Tag, X, GitCompare, Lock, ChevronLeft, ChevronRight, ExternalLink, FileText, ChevronDown, ScanSearch } from 'lucide-react';
 import { api } from '../api';
 import type { Report } from '../types';
 import FieldRow from '../components/FieldRow';
@@ -11,90 +11,46 @@ import ParseViewer from '../components/ParseViewer';
 import GisMapModal from '../components/GisMapModal';
 import StageSequencer from '../components/StageSequencer';
 
-/**
- * Field-state-aware NLP badge.
- *
- * States:
- *   pending  — NLP found a signal but the analyst hasn't coded the field yet
- *   accepted — analyst set the field to yes/probable (NLP and field agree)
- *   rejected — analyst set the field to no (NLP signal dismissed)
- *
- * The badge never disappears after coding — it tracks the decision so the
- * analyst can always see what the NLP suggested and what they decided.
- */
+
+// ── NLP field badge ───────────────────────────────────────────────────────────
+
 function NlpBadge({ rank, evidence, fieldValue }: { rank: number; evidence: string[]; fieldValue?: string }) {
   if (rank > 2) return null;
   const isHigh = rank === 1;
   const fullTitle = `NLP signal — ${isHigh ? 'strong' : 'possible (review)'}\n\nEvidence:\n${evidence.join('\n')}`;
-
-  // ── Accepted: field is coded yes/probable ──────────────────────────────────
   if (fieldValue === 'yes' || fieldValue === 'probable' || fieldValue === 'inferred') {
     return (
-      <span title={fullTitle} style={{
-        flexShrink: 0, fontSize: 10.5, fontWeight: 600, padding: '2px 7px', borderRadius: 4,
-        border: '1px solid var(--green-border)', background: 'var(--green-pale)', color: 'var(--green)',
-        cursor: 'default', letterSpacing: '0.03em', whiteSpace: 'nowrap',
-      }}>
+      <span title={fullTitle} style={{ flexShrink: 0, fontSize: 10.5, fontWeight: 600, padding: '2px 7px', borderRadius: 4, border: '1px solid var(--green-border)', background: 'var(--green-pale)', color: 'var(--green)', cursor: 'default', letterSpacing: '0.03em', whiteSpace: 'nowrap' }}>
         NLP ✓ accepted
       </span>
     );
   }
-
-  // ── Rejected: field is coded no ────────────────────────────────────────────
   if (fieldValue === 'no') {
     return (
-      <span title={fullTitle} style={{
-        flexShrink: 0, fontSize: 10.5, fontWeight: 600, padding: '2px 7px', borderRadius: 4,
-        border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-3)',
-        cursor: 'default', letterSpacing: '0.03em', whiteSpace: 'nowrap', textDecoration: 'line-through',
-      }}>
+      <span title={fullTitle} style={{ flexShrink: 0, fontSize: 10.5, fontWeight: 600, padding: '2px 7px', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-3)', cursor: 'default', letterSpacing: '0.03em', whiteSpace: 'nowrap', textDecoration: 'line-through' }}>
         NLP — rejected
       </span>
     );
   }
-
-  // ── Pending: field not yet coded ───────────────────────────────────────────
   const firstEv = (evidence[0] || '').replace(/^[\w\s]+:\s*/, '').slice(0, 38);
   return (
-    <span title={fullTitle} style={{
-      flexShrink: 0, display: 'inline-flex', flexDirection: 'column', gap: 1,
-      fontSize: 10.5, fontWeight: 600,
-      padding: '2px 7px', borderRadius: 4,
-      border: `1px solid ${isHigh ? 'var(--accent-border)' : 'var(--amber-border)'}`,
-      background: isHigh ? 'var(--accent-pale)' : 'var(--amber-pale)',
-      color: isHigh ? 'var(--accent)' : 'var(--amber)',
-      cursor: 'default', letterSpacing: '0.03em', maxWidth: 200,
-    }}>
+    <span title={fullTitle} style={{ flexShrink: 0, display: 'inline-flex', flexDirection: 'column', gap: 1, fontSize: 10.5, fontWeight: 600, padding: '2px 7px', borderRadius: 4, border: `1px solid ${isHigh ? 'var(--accent-border)' : 'var(--amber-border)'}`, background: isHigh ? 'var(--accent-pale)' : 'var(--amber-pale)', color: isHigh ? 'var(--accent)' : 'var(--amber)', cursor: 'default', letterSpacing: '0.03em', maxWidth: 200 }}>
       <span style={{ whiteSpace: 'nowrap' }}>{isHigh ? 'NLP signal — pending' : 'NLP possible — pending'}</span>
-      {firstEv && (
-        <span style={{ fontSize: 9, fontWeight: 400, opacity: 0.8, whiteSpace: 'normal', lineHeight: 1.2 }}>
-          {firstEv}{evidence[0]?.length > 40 ? '…' : ''}
-        </span>
-      )}
+      {firstEv && <span style={{ fontSize: 9, fontWeight: 400, opacity: 0.8, whiteSpace: 'normal', lineHeight: 1.2 }}>{firstEv}{evidence[0]?.length > 40 ? '…' : ''}</span>}
     </span>
   );
 }
 
-// Evidence type labels for the signals panel
 const EV_PREFIX_LABELS: Record<string, string> = {
-  'restraint SVO':    'Grammatical pattern',
-  'physical SVO':     'Grammatical pattern',
-  'transport SVO':    'Grammatical pattern',
-  'arc:':             'Narrative arc',
-  'coercion phrase':  'Phrase match',
-  'physical phrase':  'Phrase match',
-  'movement phrase':  'Phrase match',
-  'weapon display phrase': 'Display phrase',
-  'weapon + action':  'Weapon + action context',
-  'weapon mentioned': 'Weapon term (possible)',
-  'weapon (negated)': 'Weapon (negated)',
-  'primary term':     'Direct wording',
-  'secondary term':   'Contextual phrase',
-  'term (negated)':   'Negated phrase',
-  'two locations':    'Two locations detected',
-  'keyword':          'Keyword signal',
-  'keyword (negated)':'Keyword (negated)',
-  'phrase (negated)': 'Phrase (negated)',
+  'restraint SVO': 'Grammatical pattern', 'physical SVO': 'Grammatical pattern',
+  'transport SVO': 'Grammatical pattern', 'arc:': 'Narrative arc',
+  'coercion phrase': 'Phrase match', 'physical phrase': 'Phrase match',
+  'movement phrase': 'Phrase match', 'weapon display phrase': 'Display phrase',
+  'weapon + action': 'Weapon + action context', 'weapon mentioned': 'Weapon term (possible)',
+  'weapon (negated)': 'Weapon (negated)', 'primary term': 'Direct wording',
+  'secondary term': 'Contextual phrase', 'term (negated)': 'Negated phrase',
+  'two locations': 'Two locations detected', 'keyword': 'Keyword signal',
+  'keyword (negated)': 'Keyword (negated)', 'phrase (negated)': 'Phrase (negated)',
 };
 
 function formatEvidence(ev: string): { type: string; text: string } {
@@ -104,6 +60,134 @@ function formatEvidence(ev: string): { type: string; text: string } {
     }
   }
   return { type: 'Signal', text: ev };
+}
+
+function NlpSignalsPanel({ nlp, onSetField, reportId, getFieldValue }: {
+  nlp: Record<string, any>;
+  onSetField?: (field: string, value: string) => void;
+  reportId?: string;
+  getFieldValue?: (field: string) => string;
+}) {
+  type Signal = { label: string; rank: number; evidence: string[]; field: string; acceptValue: string };
+  const signals: Signal[] = [];
+  if ((nlp.coercion_rank ?? 3) <= 2) signals.push({ label: 'Coercion', rank: nlp.coercion_rank, evidence: nlp.coercion_evidence ?? [], field: 'coercion_present', acceptValue: 'yes' });
+  if ((nlp.physical_rank ?? 3) <= 2) signals.push({ label: 'Physical force', rank: nlp.physical_rank, evidence: nlp.physical_evidence ?? [], field: 'physical_force', acceptValue: 'yes' });
+  if ((nlp.sexual_rank ?? 3) <= 2) signals.push({ label: 'Sexual assault', rank: nlp.sexual_rank, evidence: nlp.sexual_evidence ?? [], field: 'sexual_assault', acceptValue: 'yes' });
+  if ((nlp.movement_rank ?? 3) <= 2) signals.push({ label: 'Movement', rank: nlp.movement_rank, evidence: nlp.movement_evidence ?? [], field: 'movement_present', acceptValue: 'yes' });
+  if ((nlp.weapon_rank ?? 3) <= 2) signals.push({ label: 'Weapon', rank: nlp.weapon_rank, evidence: nlp.weapon_evidence ?? [], field: 'threats_present', acceptValue: 'yes' });
+  if (signals.length === 0) return null;
+
+  const btnStyle = (color: string, bg: string, border: string): import('react').CSSProperties => ({
+    fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 4,
+    border: `1px solid ${border}`, background: bg, color, cursor: 'pointer', letterSpacing: '0.03em', whiteSpace: 'nowrap',
+  });
+  const sourceId = nlp._source_report_id as string | undefined;
+  const analyzedAt = nlp._analyzed_at as string | undefined;
+  const provenanceMatch = !sourceId || !reportId || sourceId === reportId;
+  const analyzedLabel = analyzedAt ? new Date(analyzedAt).toLocaleDateString('en-CA') : null;
+
+  return (
+    <div style={{ marginBottom: 14, borderRadius: 7, border: `1px solid ${provenanceMatch ? 'var(--amber-border)' : '#FCA5A5'}`, overflow: 'hidden' }}>
+      {!provenanceMatch && (
+        <div style={{ padding: '5px 12px', background: '#FEF2F2', borderBottom: '1px solid #FCA5A5', fontSize: 10, color: '#DC2626', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span>⚠</span>
+          <span>NLP data was analyzed for a different record ({sourceId}) — re-run NLP Analyze to generate signals for this case.</span>
+        </div>
+      )}
+      <div style={{ padding: '6px 12px', background: provenanceMatch ? 'var(--amber-pale)' : '#FFF7F7', borderBottom: `1px solid ${provenanceMatch ? 'var(--amber-border)' : '#FCA5A5'}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: provenanceMatch ? 'var(--amber)' : '#DC2626' }}>NLP Signals — Provisional</span>
+        <span style={{ fontSize: 10, color: provenanceMatch ? 'var(--amber)' : '#DC2626', opacity: 0.85 }}>
+          {provenanceMatch ? (analyzedLabel ? `Analyzed ${analyzedLabel} · analyst review required` : 'Analyst review required before coding') : 'Stale — does not reflect current record'}
+        </span>
+      </div>
+      {signals.map((sig) => {
+        const isStrong = sig.rank === 1;
+        const currentVal = getFieldValue ? getFieldValue(sig.field) : '';
+        const syncStatus: 'accepted' | 'rejected' | 'unclear' | 'pending' =
+          (currentVal === 'yes' || currentVal === 'probable' || currentVal === 'inferred') ? 'accepted'
+          : currentVal === 'no' ? 'rejected' : currentVal === 'unclear' ? 'unclear' : 'pending';
+        const syncCfg = {
+          accepted: { label: 'Field: yes — accepted', color: 'var(--green)', bg: 'var(--green-pale)', border: 'var(--green-border)' },
+          rejected: { label: 'Field: no — rejected', color: 'var(--text-3)', bg: 'var(--surface-2)', border: 'var(--border)' },
+          unclear:  { label: 'Field: unclear', color: 'var(--amber)', bg: 'var(--amber-pale)', border: 'var(--amber-border)' },
+          pending:  { label: 'Not yet coded', color: 'var(--text-3)', bg: 'var(--surface-2)', border: 'var(--border)' },
+        }[syncStatus];
+        return (
+          <div key={sig.label} style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+            <span style={{ flexShrink: 0, padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700, background: isStrong ? 'var(--accent-pale)' : 'var(--amber-pale)', color: isStrong ? 'var(--accent)' : 'var(--amber)', border: `1px solid ${isStrong ? 'var(--accent-border)' : 'var(--amber-border)'}`, letterSpacing: '0.04em' }}>
+              {isStrong ? 'Strong signal' : 'Possible signal'}
+            </span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-1)', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span>{sig.label}</span>
+                <span style={{ fontSize: 10, fontWeight: 400, color: 'var(--text-3)' }}>→ {sig.field.replace(/_/g, ' ')} field</span>
+                <span style={{ fontSize: 9.5, fontWeight: 600, padding: '1px 6px', borderRadius: 3, color: syncCfg.color, background: syncCfg.bg, border: `1px solid ${syncCfg.border}`, letterSpacing: '0.03em', textDecoration: syncStatus === 'rejected' ? 'line-through' : 'none' }}>{syncCfg.label}</span>
+              </div>
+              {sig.evidence.map((ev, i) => {
+                const { type, text } = formatEvidence(ev);
+                return (
+                  <div key={i} style={{ fontSize: 10.5, color: 'var(--text-2)', lineHeight: 1.5, display: 'flex', gap: 5 }}>
+                    <span style={{ color: 'var(--text-3)', flexShrink: 0 }}>◆ {type}:</span>
+                    <span style={{ fontFamily: 'monospace', fontSize: 10, background: 'var(--surface-2)', padding: '0 4px', borderRadius: 3 }}>{text}</span>
+                  </div>
+                );
+              })}
+            </div>
+            {onSetField && syncStatus !== 'accepted' && syncStatus !== 'rejected' && (
+              <div style={{ display: 'flex', gap: 4, flexShrink: 0, alignItems: 'flex-start', paddingTop: 1 }}>
+                <button style={btnStyle('var(--green)', 'var(--green-pale)', 'var(--green-border)')} onClick={() => onSetField(sig.field, sig.acceptValue)}>Accept</button>
+                <button style={btnStyle('var(--text-3)', 'var(--surface-2)', 'var(--border)')} onClick={() => onSetField(sig.field, 'unclear')}>Unclear</button>
+                <button style={btnStyle('var(--red, #DC2626)', 'var(--red-pale, #FEF2F2)', 'var(--red-border, #FCA5A5)')} onClick={() => onSetField(sig.field, 'no')}>Reject</button>
+              </div>
+            )}
+            {onSetField && (syncStatus === 'accepted' || syncStatus === 'rejected') && (
+              <div style={{ flexShrink: 0, paddingTop: 1 }}>
+                <button style={btnStyle('var(--text-3)', 'var(--surface-2)', 'var(--border)')} onClick={() => onSetField(sig.field, '')}>Revisit</button>
+              </div>
+            )}
+          </div>
+        );
+      })}
+      <div style={{ padding: '5px 12px', background: 'var(--surface-2)', fontSize: 9.5, color: 'var(--text-3)', fontStyle: 'italic' }}>
+        These are NLP-generated signals only. They do not set any field values until accepted. Analyst must confirm or reject each signal before coding.
+      </div>
+    </div>
+  );
+}
+
+const STAGE_ORDER = ['negotiation','agreement','refusal','pressure','threats','physical','sexual_violence','robbery'];
+const STAGE_LABEL: Record<string, string> = {
+  negotiation: 'Negotiation', agreement: 'Agreement', refusal: 'Refusal',
+  pressure: 'Pressure', threats: 'Threats', physical: 'Physical',
+  sexual_violence: 'Sexual violence', robbery: 'Robbery',
+};
+const STAGE_COLOR: Record<string, string> = {
+  negotiation: '#6B7280', agreement: '#6B7280', refusal: '#D97706', pressure: '#EA580C',
+  threats: '#DC2626', physical: '#B91C1C', sexual_violence: '#7F1D1D', robbery: '#7F1D1D',
+};
+
+function EscalationArc({ esc }: { esc: Record<string, any> }) {
+  if (!esc || !esc.stages || esc.stages.length === 0) return null;
+  return (
+    <div style={{ margin: '6px 0 10px', padding: '10px 12px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--surface-2)' }}>
+      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-3)', marginBottom: 6 }}>Detected escalation stages</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 0, flexWrap: 'wrap' }}>
+        {STAGE_ORDER.map((stage, i) => {
+          const active = (esc.stages as string[]).includes(stage);
+          const color = active ? STAGE_COLOR[stage] : 'var(--border)';
+          const isLast = i === STAGE_ORDER.length - 1;
+          return (
+            <div key={stage} style={{ display: 'flex', alignItems: 'center' }}>
+              <div title={active ? `${STAGE_LABEL[stage]} — detected` : `${STAGE_LABEL[stage]} — not detected`} style={{ padding: '2px 8px', borderRadius: 10, fontSize: 10.5, fontWeight: active ? 600 : 400, background: active ? `${color}20` : 'transparent', color: active ? color : 'var(--border-mid)', border: `1px solid ${active ? color + '60' : 'var(--border)'}`, whiteSpace: 'nowrap', cursor: 'default', opacity: active ? 1 : 0.45 }}>
+                {STAGE_LABEL[stage]}
+              </div>
+              {!isLast && <div style={{ width: 14, height: 1, background: active ? `${color}60` : 'var(--border)', margin: '0 1px', flexShrink: 0 }} />}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 // ── Location hint display validation ─────────────────────────────────────────
@@ -241,304 +325,6 @@ function isEnvLocationSupportedByNarrative(locationType: string, narrativeText: 
   if (NON_RESIDENTIAL_CUES.some((s) => low.includes(s))) return false;
   const required = RESIDENCE_REQUIRED_CUES[locationType] ?? RESIDENCE_REQUIRED_CUES['unknown residence'];
   return required.some((c) => low.includes(c));
-}
-
-/** Full NLP signals panel shown in the Narrative tab. */
-function NlpSignalsPanel({
-  nlp, onSetField, reportId, getFieldValue,
-}: {
-  nlp: Record<string, any>;
-  onSetField?: (field: string, value: string) => void;
-  reportId?: string;
-  getFieldValue?: (field: string) => string;
-}) {
-  type Signal = { label: string; rank: number; evidence: string[]; field: string; acceptValue: string };
-  const signals: Signal[] = [];
-
-  if ((nlp.coercion_rank ?? 3) <= 2)
-    signals.push({ label: 'Coercion', rank: nlp.coercion_rank, evidence: nlp.coercion_evidence ?? [], field: 'coercion_present', acceptValue: 'yes' });
-  if ((nlp.physical_rank ?? 3) <= 2)
-    signals.push({ label: 'Physical force', rank: nlp.physical_rank, evidence: nlp.physical_evidence ?? [], field: 'physical_force', acceptValue: 'yes' });
-  if ((nlp.sexual_rank ?? 3) <= 2)
-    signals.push({ label: 'Sexual assault', rank: nlp.sexual_rank, evidence: nlp.sexual_evidence ?? [], field: 'sexual_assault', acceptValue: 'yes' });
-  if ((nlp.movement_rank ?? 3) <= 2)
-    signals.push({ label: 'Movement', rank: nlp.movement_rank, evidence: nlp.movement_evidence ?? [], field: 'movement_present', acceptValue: 'yes' });
-  if ((nlp.weapon_rank ?? 3) <= 2)
-    signals.push({ label: 'Weapon', rank: nlp.weapon_rank, evidence: nlp.weapon_evidence ?? [], field: 'threats_present', acceptValue: 'yes' });
-
-  if (signals.length === 0) return null;
-
-  const btnStyle = (color: string, bg: string, border: string): import('react').CSSProperties => ({
-    fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 4,
-    border: `1px solid ${border}`, background: bg, color, cursor: 'pointer',
-    letterSpacing: '0.03em', whiteSpace: 'nowrap',
-  });
-
-  // Provenance check: is this NLP data actually for this report?
-  const sourceId = nlp._source_report_id as string | undefined;
-  const analyzedAt = nlp._analyzed_at as string | undefined;
-  const provenanceMatch = !sourceId || !reportId || sourceId === reportId;
-  const analyzedLabel = analyzedAt ? new Date(analyzedAt).toLocaleDateString('en-CA') : null;
-
-  return (
-    <div style={{ marginBottom: 14, borderRadius: 7, border: `1px solid ${provenanceMatch ? 'var(--amber-border)' : '#FCA5A5'}`, overflow: 'hidden' }}>
-      {/* Provenance mismatch warning */}
-      {!provenanceMatch && (
-        <div style={{
-          padding: '5px 12px', background: '#FEF2F2', borderBottom: '1px solid #FCA5A5',
-          fontSize: 10, color: '#DC2626', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6,
-        }}>
-          <span>⚠</span>
-          <span>NLP data was analyzed for a different record ({sourceId}) — re-run NLP Analyze to generate signals for this case.</span>
-        </div>
-      )}
-      {/* Header */}
-      <div style={{
-        padding: '6px 12px',
-        background: provenanceMatch ? 'var(--amber-pale)' : '#FFF7F7',
-        borderBottom: `1px solid ${provenanceMatch ? 'var(--amber-border)' : '#FCA5A5'}`,
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      }}>
-        <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: provenanceMatch ? 'var(--amber)' : '#DC2626' }}>
-          NLP Signals — Provisional
-        </span>
-        <span style={{ fontSize: 10, color: provenanceMatch ? 'var(--amber)' : '#DC2626', opacity: 0.85 }}>
-          {provenanceMatch
-            ? (analyzedLabel ? `Analyzed ${analyzedLabel} · analyst review required` : 'Analyst review required before coding')
-            : 'Stale — does not reflect current record'}
-        </span>
-      </div>
-      {/* Signal rows */}
-      {signals.map((sig) => {
-        const isStrong = sig.rank === 1;
-        const currentVal = getFieldValue ? getFieldValue(sig.field) : '';
-        // Derive sync status from current field value
-        const syncStatus: 'accepted' | 'rejected' | 'unclear' | 'pending' =
-          (currentVal === 'yes' || currentVal === 'probable' || currentVal === 'inferred') ? 'accepted'
-          : currentVal === 'no' ? 'rejected'
-          : currentVal === 'unclear' ? 'unclear'
-          : 'pending';
-        const syncCfg = {
-          accepted: { label: 'Field: yes — accepted', color: 'var(--green)',    bg: 'var(--green-pale)',   border: 'var(--green-border)' },
-          rejected: { label: 'Field: no — rejected',  color: 'var(--text-3)',   bg: 'var(--surface-2)',    border: 'var(--border)' },
-          unclear:  { label: 'Field: unclear',         color: 'var(--amber)',    bg: 'var(--amber-pale)',   border: 'var(--amber-border)' },
-          pending:  { label: 'Not yet coded',          color: 'var(--text-3)',   bg: 'var(--surface-2)',    border: 'var(--border)' },
-        }[syncStatus];
-
-        return (
-          <div key={sig.label} style={{
-            padding: '8px 12px', borderBottom: '1px solid var(--border)',
-            display: 'flex', gap: 10, alignItems: 'flex-start',
-            background: syncStatus === 'accepted' ? '#F0FDF420' : syncStatus === 'rejected' ? 'transparent' : 'transparent',
-          }}>
-            {/* Rank badge */}
-            <span style={{
-              flexShrink: 0, padding: '2px 8px', borderRadius: 4,
-              fontSize: 10, fontWeight: 700,
-              background: isStrong ? 'var(--accent-pale)' : 'var(--amber-pale)',
-              color: isStrong ? 'var(--accent)' : 'var(--amber)',
-              border: `1px solid ${isStrong ? 'var(--accent-border)' : 'var(--amber-border)'}`,
-              letterSpacing: '0.04em',
-            }}>
-              {isStrong ? 'Strong signal' : 'Possible signal'}
-            </span>
-            {/* Content */}
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-1)', marginBottom: 2, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <span>{sig.label}</span>
-                <span style={{ fontSize: 10, fontWeight: 400, color: 'var(--text-3)' }}>
-                  → {sig.field.replace(/_/g, ' ')} field
-                </span>
-                {/* Current field sync state */}
-                <span style={{
-                  fontSize: 9.5, fontWeight: 600, padding: '1px 6px', borderRadius: 3,
-                  color: syncCfg.color, background: syncCfg.bg, border: `1px solid ${syncCfg.border}`,
-                  letterSpacing: '0.03em',
-                  textDecoration: syncStatus === 'rejected' ? 'line-through' : 'none',
-                }}>
-                  {syncCfg.label}
-                </span>
-              </div>
-              {sig.evidence.map((ev, i) => {
-                const { type, text } = formatEvidence(ev);
-                return (
-                  <div key={i} style={{ fontSize: 10.5, color: 'var(--text-2)', lineHeight: 1.5, display: 'flex', gap: 5 }}>
-                    <span style={{ color: 'var(--text-3)', flexShrink: 0 }}>◆ {type}:</span>
-                    <span style={{ fontFamily: 'monospace', fontSize: 10, background: 'var(--surface-2)', padding: '0 4px', borderRadius: 3 }}>{text}</span>
-                  </div>
-                );
-              })}
-            </div>
-            {/* Analyst action buttons — only show when not already decided */}
-            {onSetField && syncStatus !== 'accepted' && syncStatus !== 'rejected' && (
-              <div style={{ display: 'flex', gap: 4, flexShrink: 0, alignItems: 'flex-start', paddingTop: 1 }}>
-                <button
-                  title={`Accept: set ${sig.field} = yes`}
-                  style={btnStyle('var(--green)', 'var(--green-pale)', 'var(--green-border)')}
-                  onClick={() => onSetField(sig.field, sig.acceptValue)}
-                >Accept</button>
-                <button
-                  title={`Mark unclear: set ${sig.field} = unclear`}
-                  style={btnStyle('var(--text-3)', 'var(--surface-2)', 'var(--border)')}
-                  onClick={() => onSetField(sig.field, 'unclear')}
-                >Unclear</button>
-                <button
-                  title={`Reject: set ${sig.field} = no`}
-                  style={btnStyle('var(--red, #DC2626)', 'var(--red-pale, #FEF2F2)', 'var(--red-border, #FCA5A5)')}
-                  onClick={() => onSetField(sig.field, 'no')}
-                >Reject</button>
-              </div>
-            )}
-            {/* When decided: show a small undo/revisit button */}
-            {onSetField && (syncStatus === 'accepted' || syncStatus === 'rejected') && (
-              <div style={{ flexShrink: 0, paddingTop: 1 }}>
-                <button
-                  title="Revisit this decision — clear the field to re-evaluate"
-                  style={btnStyle('var(--text-3)', 'var(--surface-2)', 'var(--border)')}
-                  onClick={() => onSetField(sig.field, '')}
-                >Revisit</button>
-              </div>
-            )}
-          </div>
-        );
-      })}
-      {/* Footer note */}
-      <div style={{ padding: '5px 12px', background: 'var(--surface-2)', fontSize: 9.5, color: 'var(--text-3)', fontStyle: 'italic' }}>
-        These are NLP-generated signals only. They do not set any field values until accepted. Analyst must confirm or reject each signal before coding.
-      </div>
-    </div>
-  );
-}
-
-const STAGE_ORDER = ['negotiation','agreement','refusal','pressure','threats','physical','sexual_violence','robbery'];
-const STAGE_LABEL: Record<string, string> = {
-  negotiation: 'Negotiation', agreement: 'Agreement', refusal: 'Refusal',
-  pressure: 'Pressure', threats: 'Threats', physical: 'Physical',
-  sexual_violence: 'Sexual violence', robbery: 'Robbery',
-};
-const STAGE_COLOR: Record<string, string> = {
-  negotiation: '#6B7280', agreement: '#6B7280',
-  refusal: '#D97706', pressure: '#EA580C',
-  threats: '#DC2626', physical: '#B91C1C',
-  sexual_violence: '#7F1D1D', robbery: '#7F1D1D',
-};
-
-/** Horizontal escalation arc strip shown in the Narrative Coding section. */
-const ALL_PATTERNS: Record<string, string> = {
-  condom_refusal: 'Condom refusal',
-  payment_dispute: 'Payment dispute',
-  bait_and_switch: 'Bait-and-switch',
-  rapid_escalation: 'Rapid escalation',
-  weapon_present: 'Weapon present',
-  multi_suspect: 'Multiple suspects',
-  online_lure: 'Online lure',
-  drugging_intoxication: 'Drugging / intoxication',
-  confinement: 'Confinement',
-};
-
-function EscalationArc({ esc, onTogglePattern }: { esc: Record<string, any>; onTogglePattern?: (p: string) => void }) {
-  if (!esc || !esc.stages || esc.stages.length === 0) return null;
-  const score: number = esc.score ?? 1;
-  const scoreColor = score >= 5 ? '#7F1D1D' : score >= 4 ? '#B91C1C' : score >= 3 ? '#EA580C' : '#D97706';
-  const patterns: string[] = esc.patterns ?? [];
-  const PATTERN_LABELS = ALL_PATTERNS;
-
-  return (
-    <div style={{
-      margin: '6px 0 10px', padding: '10px 12px',
-      borderRadius: 7, border: `1px solid ${scoreColor}40`,
-      background: `${scoreColor}08`,
-    }}>
-      {/* Score + arc label */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-        <span style={{
-          fontFamily: 'Lora, serif', fontSize: 15, fontWeight: 600,
-          color: scoreColor, minWidth: 18, textAlign: 'center',
-        }}>{score}</span>
-        <span style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 500, letterSpacing: '0.05em', textTransform: 'uppercase' }}>Escalation score / 5</span>
-        {patterns.length > 0 && !onTogglePattern && (
-          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginLeft: 4 }}>
-            {patterns.map(p => (
-              <span key={p} style={{
-                fontSize: 10.5, padding: '1px 6px', borderRadius: 3,
-                background: `${scoreColor}18`, color: scoreColor,
-                border: `1px solid ${scoreColor}40`, fontWeight: 500,
-              }}>{PATTERN_LABELS[p] ?? p}</span>
-            ))}
-          </div>
-        )}
-      </div>
-      {/* Score rationale */}
-      <div style={{ fontSize: 10, color: 'var(--text-3)', marginBottom: 8, fontStyle: 'italic' }}>
-        {score === 1 && 'No escalation stages detected in narrative.'}
-        {score === 2 && 'Refusal present — may have been resolved; no further pressure detected.'}
-        {score === 3 && 'Pressure or manipulation detected after refusal.'}
-        {score === 4 && 'Threats or physical force detected in narrative.'}
-        {score === 5 && 'Sexual violence or robbery detected — or multiple high-severity stages co-occur.'}
-      </div>
-
-      {/* Pattern toggles (editable) */}
-      {onTogglePattern && (
-        <div style={{ marginBottom: 8 }}>
-          <div style={{ fontSize: 10, color: 'var(--text-3)', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 4 }}>
-            Patterns — click to toggle
-          </div>
-          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-            {Object.entries(ALL_PATTERNS).map(([key, label]) => {
-              const active = patterns.includes(key);
-              return (
-                <button
-                  key={key}
-                  onClick={() => onTogglePattern(key)}
-                  title={active ? 'Click to remove' : 'Click to add'}
-                  style={{
-                    fontSize: 10.5, padding: '2px 8px', borderRadius: 3,
-                    border: active ? `1px solid ${scoreColor}80` : '1px solid var(--border)',
-                    background: active ? `${scoreColor}18` : 'var(--surface-2)',
-                    color: active ? scoreColor : 'var(--text-3)',
-                    fontWeight: active ? 600 : 400,
-                    cursor: 'pointer', fontFamily: 'DM Sans, sans-serif',
-                    transition: 'all 0.1s',
-                  }}
-                >
-                  {active ? '✓ ' : '+ '}{label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Stage bubbles */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 0, flexWrap: 'wrap' }}>
-        {STAGE_ORDER.map((stage, i) => {
-          const active = (esc.stages as string[]).includes(stage);
-          const color = active ? STAGE_COLOR[stage] : 'var(--border)';
-          const isLast = i === STAGE_ORDER.length - 1;
-          return (
-            <div key={stage} style={{ display: 'flex', alignItems: 'center' }}>
-              <div
-                title={active ? `${STAGE_LABEL[stage]} — detected` : `${STAGE_LABEL[stage]} — not detected`}
-                style={{
-                  padding: '2px 8px', borderRadius: 10,
-                  fontSize: 10.5, fontWeight: active ? 600 : 400,
-                  background: active ? `${color}20` : 'transparent',
-                  color: active ? color : 'var(--border-mid)',
-                  border: `1px solid ${active ? color + '60' : 'var(--border)'}`,
-                  whiteSpace: 'nowrap', cursor: 'default',
-                  transition: 'all 0.2s',
-                  opacity: active ? 1 : 0.45,
-                }}
-              >{STAGE_LABEL[stage]}</div>
-              {!isLast && (
-                <div style={{ width: 14, height: 1, background: active ? `${color}60` : 'var(--border)', margin: '0 1px', flexShrink: 0 }} />
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
 }
 
 /** Badge shown on incident_date when NLP detected date uncertainty. */
@@ -1108,11 +894,7 @@ function SummaryTab({ fields, analystName, analystSummary, tags, reportId }: {
   );
 }
 
-type Section = 'basics' | 'stages' | 'encounter' | 'mobility' | 'suspect' | 'narrative' | 'gis' | 'scoring' | 'summary';
-
-function ScoringTab() {
-  return <div />;
-}
+type Section = 'basics' | 'stages' | 'encounter' | 'mobility' | 'suspect' | 'narrative' | 'gis' | 'summary';
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; border: string }> = {
   uncoded:     { label: 'Uncoded',     color: 'var(--text-3)',  bg: 'var(--surface-2)', border: 'var(--border)' },
@@ -1136,6 +918,8 @@ export default function CodingScreen() {
   const [flags, setFlags] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [loadingAI, setLoadingAI] = useState(false);
+  const [analyzingNlp, setAnalyzingNlp] = useState(false);
+  const [nlpError, setNlpError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<Section>('basics');
   const [showGisMap, setShowGisMap] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
@@ -1151,8 +935,6 @@ export default function CodingScreen() {
   const [showCleaned, setShowCleaned] = useState(false);
   const [showBulletinText, setShowBulletinText] = useState(false);
   const [nlp, setNlp] = useState<Record<string, any>>({});
-  const [analyzingNlp, setAnalyzingNlp] = useState(false);
-  const [nlpError, setNlpError] = useState<string | null>(null);
   const [weather, setWeather] = useState<Record<string, any>>({});
   const [provenance, setProvenance] = useState<Record<string, string>>({});
   const [analystSummary, setAnalystSummary] = useState('');
@@ -1207,8 +989,8 @@ export default function CodingScreen() {
           'cross_neighbourhood','cross_municipality','offender_control_over_movement',
           'suspect_count','suspect_gender','suspect_description_text','suspect_race_ethnicity',
           'suspect_age_estimate','vehicle_present','vehicle_make','vehicle_model','vehicle_colour',
-          'plate_partial','repeat_suspect_flag','repeat_vehicle_flag','early_escalation_score',
-          'mobility_richness_score','escalation_point','resolution_endpoint','highest_stage_reached','turning_point','summary_analytic','key_quotes','coder_notes','uncertainty_notes',
+          'plate_partial','repeat_suspect_flag','repeat_vehicle_flag',
+          'escalation_point','resolution_endpoint','highest_stage_reached','turning_point','summary_analytic','key_quotes','coder_notes','uncertainty_notes',
           'cleaned_narrative',
           'initial_contact_address_raw','incident_address_raw','destination_address_raw',
           'lat_initial','lon_initial','lat_incident','lon_incident','lat_destination','lon_destination',
@@ -1285,7 +1067,7 @@ export default function CodingScreen() {
         if (!silent) toast('Case saved');
       }
     } finally { setSaving(false); }
-  }, [narrative, isNew, analystName, sourceOrg, dateReceived, fields, cleanedNarrative, analystSummary, provenance, tags, suggestions, flags, nlp, weather, report, navigate, toast]);
+  }, [narrative, isNew, analystName, sourceOrg, dateReceived, fields, cleanedNarrative, analystSummary, provenance, tags, suggestions, flags, weather, report, navigate, toast]);
 
   // Keep the ref pointing at the latest handleSave after every render
   useEffect(() => { handleSaveRef.current = handleSave; });
@@ -1399,13 +1181,8 @@ export default function CodingScreen() {
     return () => window.removeEventListener('keydown', handler);
   }, [prevId, nextId, handleSave, navigate]);
 
-  // NLP provenance: verify the stored NLP data was generated from this specific report.
-  // If _source_report_id is present and doesn't match the current report, NLP data is stale.
-  // If _source_report_id is absent (older records), we allow display but can't verify.
   const nlpSourceId = nlp._source_report_id as string | undefined;
   const nlpBelongsHere = !nlpSourceId || !report?.report_id || nlpSourceId === report.report_id;
-  // Gate all NLP-derived chips: only show them when the data is verifiably for this report
-  // or when the record predates provenance stamping (no _source_report_id).
   const showNlpChips = Object.keys(nlp).length > 0 && nlpBelongsHere;
 
   return (
@@ -1470,21 +1247,25 @@ export default function CodingScreen() {
           </span>
         )}
 
-        {flags.length > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-            <AlertTriangle size={13} style={{ color: 'var(--amber)', flexShrink: 0 }} />
-            <span style={{
-              fontSize: 10, fontWeight: 700, color: 'var(--amber)', letterSpacing: '0.05em',
-              textTransform: 'uppercase', flexShrink: 0,
-            }}>NLP signals (unconfirmed):</span>
-            {flags.map((flag) => (
-              <span key={flag} style={{
-                fontSize: 11, padding: '2px 8px', borderRadius: 4,
-                background: 'var(--amber-pale)', color: 'var(--amber)', border: '1px solid var(--amber-border)',
-              }}>{flag}</span>
-            ))}
-          </div>
-        )}
+
+        {(() => {
+          const nlpFlags = flags.filter(f =>
+            !/\bRank\s+\d/i.test(f) &&
+            !/\bscore\b/i.test(f) &&
+            !/\bescalation\b/i.test(f) &&
+            !/\bprobability\b/i.test(f)
+          );
+          return nlpFlags.length > 0 ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              {nlpFlags.map((flag) => (
+                <span key={flag} style={{
+                  fontSize: 11, padding: '2px 8px', borderRadius: 4,
+                  background: 'var(--surface-2)', color: 'var(--text-2)', border: '1px solid var(--border)',
+                }}>{flag}</span>
+              ))}
+            </div>
+          ) : null;
+        })()}
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto', flexWrap: 'wrap' }}>
           <input
@@ -1537,13 +1318,7 @@ export default function CodingScreen() {
             </button>
           )}
           {nlpError && (
-            <span style={{
-              fontSize: 11.5, color: 'var(--red, #c0392b)',
-              background: 'var(--red-pale, #fdecea)',
-              border: '1px solid var(--red, #c0392b)',
-              borderRadius: 4, padding: '2px 7px',
-              maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            }} title={nlpError}>
+            <span style={{ fontSize: 11.5, color: 'var(--red, #c0392b)', background: 'var(--red-pale, #fdecea)', border: '1px solid var(--red, #c0392b)', borderRadius: 4, padding: '2px 7px', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={nlpError}>
               NLP error: {nlpError}
             </span>
           )}
@@ -1940,7 +1715,6 @@ export default function CodingScreen() {
               ['suspect', 'Suspect', ['suspect_gender','suspect_age_estimate','vehicle_present','vehicle_make','vehicle_model','vehicle_colour','plate_partial']],
               ['narrative', 'Narrative', ['highest_stage_reached','turning_point','escalation_point','resolution_endpoint','summary_analytic','key_quotes','coder_notes']],
               ['gis', 'GIS', ['initial_contact_address_raw','incident_address_raw','initial_contact_confidence','incident_confidence','destination_confidence']],
-              ['scoring', 'Scoring', ['physical_force','coercion_present','threats_present','pressure_after_refusal','offender_control_over_movement','sexual_assault','stealthing','refusal_present','robbery_theft','verbal_abuse','negotiation_present','service_discussed','payment_discussed','movement_present','entered_vehicle','public_to_private_shift','public_to_secluded_shift','cross_municipality','cross_neighbourhood','deserted','repeat_suspect_flag','repeat_vehicle_flag']],
               ['summary', 'Summary', ['initial_approach_type','negotiation_present','refusal_present','pressure_after_refusal','coercion_present','threats_present','physical_force','sexual_assault','robbery_theft','exit_type','movement_present','entered_vehicle','public_to_private_shift','public_to_secluded_shift','indoor_outdoor','public_private']],
             ] as [Section, string, string[]][]).map(([sec, label, keys]) => {
               const filled = keys.filter(k => { const v = fields[k as keyof Report]; return v !== null && v !== undefined && String(v).trim() !== ''; }).length;
@@ -2184,15 +1958,7 @@ export default function CodingScreen() {
             {activeTab === 'narrative' && (
               <div style={{ marginBottom: 12 }}>
                 <NlpSignalsPanel nlp={nlp} onSetField={(field, value) => set(field as keyof Report, value)} reportId={report?.report_id} getFieldValue={(field) => f(field as keyof Report)} />
-                <EscalationArc esc={nlp.escalation ?? {}} onTogglePattern={(p) => {
-                  setNlp(prev => {
-                    const esc = prev.escalation ?? {};
-                    const cur: string[] = esc.patterns ?? [];
-                    const next = cur.includes(p) ? cur.filter((x: string) => x !== p) : [...cur, p];
-                    return { ...prev, escalation: { ...esc, patterns: next } };
-                  });
-                  scheduleAutosave();
-                }} />
+                <EscalationArc esc={nlp.escalation ?? {}} />
                 <WeatherCard w={weather} />
                 {!isNew && (
                   <ParseViewer narrative={narrative} reportId={report?.report_id} />
@@ -2307,7 +2073,6 @@ export default function CodingScreen() {
               </div>
             )}
 
-            {activeTab === 'scoring' && <ScoringTab />}
             {activeTab === 'summary' && (
               <SummaryTab
                 fields={fields}

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import type { Stats } from '../types';
-import { Car, MapPin, AlertTriangle, TrendingUp, Shield, BarChart2, RefreshCw, User, Zap } from 'lucide-react';
+import { Car, MapPin, AlertTriangle, TrendingUp, Shield, BarChart2, RefreshCw, User } from 'lucide-react';
 
 function StatCard({ label, value, sub, icon, color = 'var(--text-1)', onClick }: {
   label: string; value: string | number; sub?: string; icon: React.ReactNode;
@@ -30,59 +30,6 @@ function StatCard({ label, value, sub, icon, color = 'var(--text-1)', onClick }:
       {onClick && (
         <div style={{ fontSize: 10.5, color: 'var(--accent)', marginTop: 8, opacity: 0.7 }}>View cases →</div>
       )}
-    </div>
-  );
-}
-
-/** Stacked NLP bar: rank1 solid, rank2 lighter, background = total */
-function NlpBar({
-  label, rank1, rank2, total, rank1Color = 'var(--accent)', rank2Color,
-  onClickRank1, onClickRank2,
-}: {
-  label: string; rank1: number; rank2: number; total: number;
-  rank1Color?: string; rank2Color?: string;
-  onClickRank1?: () => void; onClickRank2?: () => void;
-}) {
-  const r2c = rank2Color ?? rank1Color + '70';
-  const r1pct = total > 0 ? (rank1 / total) * 100 : 0;
-  const r2pct = total > 0 ? (rank2 / total) * 100 : 0;
-  return (
-    <div style={{ marginBottom: 14 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
-        <span
-          style={{ fontSize: 13, color: 'var(--text-2)', cursor: onClickRank1 ? 'pointer' : 'default' }}
-          onClick={onClickRank1}
-          title={onClickRank1 ? 'Click to view cases with strong NLP signal' : undefined}
-        >
-          {label}
-        </span>
-        <div style={{ display: 'flex', gap: 8, fontSize: 11.5 }}>
-          <span
-            style={{ color: rank1Color, fontWeight: 600, cursor: onClickRank1 ? 'pointer' : 'default', textDecoration: onClickRank1 ? 'underline dotted' : 'none' }}
-            onClick={onClickRank1}
-            title={onClickRank1 ? 'View strong-signal cases' : undefined}
-          >
-            {rank1} strong
-          </span>
-          {rank2 > 0 && (
-            <span
-              style={{ color: 'var(--text-3)', cursor: onClickRank2 ? 'pointer' : 'default', textDecoration: onClickRank2 ? 'underline dotted' : 'none' }}
-              onClick={onClickRank2}
-              title={onClickRank2 ? 'View strong + possible cases' : undefined}
-            >
-              +{rank2} possible
-            </span>
-          )}
-        </div>
-      </div>
-      <div
-        style={{ height: 8, borderRadius: 10, background: 'var(--surface-3)', overflow: 'hidden', display: 'flex', cursor: onClickRank1 ? 'pointer' : 'default' }}
-        onClick={onClickRank1}
-        title={onClickRank1 ? 'Click to view cases with strong NLP signal' : undefined}
-      >
-        <div style={{ height: '100%', background: rank1Color, width: `${r1pct}%`, transition: 'width 0.6s ease', borderRadius: '10px 0 0 10px' }} />
-        <div style={{ height: '100%', background: r2c, width: `${r2pct}%`, transition: 'width 0.6s ease' }} />
-      </div>
     </div>
   );
 }
@@ -139,17 +86,6 @@ function YearChart({ data }: { data: { year: number; count: number }[] }) {
   );
 }
 
-const PATTERN_LABELS: Record<string, string> = {
-  condom_refusal:         'Condom refusal',
-  payment_dispute:        'Payment / money dispute',
-  bait_and_switch:        'Bait-and-switch',
-  rapid_escalation:       'Rapid escalation',
-  weapon_present:         'Weapon present',
-  multi_suspect:          'Multiple suspects',
-  online_lure:            'Online / digital lure',
-  drugging_intoxication:  'Drugging / intoxication',
-  confinement:            'Confinement',
-};
 
 export default function Analysis() {
   const navigate = useNavigate();
@@ -180,7 +116,7 @@ export default function Analysis() {
   );
   if (!stats) return null;
 
-  const { total, nlp_violence: nlp } = stats;
+  const { total } = stats;
   const codingPct = total ? Math.round(stats.coded / total * 100) : 0;
   const totalVehApproach = (stats.approach_foot ?? 0) + (stats.approach_vehicle ?? 0);
   const footPct = totalVehApproach > 0 ? Math.round((stats.approach_foot / totalVehApproach) * 100) : 0;
@@ -189,7 +125,6 @@ export default function Analysis() {
   const maxColour = stats.vehicle_colours?.length ? Math.max(...stats.vehicle_colours.map(c => c.count)) : 1;
   const maxType   = stats.vehicle_types?.length   ? Math.max(...stats.vehicle_types.map(t => t.count))   : 1;
   const maxMake   = stats.vehicle_makes?.length   ? Math.max(...stats.vehicle_makes.map(m => m.count))   : 1;
-  const maxPat    = stats.nlp_escalation_patterns?.length ? Math.max(...stats.nlp_escalation_patterns.map(p => p.count)) : 1;
   const vehCount  = stats.vehicle_present_count ?? stats.approach_vehicle ?? 0;
 
   const go = (qs: Record<string, string>) =>
@@ -215,57 +150,34 @@ export default function Analysis() {
           </button>
         </div>
 
-        {/* NLP unavailable warning */}
-        {stats.nlp_available === false && (
-          <div style={{ background: 'var(--amber-pale, #fffbeb)', border: '1px solid var(--amber, #f59e0b)', borderRadius: 6, padding: '10px 16px', marginBottom: 16, fontSize: 13, color: 'var(--text-2)' }}>
-            <strong>spaCy NLP model not loaded</strong> — NLP signal counts are 0. To fix: stop the server, run{' '}
-            <code style={{ background: 'var(--surface-2)', padding: '1px 5px', borderRadius: 3 }}>backend_env\Scripts\python.exe -m spacy download en_core_web_sm</code>
-            {', '}then restart and re-run the Excel import (or click <strong>NLP All</strong> on the Cases page).
-          </div>
-        )}
-
         {/* Summary cards */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 16, marginBottom: 24 }}>
           <StatCard label="Total Reports" value={total} icon={<BarChart2 size={16} />} />
           <StatCard label="Coded" value={`${stats.coded} / ${total}`} sub={`${codingPct}% complete`} icon={<TrendingUp size={16} />} color="var(--green)" onClick={() => go({ coding_status: 'coded' })} />
-          <StatCard label="NLP: Coercion" value={nlp?.coercion.rank1 ?? 0} sub={`+${nlp?.coercion.rank2 ?? 0} possible`} icon={<Shield size={16} />} color="var(--accent)" onClick={() => go({ nlp_coercion: '1' })} />
-          <StatCard label="NLP: Physical" value={nlp?.physical.rank1 ?? 0} sub={`+${nlp?.physical.rank2 ?? 0} possible`} icon={<AlertTriangle size={16} />} color="#C2410C" onClick={() => go({ nlp_physical: '1' })} />
-          <StatCard label="NLP: Sexual" value={nlp?.sexual.rank1 ?? 0} sub="strong signal" icon={<AlertTriangle size={16} />} color="#9F1239" onClick={() => go({ nlp_sexual: '1' })} />
-          <StatCard label="NLP: Movement" value={nlp?.movement.rank1 ?? 0} sub={`+${nlp?.movement.rank2 ?? 0} possible`} icon={<MapPin size={16} />} color="var(--amber)" onClick={() => go({ nlp_movement: '1' })} />
+          {stats.coercion.count > 0 && <StatCard label="Coercion" value={stats.coercion.count} sub={`${stats.coercion.pct}% of coded`} icon={<Shield size={16} />} color="var(--accent)" onClick={() => go({ coercion_present: 'yes' })} />}
+          {stats.physical_force.count > 0 && <StatCard label="Physical force" value={stats.physical_force.count} sub={`${stats.physical_force.pct}% of coded`} icon={<AlertTriangle size={16} />} color="#C2410C" onClick={() => go({ physical_force: 'yes' })} />}
+          {stats.sexual_assault.count > 0 && <StatCard label="Sexual assault" value={stats.sexual_assault.count} sub={`${stats.sexual_assault.pct}% of coded`} icon={<AlertTriangle size={16} />} color="#9F1239" onClick={() => go({ sexual_assault: 'yes' })} />}
+          {stats.movement.count > 0 && <StatCard label="Movement" value={stats.movement.count} sub={`${stats.movement.pct}% of coded`} icon={<MapPin size={16} />} color="var(--amber)" onClick={() => go({ movement_present: 'yes' })} />}
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
 
-          {/* NLP Violence Indicators */}
+          {/* Coded violence indicators */}
           <div className="card" style={{ padding: '20px 24px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Shield size={15} style={{ color: 'var(--accent)' }} />
-                <span style={{ fontFamily: 'Lora, serif', fontSize: 15, fontWeight: 500 }}>NLP Violence Indicators</span>
-              </div>
-              <span style={{ fontSize: 10.5, color: 'var(--text-3)', fontStyle: 'italic' }}>click to view cases</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+              <Shield size={15} style={{ color: 'var(--accent)' }} />
+              <span style={{ fontFamily: 'Lora, serif', fontSize: 15, fontWeight: 500 }}>Coded Violence Indicators</span>
             </div>
-            <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: '0 0 16px', lineHeight: 1.5 }}>
-              Solid = Rank 1 (strong) · Faded = Rank 2 (possible) · Click label or bar to drill down
-            </p>
-            <NlpBar label="Coercion / restraint"  rank1={nlp?.coercion.rank1 ?? 0}  rank2={nlp?.coercion.rank2 ?? 0}  total={total} rank1Color="var(--accent)" onClickRank1={() => go({ nlp_coercion: '1' })}   onClickRank2={() => go({ nlp_coercion: '2' })} />
-            <NlpBar label="Physical force"         rank1={nlp?.physical.rank1 ?? 0}  rank2={nlp?.physical.rank2 ?? 0}  total={total} rank1Color="#C2410C"       onClickRank1={() => go({ nlp_physical: '1' })}   onClickRank2={() => go({ nlp_physical: '2' })} />
-            <NlpBar label="Sexual assault"         rank1={nlp?.sexual.rank1 ?? 0}    rank2={nlp?.sexual.rank2 ?? 0}    total={total} rank1Color="#9F1239"        onClickRank1={() => go({ nlp_sexual: '1' })}     onClickRank2={() => go({ nlp_sexual: '2' })} />
-            <NlpBar label="Movement / transport"   rank1={nlp?.movement.rank1 ?? 0}  rank2={nlp?.movement.rank2 ?? 0}  total={total} rank1Color="var(--amber)"   onClickRank1={() => go({ nlp_movement: '1' })}   onClickRank2={() => go({ nlp_movement: '2' })} />
-            <NlpBar label="Weapon / threats"        rank1={nlp?.weapon.rank1 ?? 0}    rank2={nlp?.weapon.rank2 ?? 0}    total={total} rank1Color="#B45309"        onClickRank1={() => go({ nlp_weapon: '1' })}     onClickRank2={() => go({ nlp_weapon: '2' })} />
-
-            {/* Coded violence */}
-            {(stats.coercion.count > 0 || stats.physical_force.count > 0 || stats.sexual_assault.count > 0) && (
+            {(stats.coercion.count > 0 || stats.physical_force.count > 0 || stats.sexual_assault.count > 0 || stats.movement.count > 0 || stats.threats_present?.count > 0) ? (
               <>
-                <div style={{ borderTop: '1px solid var(--border)', margin: '14px 0 12px', paddingTop: 12 }}>
-                  <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-3)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>Researcher-coded</span>
-                </div>
-                {stats.coercion.count > 0 && <NlpBar label="Coercion" rank1={stats.coercion.count} rank2={0} total={total} rank1Color="var(--accent)" onClickRank1={() => go({ coercion_present: 'yes' })} />}
-                {stats.physical_force.count > 0 && <NlpBar label="Physical force" rank1={stats.physical_force.count} rank2={0} total={total} rank1Color="#C2410C" onClickRank1={() => go({ physical_force: 'yes' })} />}
-                {stats.sexual_assault.count > 0 && <NlpBar label="Sexual assault" rank1={stats.sexual_assault.count} rank2={0} total={total} rank1Color="#9F1239" onClickRank1={() => go({ sexual_assault: 'yes' })} />}
-                {stats.movement.count > 0 && <NlpBar label="Movement" rank1={stats.movement.count} rank2={0} total={total} rank1Color="var(--amber)" onClickRank1={() => go({ movement_present: 'yes' })} />}
-                {stats.threats_present?.count > 0 && <NlpBar label="Threats / weapon" rank1={stats.threats_present.count} rank2={0} total={total} rank1Color="#B45309" onClickRank1={() => go({ threats_present: 'yes' })} />}
+                {stats.coercion.count > 0 && <CountBar label="Coercion" count={stats.coercion.count} max={total} color="var(--accent)" onClick={() => go({ coercion_present: 'yes' })} />}
+                {stats.physical_force.count > 0 && <CountBar label="Physical force" count={stats.physical_force.count} max={total} color="#C2410C" onClick={() => go({ physical_force: 'yes' })} />}
+                {stats.sexual_assault.count > 0 && <CountBar label="Sexual assault" count={stats.sexual_assault.count} max={total} color="#9F1239" onClick={() => go({ sexual_assault: 'yes' })} />}
+                {stats.movement.count > 0 && <CountBar label="Movement" count={stats.movement.count} max={total} color="var(--amber)" onClick={() => go({ movement_present: 'yes' })} />}
+                {stats.threats_present?.count > 0 && <CountBar label="Threats / weapon" count={stats.threats_present.count} max={total} color="#B45309" onClick={() => go({ threats_present: 'yes' })} />}
               </>
+            ) : (
+              <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: 0, fontStyle: 'italic' }}>No coded violence data yet.</p>
             )}
           </div>
 
@@ -284,58 +196,6 @@ export default function Analysis() {
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
-
-          {/* Escalation scores */}
-          <div className="card" style={{ padding: '20px 24px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Zap size={15} style={{ color: '#EA580C' }} />
-                <span style={{ fontFamily: 'Lora, serif', fontSize: 15, fontWeight: 500 }}>Escalation Severity (NLP)</span>
-              </div>
-              <span style={{ fontSize: 10.5, color: 'var(--text-3)', fontStyle: 'italic' }}>click box to filter</span>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 18 }}>
-              {[
-                { label: 'Score 5', sub: 'sexual violence / robbery', count: nlp?.escalation.score5 ?? 0, color: '#7F1D1D', min: '5' },
-                { label: 'Score 4', sub: 'threats / physical force',  count: (nlp?.escalation.score4 ?? 0) - (nlp?.escalation.score5 ?? 0), color: '#B91C1C', min: '4' },
-                { label: 'Score 3', sub: 'pressure / manipulation',   count: (nlp?.escalation.score3 ?? 0) - (nlp?.escalation.score4 ?? 0), color: '#EA580C', min: '3' },
-              ].map(({ label, sub, count, color, min }) => (
-                <div
-                  key={label}
-                  onClick={() => count > 0 && go({ nlp_escalation_min: min })}
-                  title={count > 0 ? `Click to view ${count} cases with escalation ≥ ${min}` : undefined}
-                  style={{
-                    textAlign: 'center', padding: '10px 6px', borderRadius: 7,
-                    background: `${color}0f`, border: `1px solid ${color}30`,
-                    cursor: count > 0 ? 'pointer' : 'default',
-                    transition: 'box-shadow 0.15s',
-                  }}
-                  onMouseEnter={(e) => { if (count > 0) (e.currentTarget as HTMLDivElement).style.boxShadow = `0 0 0 2px ${color}`; }}
-                  onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.boxShadow = ''; }}
-                >
-                  <div style={{ fontFamily: 'Lora, serif', fontSize: 22, fontWeight: 500, color }}>{count}</div>
-                  <div style={{ fontSize: 11.5, fontWeight: 600, color, marginTop: 2 }}>{label}</div>
-                  <div style={{ fontSize: 10.5, color: 'var(--text-3)', marginTop: 2 }}>{sub}</div>
-                  {count > 0 && <div style={{ fontSize: 9.5, color, opacity: 0.6, marginTop: 4 }}>view →</div>}
-                </div>
-              ))}
-            </div>
-
-            {/* Escalation patterns */}
-            {stats.nlp_escalation_patterns?.length > 0 && (
-              <>
-                <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-3)', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 10 }}>Named patterns</div>
-                {stats.nlp_escalation_patterns.map(({ pattern, count }) => (
-                  <CountBar
-                    key={pattern}
-                    label={PATTERN_LABELS[pattern] ?? pattern}
-                    count={count} max={maxPat} color="#EA580C"
-                    onClick={() => go({ nlp_pattern: pattern })}
-                  />
-                ))}
-              </>
-            )}
-          </div>
 
           {/* Approach type */}
           <div className="card" style={{ padding: '20px 24px' }}>

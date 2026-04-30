@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Search, SlidersHorizontal, Trash2, FileText, Download, X, BrainCircuit, CheckSquare, Settings } from 'lucide-react';
+import { Search, SlidersHorizontal, Trash2, FileText, Download, X, CheckSquare, Settings, Sparkles } from 'lucide-react';
 import { api } from '../api';
 import type { Report } from '../types';
 
@@ -11,41 +11,27 @@ const STATUS_COLORS: Record<string, { color: string; bg: string; border: string 
   uncoded:     { color: 'var(--text-3)',  bg: 'var(--surface-2)',   border: 'var(--border)' },
 };
 
-function Dot({ val, trueColor = 'var(--accent)', nlpRank }: { val: string; trueColor?: string; nlpRank?: number }) {
+function Dot({ val, trueColor = 'var(--accent)' }: { val: string; trueColor?: string }) {
   if (val === 'yes') return <span title="Coded: yes" style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: trueColor }} />;
   if (val === 'no')  return <span title="Coded: no"  style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', border: `1.5px solid var(--border-mid)` }} />;
-  if (nlpRank === 1) return <span title="NLP Rank 1 — high probability (uncoded)" style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: trueColor, opacity: 0.35, outline: `2px solid ${trueColor}`, outlineOffset: 1 }} />;
-  if (nlpRank === 2) return <span title="NLP Rank 2 — possible (uncoded)"         style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', border: `1.5px dashed ${trueColor}`, opacity: 0.5 }} />;
   return <span style={{ color: 'var(--border-mid)', fontSize: 11 }}>–</span>;
 }
 
-function VehicleDot({ vehiclePresent, mode, nlpRank }: { vehiclePresent: string; mode: string; nlpRank?: number }) {
+function VehicleDot({ vehiclePresent, mode }: { vehiclePresent: string; mode: string }) {
   if (vehiclePresent === 'yes') return <span title={`Vehicle: yes${mode ? ' · ' + mode : ''}`} style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: 'var(--blue)' }} />;
   if (vehiclePresent === 'no')  return <span title="Vehicle: no" style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', border: '1.5px solid var(--border-mid)' }} />;
-  if (nlpRank === 1) return <span title="NLP: vehicle likely (uncoded)"   style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: 'var(--blue)', opacity: 0.35, outline: '2px solid var(--blue)', outlineOffset: 1 }} />;
-  if (nlpRank === 2) return <span title="NLP: vehicle possible (uncoded)" style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', border: '1.5px dashed var(--blue)', opacity: 0.5 }} />;
   return <span style={{ color: 'var(--border-mid)', fontSize: 11 }}>–</span>;
 }
 
-const NLP_FILTER_LABELS: Record<string, (v: string) => string> = {
-  nlp_coercion:       (v) => v === '1' ? 'NLP: Coercion — strong signal' : 'NLP: Coercion — strong + possible',
-  nlp_physical:       (v) => v === '1' ? 'NLP: Physical force — strong'  : 'NLP: Physical force — strong + possible',
-  nlp_sexual:         (v) => v === '1' ? 'NLP: Sexual assault — strong'  : 'NLP: Sexual assault — possible',
-  nlp_movement:       (v) => v === '1' ? 'NLP: Movement — strong'        : 'NLP: Movement — strong + possible',
-  nlp_weapon:         (v) => v === '1' ? 'NLP: Weapon — strong signal'   : 'NLP: Weapon — possible',
-  nlp_escalation_min: (v) => `NLP: Escalation score ≥ ${v}/5`,
-  nlp_pattern:        (v) => `NLP pattern: ${v.replace(/_/g, ' ')}`,
-  sexual_assault:     (v) => `Coded: Sexual assault = ${v}`,
-  threats_present:    (v) => `Coded: Threats = ${v}`,
+const ACTIVE_FILTER_LABELS: Record<string, (v: string) => string> = {
+  sexual_assault:  (v) => `Coded: Sexual assault = ${v}`,
+  threats_present: (v) => `Coded: Threats = ${v}`,
 };
 
 // ─── Column system ────────────────────────────────────────────────────────────
 
 type ColCtx = {
-  nlp: Record<string, any>;
   sc: { color: string; bg: string; border: string };
-  escScore: number;
-  escColor: string;
 };
 
 interface ColumnDef {
@@ -94,13 +80,7 @@ const COLUMN_DEFS: ColumnDef[] = [
 
   // ── Incident Basics ────────────────────────────────────────────────────────
   { id: 'incident_date', group: 'Incident', header: 'Incident Date', label: 'Date', title: 'Incident date', sortKey: 'incident_date',
-    render: (r, ctx) => {
-      const dc: string = ctx.nlp.date_certainty ?? '';
-      return <span style={{ color: dc === 'vague' || dc === 'approximate' ? 'var(--amber)' : dc === 'range' ? 'var(--blue)' : 'var(--text-2)', fontWeight: dc && dc !== 'exact' ? 500 : 400, whiteSpace: 'nowrap' }}
-        title={dc && dc !== 'exact' ? `Date certainty: ${dc}${ctx.nlp.date_certainty_reason ? ' — ' + ctx.nlp.date_certainty_reason : ''}` : undefined}>
-        {r.incident_date || r.date_received?.slice(0, 10) || '—'}
-      </span>;
-    }},
+    render: (r) => <span style={{ color: 'var(--text-2)', whiteSpace: 'nowrap' }}>{r.incident_date || r.date_received?.slice(0, 10) || '—'}</span> },
   { id: 'day_of_week', group: 'Incident', header: 'Day of Week', label: 'Day', title: 'Day of week', sortKey: 'day_of_week',
     render: (r) => <span style={{ color: 'var(--text-3)', fontSize: 11.5, whiteSpace: 'nowrap' }}>{r.day_of_week ? r.day_of_week.slice(0, 3) : '—'}</span> },
   { id: 'incident_time_exact',  group: 'Incident', header: 'Incident Time (Exact)',  label: 'Time',       sortKey: 'incident_time_exact',  render: (r) => txt(r_.r(r,'incident_time_exact')) },
@@ -132,16 +112,16 @@ const COLUMN_DEFS: ColumnDef[] = [
     render: (r) => <Dot val={r_.r(r,'refusal_present') ?? ''} trueColor="var(--blue)" /> },
   { id: 'pressure_after_refusal',   group: 'Encounter', header: 'Pressure After Refusal', label: 'PaR',       align: 'center', sortKey: 'pressure_after_refusal',
     render: (r) => <Dot val={r_.r(r,'pressure_after_refusal') ?? ''} trueColor="var(--amber)" /> },
-  { id: 'coercion_present',         group: 'Encounter', header: 'Coercion Present', label: 'C', title: 'Coercion — filled dot=coded yes; faint=NLP rank 1; dashed=NLP rank 2', align: 'center', sortKey: 'coercion_present',
-    render: (r, ctx) => <Dot val={r.coercion_present} trueColor="var(--accent)" nlpRank={ctx.nlp.coercion_rank} /> },
+  { id: 'coercion_present',         group: 'Encounter', header: 'Coercion Present', label: 'C', title: 'Coercion', align: 'center', sortKey: 'coercion_present',
+    render: (r) => <Dot val={r.coercion_present} trueColor="var(--accent)" /> },
   { id: 'threats_present',          group: 'Encounter', header: 'Threats Present',       label: 'Threats',    align: 'center', sortKey: 'threats_present',
     render: (r) => <Dot val={r_.r(r,'threats_present') ?? ''} trueColor="var(--amber)" /> },
   { id: 'verbal_abuse',             group: 'Encounter', header: 'Verbal Abuse',          label: 'VA',         align: 'center', sortKey: 'verbal_abuse',
     render: (r) => <Dot val={r_.r(r,'verbal_abuse') ?? ''} trueColor="var(--amber)" /> },
   { id: 'physical_force',           group: 'Encounter', header: 'Physical Force',        label: 'F', title: 'Physical force', align: 'center', sortKey: 'physical_force',
-    render: (r, ctx) => <Dot val={r.physical_force} trueColor="var(--accent)" nlpRank={ctx.nlp.physical_rank} /> },
+    render: (r) => <Dot val={r.physical_force} trueColor="var(--accent)" /> },
   { id: 'sexual_assault',           group: 'Encounter', header: 'Sexual Assault',        label: 'SA',         align: 'center', sortKey: 'sexual_assault',
-    render: (r, ctx) => <Dot val={r.sexual_assault} trueColor="var(--accent)" nlpRank={ctx.nlp.sexual_rank} /> },
+    render: (r) => <Dot val={r.sexual_assault} trueColor="var(--accent)" /> },
   { id: 'robbery_theft',            group: 'Encounter', header: 'Robbery/Theft',         label: 'Rob',        align: 'center', sortKey: 'robbery_theft',
     render: (r) => <Dot val={r_.r(r,'robbery_theft') ?? ''} trueColor="var(--amber)" /> },
   { id: 'stealthing',               group: 'Encounter', header: 'Stealthing',            label: 'Stlth',      align: 'center', sortKey: 'stealthing',
@@ -159,7 +139,7 @@ const COLUMN_DEFS: ColumnDef[] = [
 
   // ── Mobility ───────────────────────────────────────────────────────────────
   { id: 'movement_present',            group: 'Mobility', header: 'Movement Present',         label: 'M', title: 'Movement present', align: 'center', sortKey: 'movement_present',
-    render: (r, ctx) => <Dot val={r.movement_present} trueColor="var(--amber)" nlpRank={ctx.nlp.movement_rank} /> },
+    render: (r) => <Dot val={r.movement_present} trueColor="var(--amber)" /> },
   { id: 'movement_attempted',          group: 'Mobility', header: 'Movement Attempted',        label: 'M Atmp',  align: 'center', sortKey: 'movement_attempted',
     render: (r) => <Dot val={r_.r(r,'movement_attempted') ?? ''} trueColor="var(--amber)" /> },
   { id: 'movement_completed',          group: 'Mobility', header: 'Movement Completed',        label: 'M Comp',  align: 'center', sortKey: 'movement_completed',
@@ -186,14 +166,14 @@ const COLUMN_DEFS: ColumnDef[] = [
 
   // ── Suspect & Vehicle ──────────────────────────────────────────────────────
   { id: 'vehicle', group: 'Suspect/Vehicle', header: 'Vehicle Description', label: 'Vehicle', title: 'Vehicle details', sortKey: 'vehicle',
-    render: (r, ctx) => {
+    render: (r) => {
       const vl = [r.vehicle_colour, r.vehicle_make, r.vehicle_model].filter(Boolean).join(' ');
       return vl ? <span style={{ fontSize: 11.5, color: 'var(--blue)' }}>{vl}</span>
         : r.vehicle_present === 'no' ? <span style={{ fontSize: 11, color: 'var(--text-3)' }}>foot</span>
-        : <VehicleDot vehiclePresent={r.vehicle_present} mode={r.mode_of_movement} nlpRank={ctx.nlp.movement_rank} />;
+        : <VehicleDot vehiclePresent={r.vehicle_present} mode={r.mode_of_movement} />;
     }},
   { id: 'vehicle_present',      group: 'Suspect/Vehicle', header: 'Vehicle Present',       label: 'Veh',        align: 'center', sortKey: 'vehicle_present',
-    render: (r, ctx) => <VehicleDot vehiclePresent={r.vehicle_present} mode={r.mode_of_movement} nlpRank={ctx.nlp.movement_rank} /> },
+    render: (r) => <VehicleDot vehiclePresent={r.vehicle_present} mode={r.mode_of_movement} /> },
   { id: 'vehicle_make',         group: 'Suspect/Vehicle', header: 'Vehicle Make',          label: 'Veh Make',   sortKey: 'vehicle_make',   render: (r) => txt(r.vehicle_make) },
   { id: 'vehicle_model',        group: 'Suspect/Vehicle', header: 'Vehicle Model',         label: 'Veh Model',  sortKey: 'vehicle_model',  render: (r) => txt(r.vehicle_model) },
   { id: 'vehicle_colour',       group: 'Suspect/Vehicle', header: 'Vehicle Colour',        label: 'Colour',     sortKey: 'vehicle_colour', render: (r) => txt(r.vehicle_colour) },
@@ -217,25 +197,7 @@ const COLUMN_DEFS: ColumnDef[] = [
   { id: 'key_quotes',             group: 'Narrative', header: 'Key Quotes',             label: 'Key Quotes',  sortKey: 'key_quotes',             render: (r) => txt(r_.r(r,'key_quotes'), 180) },
   { id: 'coder_notes',            group: 'Narrative', header: 'Coder Notes',            label: 'Coder Notes', sortKey: 'coder_notes',            render: (r) => txt(r_.r(r,'coder_notes'), 180) },
   { id: 'uncertainty_notes',      group: 'Narrative', header: 'Uncertainty Notes',      label: 'Uncertainty', sortKey: 'uncertainty_notes',      render: (r) => txt(r_.r(r,'uncertainty_notes'), 180) },
-  { id: 'early_escalation_score', group: 'Narrative', header: 'Early Escalation Score', label: 'Esc Score',   align: 'center', sortKey: 'early_escalation_score', render: (r) => txt(r_.r(r,'early_escalation_score')) },
-  { id: 'mobility_richness_score', group: 'Narrative', header: 'Mobility Richness Score', label: 'Mob Score', align: 'center', sortKey: 'mobility_richness_score', render: (r) => txt(r_.r(r,'mobility_richness_score')) },
   { id: 'escalation_point',       group: 'Narrative', header: 'Escalation Point',       label: 'Esc Point',   sortKey: 'escalation_point',       render: (r) => txt(r_.r(r,'escalation_point'), 150) },
-
-  // ── NLP signals ───────────────────────────────────────────────────────────
-  { id: 'nlp_escalation', group: 'NLP', header: 'NLP Escalation Score', label: 'Esc', title: 'Escalation score (NLP)', align: 'center', sortKey: 'nlp_escalation',
-    render: (_r, ctx) => ctx.escScore >= 2
-      ? <span title={`Escalation score ${ctx.escScore}/5: ${ctx.nlp.escalation?.arc ?? ''}`} style={{ fontSize: 11.5, fontWeight: 700, color: ctx.escColor, background: `${ctx.escColor}15`, border: `1px solid ${ctx.escColor}40`, padding: '1px 5px', borderRadius: 4 }}>{ctx.escScore}</span>
-      : <span style={{ color: 'var(--border-mid)', fontSize: 11 }}>–</span> },
-  { id: 'nlp_coercion_rank',  group: 'NLP', header: 'NLP Coercion Rank',  label: 'NLP C',   align: 'center',
-    render: (_r, ctx) => ctx.nlp.coercion_rank  ? <span style={{ fontSize: 11 }}>R{ctx.nlp.coercion_rank}</span>  : <span style={{ color: 'var(--border-mid)', fontSize: 11 }}>–</span> },
-  { id: 'nlp_physical_rank',  group: 'NLP', header: 'NLP Physical Rank',  label: 'NLP F',   align: 'center',
-    render: (_r, ctx) => ctx.nlp.physical_rank  ? <span style={{ fontSize: 11 }}>R{ctx.nlp.physical_rank}</span>  : <span style={{ color: 'var(--border-mid)', fontSize: 11 }}>–</span> },
-  { id: 'nlp_sexual_rank',    group: 'NLP', header: 'NLP Sexual Rank',    label: 'NLP SA',  align: 'center',
-    render: (_r, ctx) => ctx.nlp.sexual_rank    ? <span style={{ fontSize: 11 }}>R{ctx.nlp.sexual_rank}</span>    : <span style={{ color: 'var(--border-mid)', fontSize: 11 }}>–</span> },
-  { id: 'nlp_movement_rank',  group: 'NLP', header: 'NLP Movement Rank',  label: 'NLP M',   align: 'center',
-    render: (_r, ctx) => ctx.nlp.movement_rank  ? <span style={{ fontSize: 11 }}>R{ctx.nlp.movement_rank}</span>  : <span style={{ color: 'var(--border-mid)', fontSize: 11 }}>–</span> },
-  { id: 'nlp_weapon_rank',    group: 'NLP', header: 'NLP Weapon Rank',    label: 'NLP Wpn', align: 'center',
-    render: (_r, ctx) => ctx.nlp.weapon_rank    ? <span style={{ fontSize: 11 }}>R{ctx.nlp.weapon_rank}</span>    : <span style={{ color: 'var(--border-mid)', fontSize: 11 }}>–</span> },
 
   // ── GIS ───────────────────────────────────────────────────────────────────
   { id: 'lat_initial',     group: 'GIS', header: 'Lat — Initial Contact',  label: 'Lat (Contact)',  align: 'right', sortKey: 'lat_initial',
@@ -266,7 +228,7 @@ const COL_GROUPS = Array.from(new Set(COLUMN_DEFS.map(c => c.group)));
 const DEFAULT_VISIBLE: string[] = [
   'report_id', 'incident_date', 'day_of_week', 'city', 'raw_narrative',
   'vehicle', 'coercion_present', 'movement_present', 'physical_force',
-  'sexual_assault', 'nlp_escalation', 'coding_status',
+  'sexual_assault', 'coding_status',
 ];
 
 const LS_VISIBLE = 'caselist_visible_cols_v2';
@@ -285,8 +247,6 @@ export default function CaseList() {
   const [loading, setLoading] = useState(true);
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
-  const [batchAnalyzing, setBatchAnalyzing] = useState(false);
-  const [batchResult, setBatchResult] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -300,15 +260,12 @@ export default function CaseList() {
   const [filterCity,       setFilterCity]       = useState(() => searchParams.get('city') || '');
   const [filterDateFrom,   setFilterDateFrom]   = useState(() => searchParams.get('date_from') || '');
   const [filterDateTo,     setFilterDateTo]     = useState(() => searchParams.get('date_to') || '');
-  const [filterNlpCoercion,   setFilterNlpCoercion]   = useState(() => searchParams.get('nlp_coercion') || '');
-  const [filterNlpPhysical,   setFilterNlpPhysical]   = useState(() => searchParams.get('nlp_physical') || '');
-  const [filterNlpSexual,     setFilterNlpSexual]     = useState(() => searchParams.get('nlp_sexual') || '');
-  const [filterNlpMovement,   setFilterNlpMovement]   = useState(() => searchParams.get('nlp_movement') || '');
-  const [filterNlpWeapon,     setFilterNlpWeapon]     = useState(() => searchParams.get('nlp_weapon') || '');
-  const [filterNlpEscalation, setFilterNlpEscalation] = useState(() => searchParams.get('nlp_escalation_min') || '');
-  const [filterNlpPattern,    setFilterNlpPattern]    = useState(() => searchParams.get('nlp_pattern') || '');
   const [filterSexualAssault, setFilterSexualAssault] = useState(() => searchParams.get('sexual_assault') || '');
   const [filterThreats,       setFilterThreats]       = useState(() => searchParams.get('threats_present') || '');
+
+  // Batch NLP
+  const [batchAnalyzing, setBatchAnalyzing] = useState(false);
+  const [batchResult, setBatchResult]       = useState<string | null>(null);
 
   // Column chooser state
   const [visibleCols, setVisibleCols] = useState<string[]>(() => lsGet(LS_VISIBLE, DEFAULT_VISIBLE));
@@ -329,14 +286,7 @@ export default function CaseList() {
     return [...ordered, ...extra];
   }, [visibleCols, colOrder]);
 
-  const activeNlpFilters: { key: string; value: string; clear: () => void }[] = [
-    { key: 'nlp_coercion',    value: filterNlpCoercion,   clear: () => setFilterNlpCoercion('') },
-    { key: 'nlp_physical',    value: filterNlpPhysical,   clear: () => setFilterNlpPhysical('') },
-    { key: 'nlp_sexual',      value: filterNlpSexual,     clear: () => setFilterNlpSexual('') },
-    { key: 'nlp_movement',    value: filterNlpMovement,   clear: () => setFilterNlpMovement('') },
-    { key: 'nlp_weapon',      value: filterNlpWeapon,     clear: () => setFilterNlpWeapon('') },
-    { key: 'nlp_escalation_min', value: filterNlpEscalation, clear: () => setFilterNlpEscalation('') },
-    { key: 'nlp_pattern',     value: filterNlpPattern,    clear: () => setFilterNlpPattern('') },
+  const activeFilters: { key: string; value: string; clear: () => void }[] = [
     { key: 'sexual_assault',  value: filterSexualAssault, clear: () => setFilterSexualAssault('') },
     { key: 'threats_present', value: filterThreats,       clear: () => setFilterThreats('') },
   ].filter(f => f.value);
@@ -354,13 +304,6 @@ export default function CaseList() {
     if (filterCity)          params.city             = filterCity;
     if (filterDateFrom)      params.date_from        = filterDateFrom;
     if (filterDateTo)        params.date_to          = filterDateTo;
-    if (filterNlpCoercion)   params.nlp_coercion     = filterNlpCoercion;
-    if (filterNlpPhysical)   params.nlp_physical     = filterNlpPhysical;
-    if (filterNlpSexual)     params.nlp_sexual       = filterNlpSexual;
-    if (filterNlpMovement)   params.nlp_movement     = filterNlpMovement;
-    if (filterNlpWeapon)     params.nlp_weapon       = filterNlpWeapon;
-    if (filterNlpEscalation) params.nlp_escalation_min = filterNlpEscalation;
-    if (filterNlpPattern)    params.nlp_pattern      = filterNlpPattern;
     if (filterSexualAssault) params.sexual_assault   = filterSexualAssault;
     if (filterThreats)       params.threats_present  = filterThreats;
     try {
@@ -376,25 +319,9 @@ export default function CaseList() {
   useEffect(() => { load(); }, [
     search, filterStatus, filterCoercion, filterMovement, filterPhysical,
     filterVehicle, filterCity, filterDateFrom, filterDateTo,
-    filterNlpCoercion, filterNlpPhysical, filterNlpSexual, filterNlpMovement,
-    filterNlpWeapon, filterNlpEscalation, filterNlpPattern,
     filterSexualAssault, filterThreats,
   ]);
 
-  const handleBatchAnalyze = async () => {
-    setBatchAnalyzing(true); setBatchResult(null);
-    try {
-      const result = await api.batchAnalyze();
-      if (result.nlp_available === false) setBatchResult('NLP unavailable — install spaCy model (en_core_web_sm)');
-      else if (result.processed === 0)    setBatchResult('All cases already analyzed');
-      else                                setBatchResult(`NLP run on ${result.processed} case${result.processed !== 1 ? 's' : ''}`);
-      load();
-    } catch (e: any) {
-      setBatchResult(e?.message || 'Batch NLP failed');
-    } finally {
-      setBatchAnalyzing(false);
-    }
-  };
 
   const handleSort = (key: string) => {
     if (sortColumn === key) setSortDirection(d => d === 'asc' ? 'desc' : 'asc');
@@ -408,7 +335,6 @@ export default function CaseList() {
     return [...reports].sort((a, b) => {
       const get = (r: Report): string | number => {
         if (sortColumn === 'vehicle')        return [r.vehicle_colour, r.vehicle_make, r.vehicle_model].filter(Boolean).join(' ');
-        if (sortColumn === 'nlp_escalation') return (r.ai_suggestions as any)?.nlp?.escalation?.score ?? -1;
         const raw = (r as any)[sortColumn];
         // yes/no fields — sort yes > no > unset
         if (raw === 'yes' || raw === 'no' || raw === 'unclear') return yesNoVal(raw);
@@ -479,93 +405,120 @@ export default function CaseList() {
 
   const resetCols = () => { setVisibleCols(DEFAULT_VISIBLE); setColOrder(DEFAULT_VISIBLE); };
 
+  const handleBatchAnalyze = async () => {
+    setBatchAnalyzing(true);
+    setBatchResult(null);
+    try {
+      const res = await api.batchAnalyze();
+      if (!res.nlp_available) {
+        setBatchResult('NLP not available — spaCy model not loaded on server');
+      } else {
+        setBatchResult(`NLP complete — ${res.processed} case${res.processed !== 1 ? 's' : ''} processed`);
+        load();
+      }
+    } catch {
+      setBatchResult('NLP batch failed — check server logs');
+    } finally {
+      setBatchAnalyzing(false);
+    }
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg)' }}>
 
       {/* ── Filter bar ── */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 10,
-        padding: '10px 20px',
-        background: 'var(--surface)',
-        borderBottom: '1px solid var(--border)',
-        flexShrink: 0, flexWrap: 'wrap',
-        boxShadow: 'var(--shadow-sm)',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 220, padding: '5px 12px', border: '1px solid var(--border)', borderRadius: 6, background: 'var(--bg)' }}>
-          <Search size={14} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
+      <div style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', flexShrink: 0, boxShadow: 'var(--shadow-sm)' }}>
+
+        {/* Row 1: Search / dates  ←→  action buttons */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 16px' }}>
+
+          {/* Search — grows to fill leftover space */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 12px', border: '1px solid var(--border)', borderRadius: 6, background: 'var(--bg)', flex: 1, minWidth: 0 }}>
+            <Search size={14} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
+            <input
+              style={{ flex: 1, minWidth: 0, border: 'none', background: 'transparent', fontSize: 13, color: 'var(--text-1)', outline: 'none', fontFamily: 'DM Sans, sans-serif' }}
+              placeholder="Search narratives, suspects, vehicles…"
+              value={search} onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+
+          {/* City */}
           <input
-            style={{ flex: 1, border: 'none', background: 'transparent', fontSize: 13, color: 'var(--text-1)', outline: 'none', fontFamily: 'DM Sans, sans-serif' }}
-            placeholder="Search narratives, suspects, vehicles, plates…"
-            value={search} onChange={(e) => setSearch(e.target.value)}
+            style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface)', fontSize: 13, fontFamily: 'DM Sans, sans-serif', color: 'var(--text-1)', outline: 'none', width: 80, flexShrink: 0 }}
+            placeholder="City…" value={filterCity} onChange={(e) => setFilterCity(e.target.value)}
           />
+
+          {/* Date range — fixed narrow width */}
+          <input type="date" title="Date from"
+            style={{ padding: '5px 6px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface)', fontSize: 11, fontFamily: 'DM Sans, sans-serif', color: 'var(--text-1)', outline: 'none', width: 120, flexShrink: 0 }}
+            value={filterDateFrom} onChange={(e) => setFilterDateFrom(e.target.value)}
+          />
+          <span style={{ color: 'var(--text-3)', fontSize: 12, flexShrink: 0 }}>–</span>
+          <input type="date" title="Date to"
+            style={{ padding: '5px 6px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface)', fontSize: 11, fontFamily: 'DM Sans, sans-serif', color: 'var(--text-1)', outline: 'none', width: 120, flexShrink: 0 }}
+            value={filterDateTo} onChange={(e) => setFilterDateTo(e.target.value)}
+          />
+
+          <span style={{ fontSize: 12, color: 'var(--text-3)', whiteSpace: 'nowrap', flexShrink: 0 }}>
+            {reports.length} record{reports.length !== 1 ? 's' : ''}
+          </span>
+
+          {/* Separator */}
+          <div style={{ width: 1, height: 20, background: 'var(--border)', flexShrink: 0 }} />
+
+          {/* Action buttons — all flexShrink: 0 so they never get squeezed */}
+          <button className="btn-ghost" onClick={() => setShowChooser(true)} title="Configure columns"
+            style={{ fontSize: 12.5, flexShrink: 0, color: showChooser ? 'var(--blue)' : undefined }}>
+            <Settings size={13} style={{ color: 'var(--blue)' }} /> Columns
+          </button>
+          <button className="btn-ghost" onClick={() => api.exportCsv()} style={{ fontSize: 12.5, flexShrink: 0 }}>
+            <Download size={13} /> CSV
+          </button>
+          <button className="btn-ghost" onClick={() => api.exportGeoJson()} style={{ fontSize: 12.5, flexShrink: 0 }}>
+            <Download size={13} /> GeoJSON
+          </button>
+          <button className="btn-ghost" onClick={handleBatchAnalyze} disabled={batchAnalyzing} style={{ fontSize: 12.5, flexShrink: 0 }}>
+            <Sparkles size={13} style={{ color: 'var(--amber)' }} />
+            {batchAnalyzing ? 'Processing…' : 'NLP All'}
+          </button>
+          {reports.length > 0 && <>
+            <div style={{ width: 1, height: 20, background: 'var(--border)', flexShrink: 0 }} />
+            <button className="btn-ghost" onClick={handleDeleteAll}
+              style={{ fontSize: 12.5, flexShrink: 0, color: 'var(--critical-red, #A51F1F)', borderColor: 'var(--critical-red-border, #F5C6C6)' }}
+              title="Delete all currently visible reports">
+              <Trash2 size={13} /> Delete All
+            </button>
+          </>}
         </div>
 
-        <SlidersHorizontal size={14} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
+        {/* Row 2: Dropdown filters */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 16px 9px', borderTop: '1px solid var(--border)' }}>
+          <SlidersHorizontal size={13} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
+          {[
+            { value: filterStatus,   set: setFilterStatus,   options: [['','All statuses'],['uncoded','Uncoded'],['in_progress','In Progress'],['coded','Coded'],['reviewed','Reviewed']] },
+            { value: filterCoercion, set: setFilterCoercion, options: [['','Coercion: any'],['yes','Coercion: yes'],['no','Coercion: no']] },
+            { value: filterMovement, set: setFilterMovement, options: [['','Movement: any'],['yes','Movement: yes'],['no','Movement: no']] },
+            { value: filterPhysical, set: setFilterPhysical, options: [['','Physical force: any'],['yes','Force: yes'],['no','Force: no']] },
+            { value: filterVehicle,  set: setFilterVehicle,  options: [['','Vehicle: any'],['yes','Vehicle: yes'],['no','Vehicle: no']] },
+          ].map((f, i) => (
+            <select key={i} value={f.value} onChange={(e) => f.set(e.target.value)}
+              style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid var(--border)', background: f.value ? 'var(--accent-pale)' : 'var(--surface)', fontSize: 13, fontFamily: 'DM Sans, sans-serif', color: f.value ? 'var(--accent)' : 'var(--text-1)', outline: 'none', cursor: 'pointer' }}>
+              {f.options.map(([val, label]) => <option key={val} value={val}>{label}</option>)}
+            </select>
+          ))}
+          {batchResult && (
+            <span style={{ fontSize: 11.5, color: 'var(--text-3)', fontStyle: 'italic', marginLeft: 8 }}>{batchResult}</span>
+          )}
+        </div>
 
-        <input
-          style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface)', fontSize: 13, fontFamily: 'DM Sans, sans-serif', color: 'var(--text-1)', outline: 'none', width: 110 }}
-          placeholder="City…" value={filterCity} onChange={(e) => setFilterCity(e.target.value)}
-        />
-
-        <input type="date" title="Date from"
-          style={{ padding: '5px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface)', fontSize: 12, fontFamily: 'DM Sans, sans-serif', color: 'var(--text-1)', outline: 'none' }}
-          value={filterDateFrom} onChange={(e) => setFilterDateFrom(e.target.value)}
-        />
-        <span style={{ color: 'var(--text-3)', fontSize: 12 }}>–</span>
-        <input type="date" title="Date to"
-          style={{ padding: '5px 8px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface)', fontSize: 12, fontFamily: 'DM Sans, sans-serif', color: 'var(--text-1)', outline: 'none' }}
-          value={filterDateTo} onChange={(e) => setFilterDateTo(e.target.value)}
-        />
-
-        {[
-          { value: filterStatus,   set: setFilterStatus,   options: [['','All statuses'],['uncoded','Uncoded'],['in_progress','In Progress'],['coded','Coded'],['reviewed','Reviewed']] },
-          { value: filterCoercion, set: setFilterCoercion, options: [['','Coercion: any'],['yes','Coercion: yes'],['no','Coercion: no']] },
-          { value: filterMovement, set: setFilterMovement, options: [['','Movement: any'],['yes','Movement: yes'],['no','Movement: no']] },
-          { value: filterPhysical, set: setFilterPhysical, options: [['','Physical force: any'],['yes','Force: yes'],['no','Force: no']] },
-          { value: filterVehicle,  set: setFilterVehicle,  options: [['','Vehicle: any'],['yes','Vehicle: yes'],['no','Vehicle: no']] },
-        ].map((f, i) => (
-          <select key={i} value={f.value} onChange={(e) => f.set(e.target.value)}
-            style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface)', fontSize: 13, fontFamily: 'DM Sans, sans-serif', color: 'var(--text-1)', outline: 'none', cursor: 'pointer' }}>
-            {f.options.map(([val, label]) => <option key={val} value={val}>{label}</option>)}
-          </select>
-        ))}
-
-        <span style={{ fontSize: 12, color: 'var(--text-3)', marginLeft: 'auto', whiteSpace: 'nowrap' }}>
-          {reports.length} record{reports.length !== 1 ? 's' : ''}
-        </span>
-
-        {/* Gear icon — column chooser */}
-        <button
-          className="btn-ghost"
-          onClick={() => setShowChooser(true)}
-          title="Configure columns"
-          style={{ fontSize: 12.5, color: showChooser ? 'var(--blue)' : undefined }}
-        >
-          <Settings size={13} style={{ color: 'var(--blue)' }} />
-          Columns
-        </button>
-
-        <button className="btn-ghost" onClick={handleBatchAnalyze} disabled={batchAnalyzing} title="Run NLP analysis on all cases that don't have it yet" style={{ fontSize: 12.5 }}>
-          <BrainCircuit size={13} style={{ color: 'var(--blue)' }} />
-          {batchAnalyzing ? 'Running NLP…' : 'NLP All'}
-        </button>
-        {batchResult && <span style={{ fontSize: 11.5, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{batchResult}</span>}
-
-        <button className="btn-ghost" onClick={() => api.exportCsv()} style={{ fontSize: 12.5 }}><Download size={13} /> CSV</button>
-        <button className="btn-ghost" onClick={() => api.exportGeoJson()} style={{ fontSize: 12.5 }}><Download size={13} /> GeoJSON</button>
-        {reports.length > 0 && (
-          <button className="btn-ghost" onClick={handleDeleteAll} style={{ fontSize: 12.5, color: 'var(--critical-red, #A51F1F)', borderColor: 'var(--critical-red-border, #F5C6C6)' }} title="Delete all currently visible reports">
-            <Trash2 size={13} /> Delete All
-          </button>
-        )}
       </div>
 
-      {/* Active NLP filter chips */}
-      {activeNlpFilters.length > 0 && (
+      {/* Active filter chips */}
+      {activeFilters.length > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '6px 20px', background: 'var(--amber-pale)', borderBottom: '1px solid var(--amber-border)', flexShrink: 0 }}>
           <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--amber)', letterSpacing: '0.04em', textTransform: 'uppercase', flexShrink: 0 }}>Active filters:</span>
-          {activeNlpFilters.map(({ key, value, clear }) => {
-            const label = NLP_FILTER_LABELS[key]?.(value) ?? `${key}: ${value}`;
+          {activeFilters.map(({ key, value, clear }) => {
+            const label = ACTIVE_FILTER_LABELS[key]?.(value) ?? `${key}: ${value}`;
             return (
               <span key={key} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '2px 8px', borderRadius: 20, fontSize: 11.5, fontWeight: 500, background: 'var(--amber-pale)', color: 'var(--amber)', border: '1px solid var(--amber-border)' }}>
                 {label}
@@ -573,7 +526,7 @@ export default function CaseList() {
               </span>
             );
           })}
-          <button onClick={() => { setFilterNlpCoercion(''); setFilterNlpPhysical(''); setFilterNlpSexual(''); setFilterNlpMovement(''); setFilterNlpWeapon(''); setFilterNlpEscalation(''); setFilterNlpPattern(''); setFilterSexualAssault(''); setFilterThreats(''); }}
+          <button onClick={() => { setFilterSexualAssault(''); setFilterThreats(''); }}
             style={{ fontSize: 11, color: 'var(--amber)', background: 'none', border: 'none', cursor: 'pointer', marginLeft: 'auto', textDecoration: 'underline' }}>
             Clear all
           </button>
@@ -663,10 +616,7 @@ export default function CaseList() {
             <tbody>
               {sortedReports.map((r, i) => {
                 const sc    = STATUS_COLORS[r.coding_status] || STATUS_COLORS.uncoded;
-                const nlp   = (r.ai_suggestions as any)?.nlp ?? {};
-                const escScore: number = nlp.escalation?.score ?? 0;
-                const escColor = escScore >= 5 ? '#7F1D1D' : escScore >= 4 ? '#B91C1C' : escScore >= 3 ? '#EA580C' : '#D97706';
-                const ctx: ColCtx = { nlp, sc, escScore, escColor };
+                const ctx: ColCtx = { sc };
                 return (
                   <tr
                     key={r.report_id}

@@ -2,66 +2,8 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, GitCompare, AlertTriangle, Car, User, MapPin, Clock } from 'lucide-react';
 import { api } from '../api';
-import type { SimilarCandidate, Report, DomainScore } from '../types';
+import type { SimilarCandidate, Report } from '../types';
 
-const DOMAIN_ORDER_SP = ['control', 'sexual', 'style', 'escape', 'target'];
-const DOMAIN_COLORS_SP: Record<string, string> = {
-  control: '#9B1D1D', sexual: '#7C2D12', style: '#B45309', escape: '#166534', target: '#4338CA',
-};
-
-// Score types where the number is not a real similarity signal
-const SUPPRESSED_SCORE_TYPES = new Set(['baseline', 'joint_absence']);
-
-function DomainMiniStrip({ domainScores }: { domainScores?: Record<string, DomainScore> }) {
-  if (!domainScores) return null;
-  return (
-    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 6, marginBottom: 2 }}>
-      {DOMAIN_ORDER_SP.map((dk) => {
-        const d = domainScores[dk];
-        if (!d) return null;
-        const pct = Math.round(d.score * 100);
-        const color = DOMAIN_COLORS_SP[dk];
-        const scoreType = d.score_type ?? (d.has_real_coded_values ? 'positive_match' : 'baseline');
-        const suppressed = SUPPRESSED_SCORE_TYPES.has(scoreType);
-
-        if (suppressed) {
-          // Show the domain label but replace the bar + number with a muted "no basis" indicator
-          const suppressLabel = scoreType === 'joint_absence' ? 'no match basis' : 'no coded basis';
-          return (
-            <div key={dk} style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 62 }}
-              title={d.score_explanation ?? `${d.label}: score not meaningful — ${suppressLabel}`}>
-              <span style={{ fontSize: 9, color: 'var(--text-3)', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-                {d.label.split(' ')[0]}
-              </span>
-              {/* Flat empty bar — no fill */}
-              <div style={{ height: 3, borderRadius: 2, background: 'var(--border)', overflow: 'hidden' }}>
-                <div style={{ width: 0, height: '100%' }} />
-              </div>
-              <span style={{
-                fontSize: 9, color: '#9CA3AF', fontWeight: 500, fontStyle: 'italic',
-                letterSpacing: '0.01em',
-              }}>
-                {suppressLabel}
-              </span>
-            </div>
-          );
-        }
-
-        return (
-          <div key={dk} style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 62 }}>
-            <span style={{ fontSize: 9, color: 'var(--text-3)', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-              {d.label.split(' ')[0]}
-            </span>
-            <div style={{ height: 3, borderRadius: 2, background: 'var(--border)', overflow: 'hidden' }}>
-              <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: 2 }} />
-            </div>
-            <span style={{ fontSize: 9.5, color: pct > 0 ? color : 'var(--text-3)', fontWeight: 600 }}>{pct}%</span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
 
 const LINKAGE_CONFIG: Record<string, { label: string; color: string; bg: string; border: string }> = {
   possible_link:  { label: 'Possible link',  color: '#065F46', bg: '#D1FAE5', border: '#6EE7B7' },
@@ -73,53 +15,6 @@ const FLAG_ICONS: Record<string, typeof Car> = {
   plate: Car, vehicle: Car, suspect: User, location: MapPin, temporal: Clock,
 };
 
-const DIM_ORDER = ['suspect','vehicle','encounter','violence','mobility','location_type','spatial','temporal'];
-const DIM_COLORS: Record<string, string> = {
-  suspect: '#9B1D1D', vehicle: '#3730A3', encounter: '#B45309',
-  violence: '#7C2D12', mobility: '#166534', location_type: '#4338CA',
-  spatial: '#0F766E', temporal: '#6B7280',
-};
-
-function ScoreRing({ score }: { score: number }) {
-  const r = 22, circ = 2 * Math.PI * r;
-  const pct = score / 100;
-  const color = score >= 60 ? '#9B1D1D' : score >= 35 ? '#B45309' : '#6B7280';
-  return (
-    <div style={{ position: 'relative', width: 56, height: 56, flexShrink: 0 }}>
-      <svg width="56" height="56" style={{ transform: 'rotate(-90deg)' }}>
-        <circle cx="28" cy="28" r={r} fill="none" stroke="var(--border)" strokeWidth="4" />
-        <circle cx="28" cy="28" r={r} fill="none" stroke={color} strokeWidth="4"
-          strokeDasharray={`${pct * circ} ${circ}`} strokeLinecap="round" />
-      </svg>
-      <div style={{
-        position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center',
-      }}>
-        <span style={{ fontSize: 14, fontWeight: 700, color, lineHeight: 1 }}>{Math.round(score)}</span>
-      </div>
-    </div>
-  );
-}
-
-function DimBar({ dim, dimKey }: { dim: any; dimKey: string }) {
-  const pct = Math.round(dim.score * 100);
-  const color = DIM_COLORS[dimKey] || '#6B7280';
-  if (pct === 0) return null;
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontSize: 10.5, color: 'var(--text-2)', fontWeight: 500, letterSpacing: '0.02em' }}>
-          {dim.label}
-        </span>
-        <span style={{ fontSize: 10, color, fontWeight: 600 }}>{pct}%</span>
-      </div>
-      <div style={{ height: 4, borderRadius: 2, background: 'var(--border)', overflow: 'hidden' }}>
-        <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: 2, transition: 'width 0.4s' }} />
-      </div>
-      <span style={{ fontSize: 10, color: 'var(--text-3)', lineHeight: 1.3 }}>{dim.reason}</span>
-    </div>
-  );
-}
 
 function Dot({ val, color = 'var(--accent)' }: { val: string; color?: string }) {
   if (val === 'yes') return (
@@ -137,20 +32,19 @@ export default function SimilarCasesPage() {
   const [candidates, setCandidates] = useState<SimilarCandidate[]>([]);
   const [target, setTarget] = useState<Report | null>(null);
   const [loading, setLoading] = useState(true);
-  const [minScore, setMinScore] = useState(10);
 
   useEffect(() => {
     if (!reportId) return;
     setLoading(true);
     Promise.all([
       api.getReport(reportId),
-      api.getSimilar(reportId, minScore),
+      api.getSimilar(reportId, 0),
     ]).then(([r, c]) => {
       setTarget(r);
       setCandidates(c);
       setLoading(false);
     });
-  }, [reportId, minScore]);
+  }, [reportId]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg)' }}>
@@ -182,39 +76,11 @@ export default function SimilarCasesPage() {
           )}
         </div>
 
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <label style={{ fontSize: 12, color: 'var(--text-3)' }}>Min score:</label>
-          <select
-            value={minScore}
-            onChange={(e) => setMinScore(Number(e.target.value))}
-            style={{
-              padding: '4px 8px', borderRadius: 5, border: '1px solid var(--border)',
-              background: 'var(--surface)', fontSize: 12, color: 'var(--text-1)', outline: 'none',
-            }}
-          >
-            <option value={5}>5 — very broad</option>
-            <option value={10}>10 — broad</option>
-            <option value={20}>20 — moderate</option>
-            <option value={35}>35 — strong</option>
-            <option value={50}>50 — very strong</option>
-          </select>
+        <div style={{ marginLeft: 'auto' }}>
           <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
             {candidates.length} candidate{candidates.length !== 1 ? 's' : ''}
           </span>
         </div>
-      </div>
-
-      {/* Disclaimer */}
-      <div style={{
-        padding: '6px 20px',
-        background: '#FFFBEB',
-        borderBottom: '1px solid #FDE68A',
-        fontSize: 11.5, color: '#92400E',
-        flexShrink: 0,
-        display: 'flex', alignItems: 'center', gap: 8,
-      }}>
-        <AlertTriangle size={13} />
-        Decision support only — scores are based on coded fields and reflect completeness of coding. Always apply analyst judgement.
       </div>
 
       {/* Body */}
@@ -225,7 +91,7 @@ export default function SimilarCasesPage() {
           </div>
         ) : candidates.length === 0 ? (
           <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-3)', fontSize: 13 }}>
-            No cases meet the minimum score threshold. Try lowering it.
+            No similar cases found.
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -254,9 +120,6 @@ export default function SimilarCasesPage() {
                     e.currentTarget.style.borderColor = 'var(--border)';
                   }}
                 >
-                  {/* Score ring */}
-                  <ScoreRing score={c.similarity.score} />
-
                   {/* Main content */}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     {/* Top row */}
@@ -280,20 +143,6 @@ export default function SimilarCasesPage() {
                         }}>{lk.label}</span>
                       )}
                     </div>
-
-                    {/* Dimension bars */}
-                    <div style={{
-                      display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px 16px',
-                      marginBottom: 6,
-                    }}>
-                      {DIM_ORDER.map((k) => {
-                        const d = c.similarity.dimensions[k];
-                        return d ? <DimBar key={k} dim={d} dimKey={k} /> : null;
-                      })}
-                    </div>
-
-                    {/* Behavioral domain mini-strip */}
-                    <DomainMiniStrip domainScores={c.similarity.domain_scores} />
 
                     {/* Repeat flags */}
                     {topFlags.length > 0 && (

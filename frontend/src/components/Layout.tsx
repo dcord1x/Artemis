@@ -12,7 +12,7 @@ export default function Layout({ children }: Props) {
         alignItems: 'center',
         gap: 0,
         padding: '0 20px',
-        height: 50,
+        height: 76,
         background: '#0B1F33',
         borderBottom: '1px solid #0F2742',
         boxShadow: '0 2px 8px rgba(0,0,0,0.20)',
@@ -24,7 +24,7 @@ export default function Layout({ children }: Props) {
           <img
             src="/logo.png"
             alt=""
-            style={{ height: 34, objectFit: 'contain', filter: 'brightness(1.05)' }}
+            style={{ height: 68, objectFit: 'contain', mixBlendMode: 'screen' }}
           />
         </div>
 
@@ -32,7 +32,7 @@ export default function Layout({ children }: Props) {
         <nav style={{ display: 'flex', gap: 1, flex: 1 }}>
           <NavItem to="/import" icon={<Upload size={13} />} label="Import" />
           <NavItem to="/cases" icon={<LayoutList size={13} />} label="Cases" />
-          <NavItem to="/" icon={<Code2 size={13} />} label="Code" exact />
+          <NavItem to="/code" icon={<Code2 size={13} />} label="Code" exact />
           <NavItem to="/map" icon={<Map size={13} />} label="Map" />
           <NavItem to="/analysis" icon={<BarChart2 size={13} />} label="Analysis" />
           <NavItem to="/research" icon={<FlaskConical size={13} />} label="Research" />
