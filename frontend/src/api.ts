@@ -48,6 +48,24 @@ export const api = {
     window.open(BASE + '/export/geojson', '_blank');
   },
 
+  exportFilteredGeoJson: (reportIds: string[]) => {
+    const ids = reportIds.join(',');
+    window.open(BASE + `/export/geojson?report_ids=${encodeURIComponent(ids)}`, '_blank');
+  },
+
+  exportMovementsGeoJson: (reportIds?: string[]) => {
+    const ids = reportIds ? reportIds.join(',') : '';
+    const qs = `include_lines=true${ids ? `&report_ids=${encodeURIComponent(ids)}` : ''}`;
+    window.open(BASE + `/export/geojson?${qs}`, '_blank');
+  },
+
+  exportShapefile: (reportIds?: string[], includeLines = false) => {
+    const params = new URLSearchParams();
+    if (reportIds && reportIds.length > 0) params.set('report_ids', reportIds.join(','));
+    if (includeLines) params.set('include_lines', 'true');
+    window.open(BASE + `/export/shapefile?${params}`, '_blank');
+  },
+
   getSimilar: (reportId: string, minScore = 10) =>
     req<SimilarCandidate[]>(`/reports/${reportId}/similar?min_score=${minScore}`),
 

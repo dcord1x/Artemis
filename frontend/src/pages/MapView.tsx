@@ -740,6 +740,31 @@ export default function MapView() {
                 <div style={{ fontSize: 12, color: S.text2, marginBottom: 8, lineHeight: 1.5 }}>
                   <span style={{ color: S.accent, fontWeight: 600 }}>{filteredPoints.length}</span> of {points.length} cases
                 </div>
+                {/* QGIS export buttons — only shown when a spatial filter is active */}
+                {filteredPoints.length > 0 && (() => {
+                  const filteredIds = filteredPoints.map(p => p.report_id);
+                  const exportBtnStyle: React.CSSProperties = {
+                    width: '100%', padding: '5px 0', fontSize: 11,
+                    fontFamily: 'DM Sans, sans-serif',
+                    background: 'rgba(255,255,255,0.05)', color: S.text2,
+                    border: `1px solid rgba(255,255,255,0.12)`, borderRadius: 5,
+                    cursor: 'pointer', marginBottom: 4, textAlign: 'center',
+                  };
+                  return (
+                    <div style={{ marginBottom: 6 }}>
+                      <div style={{ fontSize: 10, color: S.text3, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Export selection</div>
+                      <button style={exportBtnStyle} onClick={() => api.exportFilteredGeoJson(filteredIds)}>
+                        GeoJSON (points)
+                      </button>
+                      <button style={exportBtnStyle} onClick={() => api.exportMovementsGeoJson(filteredIds)}>
+                        GeoJSON (movement lines)
+                      </button>
+                      <button style={exportBtnStyle} onClick={() => api.exportShapefile(filteredIds, true)}>
+                        Shapefile (.zip)
+                      </button>
+                    </div>
+                  );
+                })()}
                 <button onClick={clearFilter} style={{
                   width: '100%', padding: '6px 0', fontSize: 12,
                   fontFamily: 'DM Sans, sans-serif',

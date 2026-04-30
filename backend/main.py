@@ -771,21 +771,59 @@ def export_csv(db: Session = Depends(get_db)):
     )
 
 
-@app.get("/export/geojson")
-def export_geojson(db: Session = Depends(get_db)):
-    reports = db.query(Report).all()
-    features = []
-    # Stage-specific city lookup: prefer stage-level city, fall back to legacy summary field
+def _build_geojson_props(r, loc_type: str) -> dict:
+    """Shared property dict for a single location feature."""
     _stage_city = {
-        "initial_contact": lambda r: r.initial_contact_city or r.city or "",
-        "incident":        lambda r: r.incident_city or r.city or "",
-        "destination":     lambda r: r.destination_city or r.city or "",
+        "initial_contact": r.initial_contact_city or r.city or "",
+        "incident":        r.incident_city or r.city or "",
+        "destination":     r.destination_city or r.city or "",
     }
     _stage_city_conf = {
-        "initial_contact": lambda r: r.initial_contact_city_confidence or "",
-        "incident":        lambda r: r.incident_city_confidence or "",
-        "destination":     lambda r: r.destination_city_confidence or "",
+        "initial_contact": r.initial_contact_city_confidence or "",
+        "incident":        r.incident_city_confidence or "",
+        "destination":     r.destination_city_confidence or "",
     }
+    return {
+        "report_id": r.report_id,
+        "location_type": loc_type,
+        "city": _stage_city.get(loc_type, r.city or ""),
+        "city_confidence": _stage_city_conf.get(loc_type, ""),
+        "primary_case_city": r.city or "",
+        "cross_city_movement": r.cross_city_movement or "",
+        "neighbourhood": r.neighbourhood or "",
+        "incident_date": r.incident_date or "",
+        "coercion_present": r.coercion_present or "",
+        "movement_present": r.movement_present or "",
+        "physical_force": r.physical_force or "",
+        "sexual_assault": r.sexual_assault or "",
+        "vehicle_present": r.vehicle_present or "",
+        "exit_type": r.exit_type or "",
+        "public_to_private_shift": r.public_to_private_shift or "",
+        "offender_control_over_movement": r.offender_control_over_movement or "",
+        "coding_status": r.coding_status or "",
+        "source_organization": r.source_organization or "",
+    }
+
+
+@app.get("/export/geojson")
+def export_geojson(
+    report_ids: str = "",
+    include_lines: bool = False,
+    db: Session = Depends(get_db),
+):
+    """Export cases as GeoJSON point features.
+
+    Optional query params:
+    - report_ids: comma-separated IDs to export (omit for all)
+    - include_lines: if true, also append LineString features for movement paths
+    """
+    q = db.query(Report)
+    if report_ids:
+        id_list = [rid.strip() for rid in report_ids.split(",") if rid.strip()]
+        q = q.filter(Report.report_id.in_(id_list))
+    reports = q.all()
+
+    features = []
     location_types = [
         ("initial_contact", "lat_initial", "lon_initial"),
         ("incident", "lat_incident", "lon_incident"),
@@ -800,34 +838,161 @@ def export_geojson(db: Session = Depends(get_db)):
             features.append({
                 "type": "Feature",
                 "geometry": {"type": "Point", "coordinates": [lon, lat]},
-                "properties": {
-                    "report_id": r.report_id,
-                    "location_type": loc_type,
-                    # Stage-specific city (more accurate for cross-city cases)
-                    "city": _stage_city[loc_type](r),
-                    "city_confidence": _stage_city_conf[loc_type](r),
-                    # Legacy summary city preserved for backward compat
-                    "primary_case_city": r.city or "",
-                    "cross_city_movement": r.cross_city_movement or "",
-                    "neighbourhood": r.neighbourhood or "",
-                    "incident_date": r.incident_date or "",
-                    "coercion_present": r.coercion_present or "",
-                    "movement_present": r.movement_present or "",
-                    "physical_force": r.physical_force or "",
-                    "sexual_assault": r.sexual_assault or "",
-                    "vehicle_present": r.vehicle_present or "",
-                    "exit_type": r.exit_type or "",
-                    "public_to_private_shift": r.public_to_private_shift or "",
-                    "offender_control_over_movement": r.offender_control_over_movement or "",
-                    "coding_status": r.coding_status or "",
-                    "source_organization": r.source_organization or "",
-                },
+                "properties": _build_geojson_props(r, loc_type),
             })
+
+    if include_lines:
+        for r in reports:
+            coords = []
+            for lat_col, lon_col in [("lat_initial", "lon_initial"), ("lat_incident", "lon_incident"), ("lat_destination", "lon_destination")]:
+                lat = getattr(r, lat_col)
+                lon = getattr(r, lon_col)
+                if lat is not None and lon is not None:
+                    coords.append([lon, lat])
+            if len(coords) >= 2:
+                features.append({
+                    "type": "Feature",
+                    "geometry": {"type": "LineString", "coordinates": coords},
+                    "properties": {
+                        "report_id": r.report_id,
+                        "location_type": "movement_path",
+                        "city": r.city or "",
+                        "incident_date": r.incident_date or "",
+                        "movement_present": r.movement_present or "",
+                        "cross_city_movement": r.cross_city_movement or "",
+                        "coding_status": r.coding_status or "",
+                    },
+                })
+
     geojson = {"type": "FeatureCollection", "features": features}
     return StreamingResponse(
         iter([json.dumps(geojson, indent=2)]),
         media_type="application/geo+json",
         headers={"Content-Disposition": "attachment; filename=redlight_export.geojson"},
+    )
+
+
+@app.get("/export/shapefile")
+def export_shapefile(
+    report_ids: str = "",
+    include_lines: bool = False,
+    db: Session = Depends(get_db),
+):
+    """Export cases as a zipped Shapefile bundle (QGIS-ready).
+
+    Optional query params:
+    - report_ids: comma-separated IDs to export (omit for all)
+    - include_lines: if true, also include a movement LineString shapefile
+    """
+    import shapefile
+    import zipfile
+
+    q = db.query(Report)
+    if report_ids:
+        id_list = [rid.strip() for rid in report_ids.split(",") if rid.strip()]
+        q = q.filter(Report.report_id.in_(id_list))
+    reports = q.all()
+
+    location_types = [
+        ("initial_contact", "lat_initial", "lon_initial"),
+        ("incident", "lat_incident", "lon_incident"),
+        ("destination", "lat_destination", "lon_destination"),
+    ]
+
+    # ── Point shapefile ────────────────────────────────────────────────────────
+    pt_shp = io.BytesIO()
+    pt_shx = io.BytesIO()
+    pt_dbf = io.BytesIO()
+    with shapefile.Writer(shp=pt_shp, shx=pt_shx, dbf=pt_dbf, shapeType=shapefile.POINT) as w:
+        w.field("report_id",  "C", 64)
+        w.field("loc_type",   "C", 32)
+        w.field("city",       "C", 64)
+        w.field("inc_date",   "C", 20)
+        w.field("coercion",   "C", 16)
+        w.field("movement",   "C", 16)
+        w.field("phys_force", "C", 16)
+        w.field("sex_aslt",   "C", 16)
+        w.field("veh_prsnt",  "C", 16)
+        w.field("exit_type",  "C", 32)
+        w.field("pub_priv",   "C", 16)
+        w.field("offndr_ctrl","C", 32)
+        w.field("status",     "C", 32)
+        w.field("source_org", "C", 64)
+        w.field("cross_city", "C", 16)
+        w.field("nbhd",       "C", 64)
+        for r in reports:
+            for loc_type, lat_col, lon_col in location_types:
+                lat = getattr(r, lat_col)
+                lon = getattr(r, lon_col)
+                if lat is None or lon is None:
+                    continue
+                w.point(lon, lat)
+                w.record(
+                    r.report_id or "",
+                    loc_type,
+                    r.city or "",
+                    r.incident_date or "",
+                    r.coercion_present or "",
+                    r.movement_present or "",
+                    r.physical_force or "",
+                    r.sexual_assault or "",
+                    r.vehicle_present or "",
+                    r.exit_type or "",
+                    r.public_to_private_shift or "",
+                    r.offender_control_over_movement or "",
+                    r.coding_status or "",
+                    r.source_organization or "",
+                    r.cross_city_movement or "",
+                    r.neighbourhood or "",
+                )
+
+    # ── Movement LineString shapefile (optional) ───────────────────────────────
+    ln_shp = ln_shx = ln_dbf = None
+    if include_lines:
+        ln_shp = io.BytesIO()
+        ln_shx = io.BytesIO()
+        ln_dbf = io.BytesIO()
+        with shapefile.Writer(shp=ln_shp, shx=ln_shx, dbf=ln_dbf, shapeType=shapefile.POLYLINE) as w:
+            w.field("report_id",  "C", 64)
+            w.field("city",       "C", 64)
+            w.field("inc_date",   "C", 20)
+            w.field("movement",   "C", 16)
+            w.field("cross_city", "C", 16)
+            w.field("status",     "C", 32)
+            for r in reports:
+                coords = []
+                for lat_col, lon_col in [("lat_initial", "lon_initial"), ("lat_incident", "lon_incident"), ("lat_destination", "lon_destination")]:
+                    lat = getattr(r, lat_col)
+                    lon = getattr(r, lon_col)
+                    if lat is not None and lon is not None:
+                        coords.append([lon, lat])
+                if len(coords) >= 2:
+                    w.line([coords])
+                    w.record(
+                        r.report_id or "",
+                        r.city or "",
+                        r.incident_date or "",
+                        r.movement_present or "",
+                        r.cross_city_movement or "",
+                        r.coding_status or "",
+                    )
+
+    # ── Bundle into ZIP ────────────────────────────────────────────────────────
+    zip_buf = io.BytesIO()
+    with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("redlight_points.shp", pt_shp.getvalue())
+        zf.writestr("redlight_points.shx", pt_shx.getvalue())
+        zf.writestr("redlight_points.dbf", pt_dbf.getvalue())
+        if include_lines and ln_shp:
+            zf.writestr("redlight_movements.shp", ln_shp.getvalue())
+            zf.writestr("redlight_movements.shx", ln_shx.getvalue())
+            zf.writestr("redlight_movements.dbf", ln_dbf.getvalue())
+
+    zip_buf.seek(0)
+    return StreamingResponse(
+        zip_buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": "attachment; filename=redlight_shapefile.zip"},
     )
 
 
