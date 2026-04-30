@@ -22,9 +22,7 @@ import { Printer, RefreshCw, ArrowLeft } from 'lucide-react';
 import { GoogleMap, useJsApiLoader, Marker } from '@react-google-maps/api';
 import { api } from '../api';
 import type { BulletinData, MapPoint } from '../types';
-
-const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string;
-const MAP_LIBRARIES: ['places'] = ['places'];
+import { GOOGLE_MAPS_API_KEY, LIBRARIES as MAP_LIBRARIES } from '../mapsConfig';
 
 // ── Small shared helpers ──────────────────────────────────────────────────────
 

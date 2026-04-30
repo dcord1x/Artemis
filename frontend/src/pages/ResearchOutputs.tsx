@@ -31,9 +31,7 @@ import type {
   LinkagePatterns,
   MapPoint,
 } from '../types';
-
-const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string;
-const MAP_LIBRARIES: ['places'] = ['places'];
+import { GOOGLE_MAPS_API_KEY, LIBRARIES as MAP_LIBRARIES } from '../mapsConfig';
 
 // ── Shared sub-components ─────────────────────────────────────────────────────
 
