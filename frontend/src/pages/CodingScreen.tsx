@@ -396,6 +396,49 @@ function WeatherCard({ w }: { w: Record<string, any> }) {
 // ── Case-level analytical summary (derived from current field values) ─────────
 
 /** Resolve field provenance state to a display tier */
+// ── Multi-checkbox field (pipe-delimited storage) ─────────────────────────────
+function MultiCheckboxField({ label, value, onChange, options }: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+}) {
+  const selected = new Set(String(value || '').split('|').filter(Boolean).map(s => s.trim()));
+  const toggle = (opt: string) => {
+    const next = new Set(selected);
+    next.has(opt) ? next.delete(opt) : next.add(opt);
+    onChange([...next].join('|'));
+  };
+  return (
+    <div style={{ marginBottom: 12, paddingBottom: 10, borderBottom: '1px solid var(--border)' }}>
+      <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-2)', marginBottom: 8 }}>{label}</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+        {options.map(opt => {
+          const active = selected.has(opt);
+          return (
+            <label key={opt} style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12,
+              padding: '4px 10px', borderRadius: 5, cursor: 'pointer', userSelect: 'none',
+              background: active ? 'var(--accent)' : 'var(--surface-2)',
+              color: active ? '#fff' : 'var(--text-2)',
+              border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+              fontWeight: active ? 600 : 400,
+              transition: 'all 0.12s',
+            }}>
+              <input type="checkbox" checked={active} onChange={() => toggle(opt)}
+                style={{ width: 11, height: 11, accentColor: 'var(--accent)', cursor: 'pointer', flexShrink: 0 }} />
+              {opt}
+            </label>
+          );
+        })}
+      </div>
+      {selected.size === 0 && (
+        <div style={{ fontSize: 11, color: 'var(--text-3)', fontStyle: 'italic', marginTop: 4 }}>— none selected</div>
+      )}
+    </div>
+  );
+}
+
 function _prov(fp: Record<string, string> | undefined, field: string): 'coded' | 'provisional' | 'unset' {
   const state = fp?.[field] ?? 'unset';
   if (state === 'analyst_filled' || state === 'reviewed') return 'coded';
@@ -523,8 +566,8 @@ function SummaryTab({ fields, analystName, analystSummary, tags, reportId }: {
     ['Environment shift: public→secluded', 'public_to_secluded_shift', new Set(['yes'])],
     ['Physical force',          'physical_force',               new Set(['yes'])],
     ['Sexual assault',          'sexual_assault',               new Set(['yes'])],
-    ['Robbery / theft',         'robbery_theft',                new Set(['yes'])],
     ['Stealthing',              'stealthing',                   new Set(['yes'])],
+    ['Robbery / theft',         'robbery_theft',                new Set(['yes'])],
   ];
 
   const approach = (fields.initial_approach_type || '').trim();
@@ -610,7 +653,7 @@ function SummaryTab({ fields, analystName, analystSummary, tags, reportId }: {
     ['intimidation_present', 'Intimidation'], ['verbal_abuse', 'Verbal abuse'],
     ['verbal_abuse_before_violence', 'Verbal abuse before violence'],
     ['physical_force', 'Physical force'], ['sexual_assault', 'Sexual assault'],
-    ['robbery_theft', 'Robbery / theft'], ['stealthing', 'Stealthing'],
+    ['stealthing', 'Stealthing'], ['robbery_theft', 'Robbery / theft'],
   ];
   for (const [field, label] of harmFields) {
     if (fields[field as keyof Report] === 'yes')
@@ -719,10 +762,12 @@ function SummaryTab({ fields, analystName, analystSummary, tags, reportId }: {
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 10, flexWrap: 'wrap' }}>
           <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>Encounter progression</div>
           {(fields.highest_stage_reached) && (
-            <span style={{ fontSize: 11.5, fontWeight: 700, padding: '3px 10px', borderRadius: 5,
-              background: 'var(--accent-pale)', color: 'var(--accent)', border: '1px solid var(--accent-border)' }}>
-              Highest stage: {fields.highest_stage_reached as string}
-            </span>
+            String(fields.highest_stage_reached).split('|').filter(Boolean).map(stage => (
+              <span key={stage} style={{ fontSize: 11.5, fontWeight: 700, padding: '3px 10px', borderRadius: 5,
+                background: 'var(--accent-pale)', color: 'var(--accent)', border: '1px solid var(--accent-border)' }}>
+                {stage.trim()}
+              </span>
+            ))
           )}
           {(fields.turning_point) && (
             <span style={{ fontSize: 11.5, fontWeight: 600, padding: '3px 10px', borderRadius: 5,
@@ -820,7 +865,18 @@ function SummaryTab({ fields, analystName, analystSummary, tags, reportId }: {
         )}
         {fields.summary_analytic && (
           <div style={{ marginBottom: 10 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-3)', marginBottom: 4 }}>Summary analytic</div>
+            <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-3)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+              Summary analytic
+              {(() => {
+                const state = fp?.['summary_analytic'] ?? 'unset';
+                const isAnalyst = state === 'analyst_filled' || state === 'reviewed';
+                const label = isAnalyst ? 'Analyst entered' : state === 'ai_suggested' ? 'System generated' : 'Source unknown';
+                const color = isAnalyst ? 'var(--green)' : 'var(--amber)';
+                const bg = isAnalyst ? 'var(--green-pale)' : 'var(--amber-pale)';
+                const border = isAnalyst ? 'var(--green-border)' : 'var(--amber-border)';
+                return <span style={{ fontSize: 9.5, fontWeight: 600, padding: '1px 5px', borderRadius: 3, background: bg, color, border: `1px solid ${border}`, textTransform: 'none', letterSpacing: 0 }}>{label}</span>;
+              })()}
+            </div>
             <div style={{ fontSize: 12.5, color: 'var(--text-2)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{fields.summary_analytic}</div>
           </div>
         )}
@@ -1873,7 +1929,7 @@ export default function CodingScreen() {
                   <FieldRow label="Pressure after refusal" value={f('pressure_after_refusal')} onChange={(v) => set('pressure_after_refusal', v)} type="yesno" suggested={s('pressure_after_refusal')} onAcceptSuggestion={() => acceptSuggestion('pressure_after_refusal')} provenance={prov('pressure_after_refusal')} onMarkReviewed={() => markReviewed('pressure_after_refusal')} />
                 </SectionPanel>
 
-                <SectionPanel title="Violence Indicators" fieldKeys={['coercion_present','threats_present','verbal_abuse','physical_force','non_consensual_substance','substance_administration_notes','sexual_assault','robbery_theft','stealthing','loss_of_consciousness','forced_movement_dragging','restraint_confinement','weapon_present_used','choking_strangulation','prevented_exit','exit_type']} fields={fields}>
+                <SectionPanel title="Violence Indicators" fieldKeys={['coercion_present','threats_present','verbal_abuse','physical_force','non_consensual_substance','substance_administration_notes','sexual_assault','stealthing','robbery_theft','loss_of_consciousness','forced_movement_dragging','restraint_confinement','weapon_present_used','choking_strangulation','prevented_exit','exit_type']} fields={fields}>
                   <FieldRow label="Coercion present" value={f('coercion_present')} onChange={(v) => set('coercion_present', v)} type="yesno-extended" suggested={s('coercion_present')} onAcceptSuggestion={() => acceptSuggestion('coercion_present')} provenance={prov('coercion_present')} onMarkReviewed={() => markReviewed('coercion_present')} badge={showNlpChips ? <NlpBadge rank={nlp.coercion_rank ?? 3} evidence={nlp.coercion_evidence ?? []} fieldValue={f('coercion_present')} /> : undefined} />
                   <FieldRow label="Threats present" value={f('threats_present')} onChange={(v) => set('threats_present', v)} type="yesno" suggested={s('threats_present')} onAcceptSuggestion={() => acceptSuggestion('threats_present')} provenance={prov('threats_present')} onMarkReviewed={() => markReviewed('threats_present')} badge={showNlpChips ? <NlpBadge rank={nlp.weapon_rank ?? 3} evidence={nlp.weapon_evidence ?? []} fieldValue={f('threats_present')} /> : undefined} />
                   <FieldRow label="Verbal abuse" value={f('verbal_abuse')} onChange={(v) => set('verbal_abuse', v)} type="yesno" suggested={s('verbal_abuse')} onAcceptSuggestion={() => acceptSuggestion('verbal_abuse')} provenance={prov('verbal_abuse')} onMarkReviewed={() => markReviewed('verbal_abuse')} />
@@ -1881,8 +1937,8 @@ export default function CodingScreen() {
                   <FieldRow label="Non-consensual substance administration" value={f('non_consensual_substance')} onChange={(v) => set('non_consensual_substance', v)} type="yesno-extended" provenance={prov('non_consensual_substance')} onMarkReviewed={() => markReviewed('non_consensual_substance')} />
                   <FieldRow label="Substance administration notes" value={f('substance_administration_notes')} onChange={(v) => set('substance_administration_notes', v)} type="textarea" placeholder='e.g. "drink tasted strange," "woke up later," "felt drugged," "client gave her something," "blackout," "unknown pill"' provenance={prov('substance_administration_notes')} onMarkReviewed={() => markReviewed('substance_administration_notes')} />
                   <FieldRow label="Sexual assault" value={f('sexual_assault')} onChange={(v) => set('sexual_assault', v)} type="yesno-extended" suggested={s('sexual_assault')} onAcceptSuggestion={() => acceptSuggestion('sexual_assault')} provenance={prov('sexual_assault')} onMarkReviewed={() => markReviewed('sexual_assault')} badge={showNlpChips ? <NlpBadge rank={nlp.sexual_rank ?? 3} evidence={nlp.sexual_evidence ?? []} fieldValue={f('sexual_assault')} /> : undefined} />
-                  <FieldRow label="Robbery / theft" value={f('robbery_theft')} onChange={(v) => set('robbery_theft', v)} type="yesno" suggested={s('robbery_theft')} onAcceptSuggestion={() => acceptSuggestion('robbery_theft')} provenance={prov('robbery_theft')} onMarkReviewed={() => markReviewed('robbery_theft')} />
                   <FieldRow label="Stealthing / condom refusal" value={f('stealthing')} onChange={(v) => set('stealthing', v)} type="yesno" suggested={s('stealthing')} onAcceptSuggestion={() => acceptSuggestion('stealthing')} provenance={prov('stealthing')} onMarkReviewed={() => markReviewed('stealthing')} />
+                  <FieldRow label="Robbery / theft" value={f('robbery_theft')} onChange={(v) => set('robbery_theft', v)} type="yesno" suggested={s('robbery_theft')} onAcceptSuggestion={() => acceptSuggestion('robbery_theft')} provenance={prov('robbery_theft')} onMarkReviewed={() => markReviewed('robbery_theft')} />
                   <FieldRow label="Loss of consciousness / blackout / memory gap" value={f('loss_of_consciousness')} onChange={(v) => set('loss_of_consciousness', v)} type="yesno" provenance={prov('loss_of_consciousness')} onMarkReviewed={() => markReviewed('loss_of_consciousness')} />
                   <FieldRow label="Forced movement / dragging" value={f('forced_movement_dragging')} onChange={(v) => set('forced_movement_dragging', v)} type="yesno-extended" provenance={prov('forced_movement_dragging')} onMarkReviewed={() => markReviewed('forced_movement_dragging')} />
                   <FieldRow label="Restraint / confinement" value={f('restraint_confinement')} onChange={(v) => set('restraint_confinement', v)} type="yesno-extended" provenance={prov('restraint_confinement')} onMarkReviewed={() => markReviewed('restraint_confinement')} />
@@ -1890,7 +1946,6 @@ export default function CodingScreen() {
                   <FieldRow label="Choking / strangulation" value={f('choking_strangulation')} onChange={(v) => set('choking_strangulation', v)} type="yesno-extended" provenance={prov('choking_strangulation')} onMarkReviewed={() => markReviewed('choking_strangulation')} />
                   <FieldRow label="Prevented exit / blocked escape" value={f('prevented_exit')} onChange={(v) => set('prevented_exit', v)} type="yesno-extended" provenance={prov('prevented_exit')} onMarkReviewed={() => markReviewed('prevented_exit')} />
                   <FieldRow label="Exit type" value={f('exit_type')} onChange={(v) => set('exit_type', v)} type="select" options={['completed','escaped','abandoned','interrupted','unknown']} suggested={s('exit_type')} onAcceptSuggestion={() => acceptSuggestion('exit_type')} provenance={prov('exit_type')} onMarkReviewed={() => markReviewed('exit_type')} />
-                  <FieldRow label="Highest stage reached" value={f('highest_stage_reached')} onChange={(v) => set('highest_stage_reached', v)} type="select" options={['no clear escalation','negotiation conflict','coercion / control','physical violence','sexual violence','robbery / theft','mixed severe harm','unknown']} provenance={prov('highest_stage_reached')} onMarkReviewed={() => markReviewed('highest_stage_reached')} />
                 </SectionPanel>
 
                 <SectionPanel title="Early Escalation Detail" fieldKeys={['repeated_pressure','intimidation_present','abrupt_tone_change','verbal_abuse_before_violence','escalation_trigger']} fields={fields} defaultCollapsed>
@@ -1910,7 +1965,7 @@ export default function CodingScreen() {
                   <FieldRow label="Movement count" value={f('movement_count')} onChange={(v) => set('movement_count', v)} type="text" placeholder="Number of distinct movements" provenance={prov('movement_count')} onMarkReviewed={() => markReviewed('movement_count')} />
                   <FieldRow label="Mode of movement" value={f('mode_of_movement')} onChange={(v) => set('mode_of_movement', v)} type="select" options={['on foot','personal vehicle','offender vehicle','rideshare / taxi','public transit','bicycle','motorcycle','boat','unknown','other']} suggested={s('mode_of_movement')} onAcceptSuggestion={() => acceptSuggestion('mode_of_movement')} provenance={prov('mode_of_movement')} onMarkReviewed={() => markReviewed('mode_of_movement')} />
                   <FieldRow label="Entered vehicle" value={f('entered_vehicle')} onChange={(v) => set('entered_vehicle', v)} type="yesno" suggested={s('entered_vehicle')} onAcceptSuggestion={() => acceptSuggestion('entered_vehicle')} provenance={prov('entered_vehicle')} onMarkReviewed={() => markReviewed('entered_vehicle')} />
-                  <FieldRow label="Vehicle driver role" value={f('vehicle_driver_role')} onChange={(v) => set('vehicle_driver_role', v)} provenance={prov('vehicle_driver_role')} onMarkReviewed={() => markReviewed('vehicle_driver_role')} />
+                  <FieldRow label="Vehicle driver role" value={f('vehicle_driver_role')} onChange={(v) => set('vehicle_driver_role', v)} type="select" options={['suspect driving','victim driving','third party driving','rideshare/taxi driver','shared/unclear','unknown','other']} provenance={prov('vehicle_driver_role')} onMarkReviewed={() => markReviewed('vehicle_driver_role')} />
                   <FieldRow label="Who controlled movement" value={f('who_controlled_movement')} onChange={(v) => set('who_controlled_movement', v)} type="select" options={['offender','victim','shared','unclear']} provenance={prov('who_controlled_movement')} onMarkReviewed={() => markReviewed('who_controlled_movement')} />
                   <FieldRow label="Unexplained relocation / woke in unknown location" value={f('unexplained_relocation')} onChange={(v) => set('unexplained_relocation', v)} type="yesno" provenance={prov('unexplained_relocation')} onMarkReviewed={() => markReviewed('unexplained_relocation')} />
                 </SectionPanel>
@@ -1963,9 +2018,30 @@ export default function CodingScreen() {
                 {!isNew && (
                   <ParseViewer narrative={narrative} reportId={report?.report_id} />
                 )}
-                <FieldRow label="Turning point / key shift" value={f('turning_point')} onChange={(v) => set('turning_point', v)} type="select" options={['boundary tested','refusal ignored','pressure increased','deception / agreement shift','movement imposed','isolation increased','threat introduced','exit blocked / control asserted','physical force applied','sexual violence initiated','robbery initiated','other']} provenance={prov('turning_point')} onMarkReviewed={() => markReviewed('turning_point')} />
+                <MultiCheckboxField
+                  label="Highest stages reached (select all that apply)"
+                  value={f('highest_stage_reached')}
+                  onChange={(v) => set('highest_stage_reached', v)}
+                  options={['negotiation conflict','coercion/control','physical violence','sexual violence','robbery/theft','weapon involvement','confinement/prevented exit','substance administration/intoxication','mixed severe harm','unknown']}
+                />
+                <FieldRow label="Turning point / key shift" value={f('turning_point')} onChange={(v) => set('turning_point', v)} type="select" options={['boundary tested','refusal ignored','pressure increased','deception/agreement shift','movement imposed','isolation increased','threat introduced','exit blocked/control asserted','physical force applied','sexual violence initiated','robbery initiated','other']} provenance={prov('turning_point')} onMarkReviewed={() => markReviewed('turning_point')} />
                 <FieldRow label="Escalation point" value={f('escalation_point')} onChange={(v) => set('escalation_point', v)} type="select" options={['no clear escalation','boundary tested','refusal ignored','pressure increased','verbal aggression escalated','deception or agreement shift','location shift imposed','isolation increased','exit blocked or movement controlled','physical force applied','weapon implied or produced','sexual assault initiated','robbery initiated','other']} suggested={s('escalation_point')} onAcceptSuggestion={() => acceptSuggestion('escalation_point')} provenance={prov('escalation_point')} onMarkReviewed={() => markReviewed('escalation_point')} />
-                <FieldRow label="Resolution / endpoint" value={f('resolution_endpoint')} onChange={(v) => set('resolution_endpoint', v)} type="select" options={['victim escaped','offender left','assault completed','robbery completed','third-party interruption','unknown','other']} provenance={prov('resolution_endpoint')} onMarkReviewed={() => markReviewed('resolution_endpoint')} />
+                <FieldRow label="Resolution / endpoint" value={f('resolution_endpoint')} onChange={(v) => set('resolution_endpoint', v)} type="select" options={['victim escaped','victim left voluntarily','offender left','victim forced out of vehicle','victim pushed/thrown out of vehicle','victim forced out of residence','victim pushed/thrown out of residence','left at unknown location','assault completed','robbery completed','both parties separated/encounter ended','third-party interruption','police/security interruption','unknown','other']} provenance={prov('resolution_endpoint')} onMarkReviewed={() => markReviewed('resolution_endpoint')} />
+                {(() => {
+                  const state = provenance['summary_analytic'] ?? 'unset';
+                  const isAnalyst = state === 'analyst_filled' || state === 'reviewed';
+                  const provLabel = isAnalyst ? 'Analyst entered' : state === 'ai_suggested' ? 'System generated' : f('summary_analytic') ? 'Source unknown' : null;
+                  return provLabel ? (
+                    <div style={{ fontSize: 10.5, marginBottom: 2, paddingLeft: 2 }}>
+                      <span style={{ fontWeight: 600, padding: '1px 6px', borderRadius: 3,
+                        background: isAnalyst ? 'var(--green-pale)' : 'var(--amber-pale)',
+                        color: isAnalyst ? 'var(--green)' : 'var(--amber)',
+                        border: `1px solid ${isAnalyst ? 'var(--green-border)' : 'var(--amber-border)'}` }}>
+                        {provLabel}
+                      </span>
+                    </div>
+                  ) : null;
+                })()}
                 <FieldRow label="Analytic summary (coded)" value={f('summary_analytic')} onChange={(v) => set('summary_analytic', v)} type="textarea" suggested={s('summary_analytic')} onAcceptSuggestion={() => acceptSuggestion('summary_analytic')} placeholder="1–2 sentence analytic summary (coded field — see left panel for interpretive summary)" provenance={prov('summary_analytic')} onMarkReviewed={() => markReviewed('summary_analytic')} />
                 <FieldRow label="Key quotes" value={f('key_quotes')} onChange={(v) => set('key_quotes', v)} type="textarea" suggested={s('key_quotes')} onAcceptSuggestion={() => acceptSuggestion('key_quotes')} provenance={prov('key_quotes')} onMarkReviewed={() => markReviewed('key_quotes')} />
                 <FieldRow label="Coder notes" value={f('coder_notes')} onChange={(v) => set('coder_notes', v)} type="textarea" provenance={prov('coder_notes')} onMarkReviewed={() => markReviewed('coder_notes')} />

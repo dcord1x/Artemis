@@ -79,7 +79,7 @@ const COLUMN_DEFS: ColumnDef[] = [
     render: (r) => txt(r_.r(r,'source_worker_id')) },
 
   // ── Incident Basics ────────────────────────────────────────────────────────
-  { id: 'incident_date', group: 'Incident', header: 'Incident Date', label: 'Date', title: 'Incident date', sortKey: 'incident_date',
+  { id: 'incident_date', group: 'Incident', header: 'Incident Date', label: 'Inc. Date', title: 'Incident date (date incident occurred — not import date)', sortKey: 'incident_date',
     render: (r) => <span style={{ color: 'var(--text-2)', whiteSpace: 'nowrap' }}>{r.incident_date || r.date_received?.slice(0, 10) || '—'}</span> },
   { id: 'day_of_week', group: 'Incident', header: 'Day of Week', label: 'Day', title: 'Day of week', sortKey: 'day_of_week',
     render: (r) => <span style={{ color: 'var(--text-3)', fontSize: 11.5, whiteSpace: 'nowrap' }}>{r.day_of_week ? r.day_of_week.slice(0, 3) : '—'}</span> },
@@ -245,8 +245,8 @@ export default function CaseList() {
   const [searchParams] = useSearchParams();
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
-  const [sortColumn, setSortColumn] = useState<string | null>(null);
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [sortColumn, setSortColumn] = useState<string | null>('incident_date');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -449,7 +449,8 @@ export default function CaseList() {
           />
 
           {/* Date range — fixed narrow width */}
-          <input type="date" title="Date from"
+          <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap', flexShrink: 0 }}>Incident date:</span>
+          <input type="date" title="Incident date from"
             style={{ padding: '5px 6px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface)', fontSize: 11, fontFamily: 'DM Sans, sans-serif', color: 'var(--text-1)', outline: 'none', width: 120, flexShrink: 0 }}
             value={filterDateFrom} onChange={(e) => setFilterDateFrom(e.target.value)}
           />
