@@ -676,6 +676,11 @@ def bulk_save(data: BulkSaveRequest, db: Session = Depends(get_db)):
         h = _narrative_hash(raw)
         existing = db.query(Report).filter(Report.narrative_hash == h).first()
         if existing:
+            # Back-fill source_bulletin_text if the existing case has none but this import provides it
+            bulletin_text = inc.get("_bulletin_text", "")
+            if bulletin_text and not (existing.source_bulletin_text or "").strip():
+                existing.source_bulletin_text = bulletin_text
+                db.commit()
             skipped.append(existing.report_id)
             continue
 
