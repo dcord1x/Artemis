@@ -331,14 +331,25 @@ export default function CaseList() {
 
   const yesNoVal = (v: string | null | undefined) => v === 'yes' ? 2 : v === 'no' ? 1 : 0;
 
+  const DATE_SORT_KEYS = new Set(['incident_date', 'date_received']);
+  const toTs = (v: string | null | undefined): number => {
+    if (!v) return 0;
+    const t = new Date(v).getTime();
+    return isNaN(t) ? 0 : t;
+  };
+
   const sortedReports = useMemo(() => {
     if (!sortColumn) return reports;
     return [...reports].sort((a, b) => {
       const get = (r: Report): string | number => {
         if (sortColumn === 'vehicle')        return [r.vehicle_colour, r.vehicle_make, r.vehicle_model].filter(Boolean).join(' ');
+        // incident_date falls back to date_received (same as the render) so sort matches display
+        if (sortColumn === 'incident_date')  return toTs(r.incident_date || r.date_received?.slice(0, 10));
         const raw = (r as any)[sortColumn];
         // yes/no fields — sort yes > no > unset
         if (raw === 'yes' || raw === 'no' || raw === 'unclear') return yesNoVal(raw);
+        // date fields — compare as timestamps so ordering is always correct
+        if (DATE_SORT_KEYS.has(sortColumn))  return toTs(raw);
         return raw ?? '';
       };
       const av = get(a), bv = get(b);
