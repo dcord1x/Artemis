@@ -311,10 +311,13 @@ def analyze_report(report_id: str, db: Session = Depends(get_db)):
 def batch_analyze(db: Session = Depends(get_db)):
     """
     Run spaCy NLP analysis on every report that has no nlp data yet.
-    Skips reports that already have ai_suggestions["nlp"] populated.
-    Returns a count of reports processed.
+    Skips reports that already have ai_suggestions["nlp"] populated with coercion_rank.
+    Returns a count of reports processed and whether spaCy is available.
     """
     from nlp_analysis import analyze_narrative, _nlp as _spacy_model
+    # Return early if spaCy model not loaded — no point iterating all reports
+    if _spacy_model is None:
+        return {"ok": True, "processed": 0, "nlp_available": False}
     reports = db.query(Report).all()
     processed = 0
     for r in reports:
@@ -331,7 +334,7 @@ def batch_analyze(db: Session = Depends(get_db)):
         r.updated_at = datetime.utcnow()
         processed += 1
     db.commit()
-    return {"ok": True, "processed": processed, "nlp_available": _spacy_model is not None}
+    return {"ok": True, "processed": processed, "nlp_available": True}
 
 
 # ── Bulletin import ───────────────────────────────────────────────────────────

@@ -94,11 +94,30 @@ function NlpSignalsPanel({ nlp, onSetField, reportId, getFieldValue }: {
           <span>NLP data was analyzed for a different record ({sourceId}) — re-run NLP Analyze to generate signals for this case.</span>
         </div>
       )}
-      <div style={{ padding: '6px 12px', background: provenanceMatch ? 'var(--amber-pale)' : '#FFF7F7', borderBottom: `1px solid ${provenanceMatch ? 'var(--amber-border)' : '#FCA5A5'}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div style={{ padding: '6px 12px', background: provenanceMatch ? 'var(--amber-pale)' : '#FFF7F7', borderBottom: `1px solid ${provenanceMatch ? 'var(--amber-border)' : '#FCA5A5'}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: provenanceMatch ? 'var(--amber)' : '#DC2626' }}>NLP Signals — Provisional</span>
-        <span style={{ fontSize: 10, color: provenanceMatch ? 'var(--amber)' : '#DC2626', opacity: 0.85 }}>
-          {provenanceMatch ? (analyzedLabel ? `Analyzed ${analyzedLabel} · analyst review required` : 'Analyst review required before coding') : 'Stale — does not reflect current record'}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 10, color: provenanceMatch ? 'var(--amber)' : '#DC2626', opacity: 0.85 }}>
+            {provenanceMatch ? (analyzedLabel ? `Analyzed ${analyzedLabel} · analyst review required` : 'Analyst review required before coding') : 'Stale — does not reflect current record'}
+          </span>
+          {onSetField && provenanceMatch && signals.some(sig => {
+            const val = getFieldValue ? getFieldValue(sig.field) : '';
+            return val !== 'yes' && val !== 'probable' && val !== 'inferred' && val !== 'no' && val !== 'unclear';
+          }) && (
+            <button
+              type="button"
+              style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 4, border: '1px solid var(--green-border)', background: 'var(--green-pale)', color: 'var(--green)', cursor: 'pointer', whiteSpace: 'nowrap', letterSpacing: '0.03em' }}
+              onClick={() => signals.forEach(sig => {
+                const val = getFieldValue ? getFieldValue(sig.field) : '';
+                if (val !== 'yes' && val !== 'probable' && val !== 'inferred' && val !== 'no' && val !== 'unclear') {
+                  onSetField(sig.field, sig.acceptValue);
+                }
+              })}
+            >
+              Accept all pending
+            </button>
+          )}
+        </div>
       </div>
       {signals.map((sig) => {
         const isStrong = sig.rank === 1;
@@ -135,14 +154,14 @@ function NlpSignalsPanel({ nlp, onSetField, reportId, getFieldValue }: {
             </div>
             {onSetField && syncStatus !== 'accepted' && syncStatus !== 'rejected' && (
               <div style={{ display: 'flex', gap: 4, flexShrink: 0, alignItems: 'flex-start', paddingTop: 1 }}>
-                <button style={btnStyle('var(--green)', 'var(--green-pale)', 'var(--green-border)')} onClick={() => onSetField(sig.field, sig.acceptValue)}>Accept</button>
-                <button style={btnStyle('var(--text-3)', 'var(--surface-2)', 'var(--border)')} onClick={() => onSetField(sig.field, 'unclear')}>Unclear</button>
-                <button style={btnStyle('var(--red, #DC2626)', 'var(--red-pale, #FEF2F2)', 'var(--red-border, #FCA5A5)')} onClick={() => onSetField(sig.field, 'no')}>Reject</button>
+                <button type="button" style={btnStyle('var(--green)', 'var(--green-pale)', 'var(--green-border)')} onClick={() => onSetField(sig.field, sig.acceptValue)}>Accept</button>
+                <button type="button" style={btnStyle('var(--text-3)', 'var(--surface-2)', 'var(--border)')} onClick={() => onSetField(sig.field, 'unclear')}>Unclear</button>
+                <button type="button" style={btnStyle('var(--red, #DC2626)', 'var(--red-pale, #FEF2F2)', 'var(--red-border, #FCA5A5)')} onClick={() => onSetField(sig.field, 'no')}>Reject</button>
               </div>
             )}
             {onSetField && (syncStatus === 'accepted' || syncStatus === 'rejected') && (
               <div style={{ flexShrink: 0, paddingTop: 1 }}>
-                <button style={btnStyle('var(--text-3)', 'var(--surface-2)', 'var(--border)')} onClick={() => onSetField(sig.field, '')}>Revisit</button>
+                <button type="button" style={btnStyle('var(--text-3)', 'var(--surface-2)', 'var(--border)')} onClick={() => onSetField(sig.field, '')}>Revisit</button>
               </div>
             )}
           </div>
@@ -1766,7 +1785,7 @@ export default function CodingScreen() {
             {([
               ['basics', 'Basics', ['incident_date','city','neighbourhood','indoor_outdoor','public_private','deserted','incident_time_exact','day_of_week','destination_known','location_certainty','initial_contact_city','incident_city','destination_city']],
               ['stages', 'Stages', []],
-              ['encounter', 'Encounter', ['initial_approach_type','negotiation_present','refusal_present','pressure_after_refusal','coercion_present','threats_present','verbal_abuse','physical_force','sexual_assault','robbery_theft','stealthing','exit_type','repeated_pressure','intimidation_present','abrupt_tone_change','verbal_abuse_before_violence']],
+              ['encounter', 'Encounter', ['initial_approach_type','negotiation_present','refusal_present','pressure_after_refusal','coercion_present','threats_present','verbal_abuse','physical_force','sexual_assault','robbery_theft','stealthing','repeated_pressure','intimidation_present','abrupt_tone_change','verbal_abuse_before_violence']],
               ['mobility', 'Mobility', ['movement_present','movement_attempted','mode_of_movement','entered_vehicle','public_to_private_shift','public_to_secluded_shift','cross_neighbourhood','cross_municipality','cross_city_movement','offender_control_over_movement','movement_completed','who_controlled_movement','movement_confidence']],
               ['suspect', 'Suspect', ['suspect_gender','suspect_age_estimate','vehicle_present','vehicle_make','vehicle_model','vehicle_colour','plate_partial']],
               ['narrative', 'Narrative', ['highest_stage_reached','turning_point','escalation_point','resolution_endpoint','summary_analytic','key_quotes','coder_notes']],
@@ -1929,7 +1948,7 @@ export default function CodingScreen() {
                   <FieldRow label="Pressure after refusal" value={f('pressure_after_refusal')} onChange={(v) => set('pressure_after_refusal', v)} type="yesno" suggested={s('pressure_after_refusal')} onAcceptSuggestion={() => acceptSuggestion('pressure_after_refusal')} provenance={prov('pressure_after_refusal')} onMarkReviewed={() => markReviewed('pressure_after_refusal')} />
                 </SectionPanel>
 
-                <SectionPanel title="Violence Indicators" fieldKeys={['coercion_present','threats_present','verbal_abuse','physical_force','non_consensual_substance','substance_administration_notes','sexual_assault','stealthing','robbery_theft','loss_of_consciousness','forced_movement_dragging','restraint_confinement','weapon_present_used','choking_strangulation','prevented_exit','exit_type']} fields={fields}>
+                <SectionPanel title="Violence Indicators" fieldKeys={['coercion_present','threats_present','verbal_abuse','physical_force','non_consensual_substance','substance_administration_notes','sexual_assault','stealthing','robbery_theft','loss_of_consciousness','forced_movement_dragging','restraint_confinement','weapon_present_used','choking_strangulation','prevented_exit']} fields={fields}>
                   <FieldRow label="Coercion present" value={f('coercion_present')} onChange={(v) => set('coercion_present', v)} type="yesno-extended" suggested={s('coercion_present')} onAcceptSuggestion={() => acceptSuggestion('coercion_present')} provenance={prov('coercion_present')} onMarkReviewed={() => markReviewed('coercion_present')} badge={showNlpChips ? <NlpBadge rank={nlp.coercion_rank ?? 3} evidence={nlp.coercion_evidence ?? []} fieldValue={f('coercion_present')} /> : undefined} />
                   <FieldRow label="Threats present" value={f('threats_present')} onChange={(v) => set('threats_present', v)} type="yesno" suggested={s('threats_present')} onAcceptSuggestion={() => acceptSuggestion('threats_present')} provenance={prov('threats_present')} onMarkReviewed={() => markReviewed('threats_present')} badge={showNlpChips ? <NlpBadge rank={nlp.weapon_rank ?? 3} evidence={nlp.weapon_evidence ?? []} fieldValue={f('threats_present')} /> : undefined} />
                   <FieldRow label="Verbal abuse" value={f('verbal_abuse')} onChange={(v) => set('verbal_abuse', v)} type="yesno" suggested={s('verbal_abuse')} onAcceptSuggestion={() => acceptSuggestion('verbal_abuse')} provenance={prov('verbal_abuse')} onMarkReviewed={() => markReviewed('verbal_abuse')} />
@@ -1945,7 +1964,6 @@ export default function CodingScreen() {
                   <FieldRow label="Weapon present / used" value={f('weapon_present_used')} onChange={(v) => set('weapon_present_used', v)} type="yesno-extended" provenance={prov('weapon_present_used')} onMarkReviewed={() => markReviewed('weapon_present_used')} />
                   <FieldRow label="Choking / strangulation" value={f('choking_strangulation')} onChange={(v) => set('choking_strangulation', v)} type="yesno-extended" provenance={prov('choking_strangulation')} onMarkReviewed={() => markReviewed('choking_strangulation')} />
                   <FieldRow label="Prevented exit / blocked escape" value={f('prevented_exit')} onChange={(v) => set('prevented_exit', v)} type="yesno-extended" provenance={prov('prevented_exit')} onMarkReviewed={() => markReviewed('prevented_exit')} />
-                  <FieldRow label="Exit type" value={f('exit_type')} onChange={(v) => set('exit_type', v)} type="select" options={['completed','escaped','abandoned','interrupted','unknown']} suggested={s('exit_type')} onAcceptSuggestion={() => acceptSuggestion('exit_type')} provenance={prov('exit_type')} onMarkReviewed={() => markReviewed('exit_type')} />
                 </SectionPanel>
 
                 <SectionPanel title="Early Escalation Detail" fieldKeys={['repeated_pressure','intimidation_present','abrupt_tone_change','verbal_abuse_before_violence','escalation_trigger']} fields={fields} defaultCollapsed>

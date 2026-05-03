@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Search, SlidersHorizontal, Trash2, FileText, Download, X, CheckSquare, Settings, Sparkles } from 'lucide-react';
 import { api } from '../api';
 import type { Report } from '../types';
+import { useToast } from '../components/Toast';
 
 const STATUS_COLORS: Record<string, { color: string; bg: string; border: string }> = {
   coded:       { color: 'var(--green)',   bg: 'var(--green-pale)',  border: 'var(--green-border)' },
@@ -265,7 +266,7 @@ export default function CaseList() {
 
   // Batch NLP
   const [batchAnalyzing, setBatchAnalyzing] = useState(false);
-  const [batchResult, setBatchResult]       = useState<string | null>(null);
+  const addToast = useToast();
 
   // Column chooser state
   const [visibleCols, setVisibleCols] = useState<string[]>(() => lsGet(LS_VISIBLE, DEFAULT_VISIBLE));
@@ -407,17 +408,18 @@ export default function CaseList() {
 
   const handleBatchAnalyze = async () => {
     setBatchAnalyzing(true);
-    setBatchResult(null);
     try {
       const res = await api.batchAnalyze();
       if (!res.nlp_available) {
-        setBatchResult('NLP not available — spaCy model not loaded on server');
+        addToast('NLP unavailable — spaCy model not loaded on server. Run: python -m spacy download en_core_web_sm', 'error');
+      } else if (res.processed === 0) {
+        addToast('NLP All — all cases already have NLP data. Open a case and click "NLP Analyze" to re-run on a specific case.', 'info');
       } else {
-        setBatchResult(`NLP complete — ${res.processed} case${res.processed !== 1 ? 's' : ''} processed`);
+        addToast(`NLP complete — ${res.processed} case${res.processed !== 1 ? 's' : ''} analyzed. Open cases to review signals.`, 'success');
         load();
       }
     } catch {
-      setBatchResult('NLP batch failed — check server logs');
+      addToast('NLP batch failed — check that the backend is running', 'error');
     } finally {
       setBatchAnalyzing(false);
     }
@@ -507,9 +509,6 @@ export default function CaseList() {
               {f.options.map(([val, label]) => <option key={val} value={val}>{label}</option>)}
             </select>
           ))}
-          {batchResult && (
-            <span style={{ fontSize: 11.5, color: 'var(--text-3)', fontStyle: 'italic', marginLeft: 8 }}>{batchResult}</span>
-          )}
         </div>
 
       </div>
