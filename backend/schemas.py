@@ -79,11 +79,14 @@ class ReportUpdate(BaseModel):
     suspect_age_estimate: Optional[str] = None
     vehicle_present: Optional[str] = None
     vehicle_make: Optional[str] = None
+    vehicle_year: Optional[str] = None
     vehicle_model: Optional[str] = None
     vehicle_colour: Optional[str] = None
+    vehicle_description: Optional[str] = None
     plate_partial: Optional[str] = None
     repeat_suspect_flag: Optional[str] = None
     repeat_vehicle_flag: Optional[str] = None
+    human_trafficking_flag: Optional[str] = None
 
     # Narrative coding
     early_escalation_score: Optional[str] = None
@@ -235,11 +238,14 @@ class ReportOut(BaseModel):
     suspect_age_estimate: str
     vehicle_present: str
     vehicle_make: str
+    vehicle_year: str
     vehicle_model: str
     vehicle_colour: str
+    vehicle_description: str
     plate_partial: str
     repeat_suspect_flag: str
     repeat_vehicle_flag: str
+    human_trafficking_flag: str
 
     early_escalation_score: str
     mobility_richness_score: str

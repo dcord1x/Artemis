@@ -8,13 +8,14 @@ interface Props {
   fields: Record<string, any>;
   children: ReactNode;
   defaultCollapsed?: boolean;
+  noAutoCollapse?: boolean;
 }
 
 function isFilled(v: any): boolean {
   return v !== null && v !== undefined && String(v).trim() !== '';
 }
 
-export default function SectionPanel({ title, description, fieldKeys, fields, children, defaultCollapsed = false }: Props) {
+export default function SectionPanel({ title, description, fieldKeys, fields, children, defaultCollapsed = false, noAutoCollapse = false }: Props) {
   const filled = fieldKeys.filter(k => isFilled(fields[k])).length;
   const total = fieldKeys.length;
   const complete = filled === total && total > 0;
@@ -22,8 +23,8 @@ export default function SectionPanel({ title, description, fieldKeys, fields, ch
   const [open, setOpen] = useState(!defaultCollapsed && !complete);
 
   useEffect(() => {
-    if (complete) setOpen(false);
-  }, [complete]);
+    if (complete && !noAutoCollapse) setOpen(false);
+  }, [complete, noAutoCollapse]);
 
   const pct = total > 0 ? Math.round((filled / total) * 100) : 0;
   const barColor = complete ? 'var(--green)' : pct > 0 ? 'var(--gold)' : 'var(--border-mid)';

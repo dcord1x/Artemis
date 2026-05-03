@@ -95,11 +95,14 @@ class Report(Base):
     suspect_age_estimate = Column(String, default="")
     vehicle_present = Column(String, default="")
     vehicle_make = Column(String, default="")
+    vehicle_year = Column(String, default="")
     vehicle_model = Column(String, default="")
     vehicle_colour = Column(String, default="")
+    vehicle_description = Column(Text, default="")
     plate_partial = Column(String, default="")
     repeat_suspect_flag = Column(String, default="")
     repeat_vehicle_flag = Column(String, default="")
+    human_trafficking_flag = Column(String, default="")
 
     # Narrative coding
     early_escalation_score = Column(String, default="")

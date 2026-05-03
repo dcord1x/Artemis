@@ -1787,7 +1787,7 @@ export default function CodingScreen() {
               ['stages', 'Stages', []],
               ['encounter', 'Encounter', ['initial_approach_type','negotiation_present','refusal_present','pressure_after_refusal','coercion_present','threats_present','verbal_abuse','physical_force','sexual_assault','robbery_theft','stealthing','repeated_pressure','intimidation_present','abrupt_tone_change','verbal_abuse_before_violence']],
               ['mobility', 'Mobility', ['movement_present','movement_attempted','mode_of_movement','entered_vehicle','public_to_private_shift','public_to_secluded_shift','cross_neighbourhood','cross_municipality','cross_city_movement','offender_control_over_movement','movement_completed','who_controlled_movement','movement_confidence']],
-              ['suspect', 'Suspect', ['suspect_gender','suspect_age_estimate','vehicle_present','vehicle_make','vehicle_model','vehicle_colour','plate_partial']],
+              ['suspect', 'Suspect', ['suspect_gender','suspect_age_estimate','vehicle_present','vehicle_make','vehicle_year','vehicle_model','vehicle_colour','plate_partial']],
               ['narrative', 'Narrative', ['highest_stage_reached','turning_point','escalation_point','resolution_endpoint','summary_analytic','key_quotes','coder_notes']],
               ['gis', 'GIS', ['initial_contact_address_raw','incident_address_raw','initial_contact_confidence','incident_confidence','destination_confidence']],
               ['summary', 'Summary', ['initial_approach_type','negotiation_present','refusal_present','pressure_after_refusal','coercion_present','threats_present','physical_force','sexual_assault','robbery_theft','exit_type','movement_present','entered_vehicle','public_to_private_shift','public_to_secluded_shift','indoor_outdoor','public_private']],
@@ -2008,7 +2008,7 @@ export default function CodingScreen() {
 
             {activeTab === 'suspect' && (
               <div style={{ marginBottom: 12 }}>
-                <SectionPanel title="Suspect Description" fieldKeys={['suspect_count','suspect_gender','suspect_description_text','suspect_race_ethnicity','suspect_age_estimate']} fields={fields}>
+                <SectionPanel title="Suspect Description" fieldKeys={['suspect_count','suspect_gender','suspect_description_text','suspect_race_ethnicity','suspect_age_estimate']} fields={fields} noAutoCollapse>
                   <FieldRow label="Suspect count" value={f('suspect_count')} onChange={(v) => set('suspect_count', v)} suggested={s('suspect_count')} onAcceptSuggestion={() => acceptSuggestion('suspect_count')} provenance={prov('suspect_count')} onMarkReviewed={() => markReviewed('suspect_count')} />
                   <FieldRow label="Suspect gender" value={f('suspect_gender')} onChange={(v) => set('suspect_gender', v)} suggested={s('suspect_gender')} onAcceptSuggestion={() => acceptSuggestion('suspect_gender')} provenance={prov('suspect_gender')} onMarkReviewed={() => markReviewed('suspect_gender')} />
                   <FieldRow label="Suspect description" value={f('suspect_description_text')} onChange={(v) => set('suspect_description_text', v)} type="textarea" suggested={s('suspect_description_text')} onAcceptSuggestion={() => acceptSuggestion('suspect_description_text')} provenance={prov('suspect_description_text')} onMarkReviewed={() => markReviewed('suspect_description_text')} />
@@ -2016,14 +2016,45 @@ export default function CodingScreen() {
                   <FieldRow label="Age estimate" value={f('suspect_age_estimate')} onChange={(v) => set('suspect_age_estimate', v)} suggested={s('suspect_age_estimate')} onAcceptSuggestion={() => acceptSuggestion('suspect_age_estimate')} provenance={prov('suspect_age_estimate')} onMarkReviewed={() => markReviewed('suspect_age_estimate')} />
                 </SectionPanel>
 
-                <SectionPanel title="Vehicle" fieldKeys={['vehicle_present','vehicle_make','vehicle_model','vehicle_colour','plate_partial','repeat_suspect_flag','repeat_vehicle_flag']} fields={fields}>
+                <SectionPanel title="Vehicle" fieldKeys={['vehicle_present','vehicle_make','vehicle_year','vehicle_model','vehicle_colour','vehicle_description','plate_partial','repeat_suspect_flag','repeat_vehicle_flag']} fields={fields} noAutoCollapse>
                   <FieldRow label="Vehicle present" value={f('vehicle_present')} onChange={(v) => set('vehicle_present', v)} type="yesno-extended" suggested={s('vehicle_present')} onAcceptSuggestion={() => acceptSuggestion('vehicle_present')} provenance={prov('vehicle_present')} onMarkReviewed={() => markReviewed('vehicle_present')} />
                   <FieldRow label="Vehicle make" value={f('vehicle_make')} onChange={(v) => set('vehicle_make', v)} suggested={s('vehicle_make')} onAcceptSuggestion={() => acceptSuggestion('vehicle_make')} provenance={prov('vehicle_make')} onMarkReviewed={() => markReviewed('vehicle_make')} />
+                  <FieldRow label="Vehicle year" value={f('vehicle_year')} onChange={(v) => set('vehicle_year', v)} provenance={prov('vehicle_year')} onMarkReviewed={() => markReviewed('vehicle_year')} placeholder="e.g. 2019" />
                   <FieldRow label="Vehicle model" value={f('vehicle_model')} onChange={(v) => set('vehicle_model', v)} suggested={s('vehicle_model')} onAcceptSuggestion={() => acceptSuggestion('vehicle_model')} provenance={prov('vehicle_model')} onMarkReviewed={() => markReviewed('vehicle_model')} />
                   <FieldRow label="Vehicle colour" value={f('vehicle_colour')} onChange={(v) => set('vehicle_colour', v)} suggested={s('vehicle_colour')} onAcceptSuggestion={() => acceptSuggestion('vehicle_colour')} provenance={prov('vehicle_colour')} onMarkReviewed={() => markReviewed('vehicle_colour')} />
+                  <FieldRow label="Vehicle description" value={f('vehicle_description')} onChange={(v) => set('vehicle_description', v)} type="textarea" placeholder='Free-text description, e.g. "Painter&apos;s van with ladders on top", "rusted rear panel"' provenance={prov('vehicle_description')} onMarkReviewed={() => markReviewed('vehicle_description')} />
                   <FieldRow label="Plate (partial)" value={f('plate_partial')} onChange={(v) => set('plate_partial', v)} suggested={s('plate_partial')} onAcceptSuggestion={() => acceptSuggestion('plate_partial')} placeholder="e.g. JC3 37L" provenance={prov('plate_partial')} onMarkReviewed={() => markReviewed('plate_partial')} />
                   <FieldRow label="Repeat suspect flag" value={f('repeat_suspect_flag')} onChange={(v) => set('repeat_suspect_flag', v)} type="yesno" provenance={prov('repeat_suspect_flag')} onMarkReviewed={() => markReviewed('repeat_suspect_flag')} />
                   <FieldRow label="Repeat vehicle flag" value={f('repeat_vehicle_flag')} onChange={(v) => set('repeat_vehicle_flag', v)} type="yesno" provenance={prov('repeat_vehicle_flag')} onMarkReviewed={() => markReviewed('repeat_vehicle_flag')} />
+                </SectionPanel>
+
+                <SectionPanel title="Case Flags" fieldKeys={['human_trafficking_flag']} fields={fields}>
+                  <div style={{ padding: '4px 8px 8px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', userSelect: 'none' }}>
+                      <div
+                        onClick={() => set('human_trafficking_flag', f('human_trafficking_flag') === 'yes' ? '' : 'yes')}
+                        style={{
+                          width: 36, height: 20, borderRadius: 10, flexShrink: 0,
+                          background: f('human_trafficking_flag') === 'yes' ? '#9B1D1D' : 'var(--border)',
+                          position: 'relative', cursor: 'pointer',
+                          transition: 'background 0.2s',
+                        }}
+                      >
+                        <div style={{
+                          position: 'absolute', top: 2, left: f('human_trafficking_flag') === 'yes' ? 18 : 2,
+                          width: 16, height: 16, borderRadius: '50%',
+                          background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                          transition: 'left 0.2s',
+                        }} />
+                      </div>
+                      <span style={{ fontSize: 13, fontWeight: f('human_trafficking_flag') === 'yes' ? 600 : 400, color: f('human_trafficking_flag') === 'yes' ? '#9B1D1D' : 'var(--text-2)' }}>
+                        Possible Human Trafficking
+                      </span>
+                      {f('human_trafficking_flag') === 'yes' && (
+                        <span style={{ fontSize: 10, fontWeight: 700, color: '#fff', background: '#9B1D1D', borderRadius: 4, padding: '1px 6px', letterSpacing: '0.05em' }}>FLAGGED</span>
+                      )}
+                    </label>
+                  </div>
                 </SectionPanel>
               </div>
             )}

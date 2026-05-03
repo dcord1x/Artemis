@@ -67,11 +67,14 @@ export interface Report {
   suspect_age_estimate: string;
   vehicle_present: string;
   vehicle_make: string;
+  vehicle_year: string;
   vehicle_model: string;
   vehicle_colour: string;
+  vehicle_description: string;
   plate_partial: string;
   repeat_suspect_flag: string;
   repeat_vehicle_flag: string;
+  human_trafficking_flag: string;
 
   early_escalation_score: string;
   mobility_richness_score: string;

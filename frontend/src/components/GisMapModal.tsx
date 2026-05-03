@@ -169,7 +169,7 @@ export default function GisMapModal({ fields, onClose, onGeocode }: GisMapModalP
 
   // Geocode an existing address string → lat/lon
   const geocodeAddress = (cfg: typeof POINT_CONFIG[0]) => {
-    const address = fields[cfg.normKey] as string | undefined;
+    const address = (fields[cfg.normKey] as string | undefined) || (fields[cfg.rawKey] as string | undefined);
     if (!address || !onGeocode || !geocoderRef.current) return;
     setGeocoding(true);
     geocoderRef.current.geocode({ address }, (results, status) => {
@@ -308,18 +308,18 @@ export default function GisMapModal({ fields, onClose, onGeocode }: GisMapModalP
               </Autocomplete>
             </div>
           )}
-          {!isLoaded || validPoints.length === 0 ? (
+          {!isLoaded ? (
             <div style={{
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               height: '100%', color: 'var(--text-3)', fontSize: 13,
             }}>
-              {!isLoaded ? 'Loading map…' : 'No coordinates entered yet — fill in lat/lon fields or use the toolbar above to place points on the map.'}
+              Loading map…
             </div>
           ) : (
             <GoogleMap
               mapContainerStyle={{ width: '100%', height: '100%' }}
-              center={coords[0] ?? { lat: 20, lng: 0 }}
-              zoom={5}
+              center={coords[0] ?? { lat: 49.25, lng: -123.12 }}
+              zoom={coords.length > 0 ? 5 : 11}
               onLoad={onMapLoad}
               onClick={(e) => {
                 if (placeMode) { handleMapClick(e); return; }
@@ -333,6 +333,16 @@ export default function GisMapModal({ fields, onClose, onGeocode }: GisMapModalP
                 draggableCursor: placeMode ? 'crosshair' : undefined,
               }}
             >
+              {validPoints.length === 0 && !placeMode && (
+                <div style={{
+                  position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+                  background: 'rgba(255,255,255,0.9)', borderRadius: 8, padding: '10px 16px',
+                  fontSize: 12, color: '#555', textAlign: 'center', pointerEvents: 'none',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+                }}>
+                  Search an address above or select a point type and click the map to place it
+                </div>
+              )}
               {validPoints.map((p) => {
                 const lat = fields[p.latKey] as number;
                 const lon = fields[p.lonKey] as number;
