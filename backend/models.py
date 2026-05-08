@@ -291,6 +291,8 @@ def init_db():
         # PDF provenance
         ("source_bulletin_text", "TEXT DEFAULT ''"),
         ("source_bulletin_session_id", "VARCHAR DEFAULT ''"),
+        # Suspect / vehicle expanded
+        ("vehicle_year", "VARCHAR DEFAULT ''"),
         # Violence indicators
         ("loss_of_consciousness", "VARCHAR DEFAULT ''"),
         ("non_consensual_substance", "VARCHAR DEFAULT ''"),
