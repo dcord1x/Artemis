@@ -14,6 +14,30 @@ NLP-only contributions are always surfaced as provisional — never as confirmed
 from collections import Counter
 from typing import Any
 
+_POSITIVE: frozenset = frozenset({'yes', 'probable', 'inferred', 'probable / inferred'})
+
+_BULLETIN_POSITIVE: frozenset = frozenset({
+    'immediate — issue bulletin', 'yes — further review needed', 'possible — analyst review',
+})
+_URGENCY_HIGH: frozenset = frozenset({'urgent — same-day action', 'high — within 48 hours'})
+
+_HEATMAP_FIELDS: list = [
+    'refusal_present', 'pressure_after_refusal', 'coercion_present', 'threats_present',
+    'physical_force', 'sexual_assault', 'stealthing', 'robbery_theft',
+    'non_consensual_substance', 'loss_of_consciousness', 'forced_movement_dragging',
+    'restraint_confinement', 'weapon_present_used', 'choking_strangulation',
+    'prevented_exit', 'movement_relocation_present',
+    'trafficking_exploitation_concern', 'third_party_control_indicated',
+    'public_safety_bulletin_suitability',
+]
+
+_VAWG_FLAG_FIELDS: list = [
+    'trafficking_exploitation_concern', 'third_party_control_indicated',
+    'worker_appears_controlled', 'client_connected_to_controller',
+    'movement_to_unknown_unsafe_location', 'worker_unaware_how_arrived',
+    'grooming_recruitment_concern', 'repeat_targeting_concern',
+    'multiple_women_referenced', 'organized_group_offending_concern',
+]
 
 # ── Low-level helpers ─────────────────────────────────────────────────────────
 
@@ -389,10 +413,28 @@ def aggregate_sequences(reports: list) -> dict:
         if len(harm_stages_present) >= 2:
             harm_counter[' → '.join(harm_stages_present)] += 1
 
+        escalation_cue = 'yes' if any(
+            _get(r, f) == 'yes' for f in ('repeated_pressure', 'intimidation_present', 'abrupt_tone_change', 'verbal_abuse_before_violence')
+        ) else ''
+        main_harms = ', '.join(
+            lbl for fld, lbl in [
+                ('coercion_present', 'coercion'), ('physical_force', 'physical force'),
+                ('sexual_assault', 'sexual assault'), ('robbery_theft', 'robbery'),
+                ('threats_present', 'threats'), ('weapon_present_used', 'weapon'),
+                ('choking_strangulation', 'choking'), ('prevented_exit', 'exit blocked'),
+            ]
+            if _get(r, fld) in _POSITIVE
+        )
         per_case.append({
-            'report_id':   _get(r, 'report_id'),
-            'sequence':    ' → '.join(names),
-            'stage_count': len(names),
+            'report_id':                   _get(r, 'report_id'),
+            'sequence':                    ' → '.join(names),
+            'stage_count':                 len(names),
+            'primary_incident_type':       _get(r, 'primary_incident_type'),
+            'overall_severity':            _get(r, 'overall_severity'),
+            'stage_coding_suitability':    _get(r, 'stage_coding_suitability'),
+            'movement_relocation_present': _get(r, 'movement_relocation_present'),
+            'escalation_cue':              escalation_cue,
+            'main_harms':                  main_harms,
         })
 
     return {
@@ -497,20 +539,114 @@ def aggregate_environment(reports: list) -> dict:
     des_counter: Counter = Counter()
     loc_counter: Counter = Counter()
 
-    _LOC_CLASSIFY = [
-        ('vehicle', 'vehicle / car'),       ('car', 'vehicle / car'),
-        ('truck', 'vehicle / car'),
-        ('hotel', 'hotel / motel'),         ('motel', 'hotel / motel'),
-        ('residence', 'residence'),         ('house', 'residence'),
-        ('apartment', 'residence'),         ('home', 'residence'),
-        ('alley', 'alley / lane'),          ('lane', 'alley / lane'),
-        ('street', 'street / roadway'),     ('road', 'street / roadway'),
-        ('avenue', 'street / roadway'),
-        ('park', 'park / outdoor area'),    ('parking', 'parking lot'),
-        ('business', 'commercial'),         ('store', 'commercial'),
-        ('bar', 'bar / venue'),             ('club', 'bar / venue'),
-        ('online', 'online / digital'),     ('app', 'online / digital'),
+    # Keyword → canonical location type category.
+    # Checked in order; first match wins.
+    _LOC_CLASSIFY: list[tuple[str, str]] = [
+        # Vehicles first (avoid "avenue" hitting "vehicle")
+        ('vehicle',       'vehicle / car'),
+        (' car ',         'vehicle / car'),
+        ('truck',         'vehicle / car'),
+        ('suv',           'vehicle / car'),
+        ('van ',          'vehicle / car'),
+        # Accommodation
+        ('hotel',         'hotel / motel'),
+        ('motel',         'hotel / motel'),
+        ('airbnb',        'hotel / motel'),
+        # Residence
+        ('residence',     'residence'),
+        ('house',         'residence'),
+        ('apartment',     'residence'),
+        ('condo',         'residence'),
+        ('home',          'residence'),
+        ('unit ',         'residence'),
+        ('suite',         'residence'),
+        # Outdoor / lanes
+        ('alley',         'alley / lane'),
+        (' lane',         'alley / lane'),
+        # Streets / roads
+        ('street',        'street / roadway'),
+        (' road',         'street / roadway'),
+        ('avenue',        'street / roadway'),
+        ('boulevard',     'street / roadway'),
+        ('highway',       'street / roadway'),
+        ('intersection',  'known intersection'),
+        (' and ',         'known intersection'),
+        (' & ',           'known intersection'),
+        # Parks / outdoor
+        ('park',          'park / outdoor area'),
+        ('outdoor',       'park / outdoor area'),
+        ('field',         'park / outdoor area'),
+        # Parking
+        ('parking lot',   'parking lot'),
+        ('parking',       'parking lot'),
+        # Commercial / business
+        ('business',      'business / commercial site'),
+        ('store',         'business / commercial site'),
+        ('shop',          'business / commercial site'),
+        ('mall',          'business / commercial site'),
+        ('office',        'business / commercial site'),
+        # Venues
+        ('bar',           'bar / venue'),
+        ('club',          'bar / venue'),
+        ('restaurant',    'bar / venue'),
+        # Digital / online
+        ('online',        'online / digital'),
+        ('app',           'online / digital'),
+        ('text',          'online / digital'),
+        ('phone',         'online / digital'),
+        # Unknown explicit
+        ('unknown',       'unknown / unclear'),
+        ('unclear',       'unknown / unclear'),
+        ('not known',     'unknown / unclear'),
+        ('not specified', 'unknown / unclear'),
     ]
+
+    # Narrative-fragment detection: if the raw value looks like a sentence
+    # (long, starts with a stopword, or contains a full stop), classify it
+    # as "other / unclear" rather than dumping it as a category label.
+    _NARRATIVE_STARTERS = (
+        'the ', 'it ', 'she ', 'he ', 'they ', 'worker ', 'suspect ',
+        'client ', 'victim ', 'this ', 'an ', 'a ', 'after ', 'when ',
+        'at the time', 'foot ',  # e.g. "foot" as lone word → not a category
+    )
+
+    def _classify_location(loc: str) -> tuple[str, str | None]:
+        """
+        Return (category, specific_location | None).
+
+        category         — one of the canonical type strings above
+        specific_location — non-None when the value looks like a named place
+                            (intersection, neighbourhood, municipality) rather
+                            than a generic type string.
+        """
+        raw = loc.strip()
+        if not raw:
+            return ('unknown / unclear', None)
+
+        lc = raw.lower()
+
+        # Reject outright if it looks like a sentence fragment
+        is_long_narrative = len(raw) > 40 or '.' in raw or raw.endswith(',')
+        starts_narrative  = any(lc.startswith(s) for s in _NARRATIVE_STARTERS)
+        if is_long_narrative or starts_narrative:
+            return ('other / unclear', None)
+
+        # Keyword classification
+        for keyword, category in _LOC_CLASSIFY:
+            if keyword in lc:
+                # If it matched "and" / "&" but is short it may be a named intersection
+                if keyword in (' and ', ' & '):
+                    return (category, raw.title())
+                return (category, None)
+
+        # Short, looks like a proper noun / named place → specific location
+        if len(raw) <= 35:
+            return ('known neighbourhood / municipality', raw.title())
+
+        return ('other / unclear', None)
+
+    specific_loc_counter: Counter = Counter()
+    location_mentions_total: int = 0  # may exceed case count (up to 3 fields per case)
 
     for r in reports:
         io = _get(r, 'indoor_outdoor')
@@ -530,15 +666,11 @@ def aggregate_environment(reports: list) -> dict:
             loc = _get(r, field)
             if not loc:
                 continue
-            loc_lc = loc.lower()
-            categorised = False
-            for keyword, category in _LOC_CLASSIFY:
-                if keyword in loc_lc:
-                    loc_counter[category] += 1
-                    categorised = True
-                    break
-            if not categorised:
-                loc_counter[loc[:40].title()] += 1
+            location_mentions_total += 1
+            category, specific = _classify_location(loc)
+            loc_counter[category] += 1
+            if specific:
+                specific_loc_counter[specific] += 1
 
     # ── Cross-tabulations ─────────────────────────────────────────────────────
     def _harm_cross(subset: list) -> dict:
@@ -593,11 +725,238 @@ def aggregate_environment(reports: list) -> dict:
         'public_private':        dict(pp_counter),
         'deserted':              dict(des_counter),
         'location_types':        [{'type': t, 'count': c}
-                                   for t, c in loc_counter.most_common(15)],
+                                   for t, c in loc_counter.most_common(20)],
+        'specific_locations':    [{'location': loc, 'count': c}
+                                   for loc, c in specific_loc_counter.most_common(20)
+                                   if c >= 2],   # only show repeated locations
+        'location_mentions_total': location_mentions_total,
         'violence_by_environment': violence_by_env,
         'movement_by_setting':   movement_by_setting,
         'deserted_analysis':     deserted_analysis,
         'combined_patterns':     [{'pattern': p, 'count': c}
                                    for p, c in combined_counter.most_common(15)],
         'total':                 total,
+    }
+
+
+def aggregate_encounter(reports: list) -> dict:
+    """
+    Aggregate encounter-level (whole-incident) indicator fields across all reports.
+
+    Counts positive responses (yes / probable / inferred / probable / inferred) for
+    all major Encounter tab indicators and builds frequency distributions for
+    categorical fields (primary incident type, overall severity, etc.).
+    Also builds useful cross-tabulations.
+    """
+    total = len(reports)
+
+    incident_type_ctr: Counter = Counter()
+    severity_ctr:      Counter = Counter()
+    suitability_ctr:   Counter = Counter()
+    clarity_ctr:       Counter = Counter()
+
+    indicator_fields = [
+        'negotiation_present', 'refusal_present', 'pressure_after_refusal',
+        'boundary_issue_present', 'coercion_present', 'threats_present',
+        'verbal_abuse', 'physical_force', 'non_consensual_substance',
+        'sexual_assault', 'stealthing', 'robbery_theft', 'loss_of_consciousness',
+        'forced_movement_dragging', 'restraint_confinement', 'weapon_present_used',
+        'choking_strangulation', 'prevented_exit', 'movement_relocation_present',
+        'repeated_pressure', 'intimidation_present', 'abrupt_tone_change',
+        'verbal_abuse_before_violence',
+    ]
+    indicator_counts = {f: 0 for f in indicator_fields}
+
+    refusal_then_coercion   = 0
+    pressure_then_force     = 0
+    movement_with_harm      = 0
+    substance_with_blackout = 0
+
+    for r in reports:
+        it = _get(r, 'primary_incident_type')
+        if it:
+            incident_type_ctr[it] += 1
+
+        sev = _get(r, 'overall_severity')
+        if sev:
+            severity_ctr[sev] += 1
+
+        suit = _get(r, 'stage_coding_suitability')
+        if suit:
+            suitability_ctr[suit] += 1
+
+        cl = _get(r, 'sequence_clarity')
+        if cl:
+            clarity_ctr[cl] += 1
+
+        for field in indicator_fields:
+            if _get(r, field) in _POSITIVE:
+                indicator_counts[field] += 1
+
+        # Cross-tabulations — accumulated in main loop (single pass)
+        if _get(r, 'refusal_present') in _POSITIVE and _get(r, 'coercion_present') in _POSITIVE:
+            refusal_then_coercion += 1
+        if _get(r, 'pressure_after_refusal') in _POSITIVE and _get(r, 'physical_force') in _POSITIVE:
+            pressure_then_force += 1
+        if _get(r, 'movement_relocation_present') in _POSITIVE and (
+            _get(r, 'coercion_present') in _POSITIVE
+            or _get(r, 'physical_force') in _POSITIVE
+            or _get(r, 'sexual_assault') in _POSITIVE
+        ):
+            movement_with_harm += 1
+        if _get(r, 'non_consensual_substance') in _POSITIVE and _get(r, 'loss_of_consciousness') in _POSITIVE:
+            substance_with_blackout += 1
+
+    return {
+        'incident_type_distribution': [{'value': v, 'count': c} for v, c in incident_type_ctr.most_common()],
+        'severity_distribution':      [{'value': v, 'count': c} for v, c in severity_ctr.most_common()],
+        'suitability_distribution':   [{'value': v, 'count': c} for v, c in suitability_ctr.most_common()],
+        'clarity_distribution':       [{'value': v, 'count': c} for v, c in clarity_ctr.most_common()],
+        'indicator_counts':           indicator_counts,
+        'cross_tabs': {
+            'refusal_then_coercion':    refusal_then_coercion,
+            'pressure_then_force':      pressure_then_force,
+            'movement_with_harm':       movement_with_harm,
+            'substance_with_blackout':  substance_with_blackout,
+        },
+        'total': total,
+    }
+
+
+def aggregate_vawg(reports: list) -> dict:
+    """
+    Aggregate VAWG / Exploitation and Public Safety Flag fields across all reports.
+    Single pass: builds flag counts, distributions, cross-tabs,
+    co-occurrence matrix, and flagged-for-review list.
+    """
+    total = len(reports)
+
+    flag_counts = {f: 0 for f in _VAWG_FLAG_FIELDS}
+    bulletin_positive_count = 0
+    urgency_high_count      = 0
+    urgency_ctr:   Counter = Counter()
+    bulletin_ctr:  Counter = Counter()
+
+    n = len(_HEATMAP_FIELDS)
+    matrix = [[0] * n for _ in range(n)]
+
+    cross_tabs = {
+        'trafficking_with_movement':            0,
+        'trafficking_with_substance':           0,
+        'trafficking_with_blackout':            0,
+        'third_party_with_unknown_location':    0,
+        'group_offending_with_sexual_violence': 0,
+        'bulletin_suitable_with_repeat_target': 0,
+    }
+
+    flagged_for_review: list = []
+
+    for r in reports:
+        # Flag counts (VAWG select fields)
+        for field in _VAWG_FLAG_FIELDS:
+            if _get(r, field) in _POSITIVE:
+                flag_counts[field] += 1
+
+        # Bulletin suitability / urgency
+        bull = _get(r, 'public_safety_bulletin_suitability')
+        if bull:
+            bulletin_ctr[bull] += 1
+        if bull in _BULLETIN_POSITIVE:
+            bulletin_positive_count += 1
+
+        urg = _get(r, 'public_safety_urgency_level')
+        if urg:
+            urgency_ctr[urg] += 1
+        if urg in _URGENCY_HIGH:
+            urgency_high_count += 1
+
+        # Co-occurrence matrix — upper triangle, mirrored after loop
+        # Field index 18 (public_safety_bulletin_suitability) uses bulletin-specific positive set
+        row_vals = [_get(r, f) for f in _HEATMAP_FIELDS]
+        positives = [
+            v in _BULLETIN_POSITIVE if i == 18 else v in _POSITIVE
+            for i, v in enumerate(row_vals)
+        ]
+        for i in range(n):
+            if positives[i]:
+                matrix[i][i] += 1
+                for j in range(i + 1, n):
+                    if positives[j]:
+                        matrix[i][j] += 1
+
+        # Cross-tabs
+        traf = _get(r, 'trafficking_exploitation_concern') in _POSITIVE
+        if traf:
+            if _get(r, 'movement_relocation_present') in _POSITIVE:
+                cross_tabs['trafficking_with_movement'] += 1
+            if _get(r, 'non_consensual_substance') in _POSITIVE:
+                cross_tabs['trafficking_with_substance'] += 1
+            if _get(r, 'loss_of_consciousness') in _POSITIVE:
+                cross_tabs['trafficking_with_blackout'] += 1
+        if _get(r, 'third_party_control_indicated') in _POSITIVE and \
+                _get(r, 'movement_to_unknown_unsafe_location') in _POSITIVE:
+            cross_tabs['third_party_with_unknown_location'] += 1
+        if _get(r, 'organized_group_offending_concern') in _POSITIVE and \
+                _get(r, 'sexual_assault') in _POSITIVE:
+            cross_tabs['group_offending_with_sexual_violence'] += 1
+        if bull in _BULLETIN_POSITIVE and \
+                _get(r, 'repeat_targeting_concern') in _POSITIVE:
+            cross_tabs['bulletin_suitable_with_repeat_target'] += 1
+
+        # Flagged for review
+        any_vawg_flag = any(_get(r, f) in _POSITIVE for f in _VAWG_FLAG_FIELDS)
+        is_flagged = any_vawg_flag or bull in _BULLETIN_POSITIVE or urg in _URGENCY_HIGH
+        if is_flagged and _get(r, 'coding_status') != 'uncoded':
+            reasons = []
+            if traf:
+                reasons.append('trafficking/exploitation concern')
+            if _get(r, 'third_party_control_indicated') in _POSITIVE:
+                reasons.append('third-party control')
+            if _get(r, 'worker_appears_controlled') in _POSITIVE:
+                reasons.append('worker appears controlled')
+            if _get(r, 'grooming_recruitment_concern') in _POSITIVE:
+                reasons.append('grooming/recruitment')
+            if _get(r, 'repeat_targeting_concern') in _POSITIVE:
+                reasons.append('repeat targeting')
+            if _get(r, 'multiple_women_referenced') in _POSITIVE:
+                reasons.append('multiple women referenced')
+            if _get(r, 'organized_group_offending_concern') in _POSITIVE:
+                reasons.append('group offending concern')
+            if bull in _BULLETIN_POSITIVE:
+                reasons.append('bulletin suitable')
+            if urg in _URGENCY_HIGH:
+                reasons.append(f'urgency: {urg}')
+            flagged_for_review.append({
+                'report_id':                          _get(r, 'report_id'),
+                'incident_date':                      _get(r, 'incident_date'),
+                'city':                               _get(r, 'city'),
+                'primary_incident_type':              _get(r, 'primary_incident_type'),
+                'overall_severity':                   _get(r, 'overall_severity'),
+                'public_safety_urgency_level':        urg,
+                'public_safety_bulletin_suitability': bull,
+                'coding_status':                      _get(r, 'coding_status'),
+                'vawg_key_excerpts':                  _get(r, 'vawg_key_excerpts'),
+                'reasons':                            reasons,
+            })
+
+    # Mirror co-occurrence matrix upper triangle
+    for i in range(n):
+        for j in range(i + 1, n):
+            matrix[j][i] = matrix[i][j]
+
+    return {
+        'flag_counts': {
+            **flag_counts,
+            'public_safety_bulletin_suitability_positive': bulletin_positive_count,
+            'public_safety_urgency_urgent_high':            urgency_high_count,
+        },
+        'urgency_distribution':             [{'value': v, 'count': c} for v, c in urgency_ctr.most_common()],
+        'bulletin_suitability_distribution':[{'value': v, 'count': c} for v, c in bulletin_ctr.most_common()],
+        'cross_tabs':                       cross_tabs,
+        'cooccurrence': {
+            'fields': _HEATMAP_FIELDS,
+            'matrix': matrix,
+        },
+        'flagged_for_review': flagged_for_review,
+        'total':              total,
     }

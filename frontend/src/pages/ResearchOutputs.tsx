@@ -15,11 +15,14 @@
 
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Download, RefreshCw, AlertTriangle, FileText, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
-import { GoogleMap, useJsApiLoader, Marker, Polyline } from '@react-google-maps/api';
+import { Download, RefreshCw, AlertTriangle, ChevronDown, ChevronUp, Trash2, FileText } from 'lucide-react';
+import { GoogleMap, Marker, Polyline } from '@react-google-maps/api';
 import { api } from '../api';
 import type {
   ResearchAggregate,
+  AggregateEncounter,
+  AggregateVawg,
+  DataQuality,
   SequenceRow,
   PatternRow,
   StageRow,
@@ -31,7 +34,8 @@ import type {
   LinkagePatterns,
   MapPoint,
 } from '../types';
-import { GOOGLE_MAPS_API_KEY, LIBRARIES as MAP_LIBRARIES } from '../mapsConfig';
+import { GOOGLE_MAPS_API_KEY } from '../mapsConfig';
+import { useMaps } from '../context/MapsContext';
 
 // ── Shared sub-components ─────────────────────────────────────────────────────
 
@@ -79,28 +83,32 @@ function ProvenanceNote() {
 
 /** Horizontal frequency bar */
 function FreqBar({
-  label, count, max, sub, color = 'var(--accent)', provisional,
+  label, count, max, sub, color = 'var(--accent)', provisional, sparse,
 }: {
   label: string; count: number; max: number;
-  sub?: string; color?: string; provisional?: boolean;
+  sub?: string; color?: string; provisional?: boolean; sparse?: boolean;
 }) {
   const pct = max > 0 ? (count / max) * 100 : 0;
+  // Sparse signals get a visually muted, thinner bar
+  const barH = sparse ? 3 : 5;
+  const barColor = sparse ? color + '88' : color;
   return (
-    <div style={{ marginBottom: 8 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 3 }}>
-        <span style={{ fontSize: 12.5, color: 'var(--text-2)', maxWidth: '78%', lineHeight: 1.35 }}>
+    <div style={{ marginBottom: sparse ? 6 : 8, opacity: sparse ? 0.75 : 1 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 2 }}>
+        <span style={{ fontSize: sparse ? 12 : 12.5, color: sparse ? 'var(--text-3)' : 'var(--text-2)', maxWidth: '78%', lineHeight: 1.35 }}>
           {label}
           {provisional && (
             <span style={{ marginLeft: 5, fontSize: 10, color: 'var(--amber)', fontWeight: 600 }}>
               [provisional]
             </span>
           )}
+          {sparse && <SparseBadge />}
           {sub && <span style={{ fontSize: 11, color: 'var(--text-3)', marginLeft: 5 }}>{sub}</span>}
         </span>
         <span style={{ fontSize: 12, color: 'var(--text-3)', fontWeight: 500, flexShrink: 0 }}>{count}</span>
       </div>
-      <div style={{ height: 5, borderRadius: 10, background: 'var(--surface-3)', overflow: 'hidden' }}>
-        <div style={{ height: '100%', borderRadius: 10, background: color, width: `${pct}%`, transition: 'width 0.5s ease' }} />
+      <div style={{ height: barH, borderRadius: 10, background: 'var(--surface-3)', overflow: 'hidden' }}>
+        <div style={{ height: '100%', borderRadius: 10, background: barColor, width: `${pct}%`, transition: 'width 0.5s ease' }} />
       </div>
     </div>
   );
@@ -153,18 +161,468 @@ function Panel({ children, style }: { children: React.ReactNode; style?: React.C
   );
 }
 
+/** Format percentage with 1 decimal place for small values to avoid "0%" */
+function fmtPct(n: number, total: number): string {
+  if (total === 0) return '—';
+  const p = (n / total) * 100;
+  if (p === 0) return '0%';
+  if (p < 10) return `${p.toFixed(1)}%`;
+  return `${Math.round(p)}%`;
+}
+
+/** Format as "N cases (X%)" */
+function fmtCountPct(n: number, total: number): string {
+  return `${n} case${n !== 1 ? 's' : ''} (${fmtPct(n, total)})`;
+}
+
+// ── Research governance layer ─────────────────────────────────────────────────
+
+/**
+ * Minimum coded cases before a distribution/chart is shown at full weight.
+ * Below this, outputs are labelled "coded signal" not "pattern."
+ */
+const SPARSE_MIN = 5;
+/**
+ * Minimum coded cases before a distribution card is shown at all.
+ * Below this, show a compact placeholder instead of an empty panel.
+ */
+const MIN_DIST_CASES = 3;
+
+/** True if a count is too small to represent a meaningful distribution. */
+function isSparse(count: number): boolean {
+  return count > 0 && count < SPARSE_MIN;
+}
+
+/** Compact placeholder shown in place of an empty or near-empty output. */
+function SparsePlaceholder({ field, tab = 'Encounter' }: { field: string; tab?: string }) {
+  return (
+    <div style={{
+      fontSize: 12, color: 'var(--text-3)', fontStyle: 'italic',
+      padding: '8px 10px', background: 'var(--surface-2)', borderRadius: 5,
+      border: '1px dashed var(--border)',
+    }}>
+      Not enough analyst-coded data yet to display this output.
+      Code <strong style={{ fontWeight: 600, fontStyle: 'normal' }}>{field}</strong> in the {tab} tab to populate this section.
+    </div>
+  );
+}
+
+/**
+ * Compact "sparse" badge shown next to an output with very low counts.
+ * Visually signals that the result is a preliminary coded signal, not a pattern.
+ */
+function SparseBadge() {
+  return (
+    <span style={{
+      fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 3,
+      background: 'var(--amber-pale, #fffbeb)', color: 'var(--amber, #f59e0b)',
+      border: '1px solid var(--amber-border, #fcd34d)',
+      marginLeft: 6, verticalAlign: 'middle',
+    }}>
+      sparse
+    </span>
+  );
+}
+
+// ── Module-level constants ────────────────────────────────────────────────────
+
+function severityColor(sev: string): string {
+  const s = sev.toLowerCase();
+  if (s.includes('severe') || s.includes('high risk')) return '#A51F1F';
+  if (s.includes('high concern')) return 'var(--amber)';
+  return 'var(--green)';
+}
+
+const SUITABILITY_RE = /^(yes|no|partial)/i;
+
+const INDICATOR_LABELS: [string, string, string][] = [
+  ['negotiation_present',         'Negotiation present',                     '#0ea5e9'],
+  ['refusal_present',             'Refusal present',                         '#0ea5e9'],
+  ['pressure_after_refusal',      'Pressure after refusal',                  '#f59e0b'],
+  ['boundary_issue_present',      'Boundary issue present',                  '#f59e0b'],
+  ['coercion_present',            'Coercion present',                        '#ef4444'],
+  ['threats_present',             'Threats present',                         '#ef4444'],
+  ['verbal_abuse',                'Verbal abuse',                            '#ef4444'],
+  ['physical_force',              'Physical force',                          '#ef4444'],
+  ['sexual_assault',              'Sexual assault',                          '#ef4444'],
+  ['stealthing',                  'Stealthing / condom refusal',             '#ef4444'],
+  ['robbery_theft',               'Robbery / theft',                         '#ef4444'],
+  ['non_consensual_substance',    'Non-consensual substance administration', '#8b5cf6'],
+  ['loss_of_consciousness',       'Loss of consciousness / blackout',        '#8b5cf6'],
+  ['forced_movement_dragging',    'Forced movement / dragging',              '#6366f1'],
+  ['restraint_confinement',       'Restraint / confinement',                 '#6366f1'],
+  ['weapon_present_used',         'Weapon present / used',                   '#ef4444'],
+  ['choking_strangulation',       'Choking / strangulation',                 '#ef4444'],
+  ['prevented_exit',              'Prevented exit / blocked escape',         '#ef4444'],
+  ['movement_relocation_present', 'Movement / relocation present',           '#6366f1'],
+  ['repeated_pressure',           'Repeated pressure (escalation cue)',      '#f59e0b'],
+  ['intimidation_present',        'Intimidation present (escalation cue)',   '#f59e0b'],
+  ['abrupt_tone_change',          'Abrupt tone change (escalation cue)',     '#f59e0b'],
+  ['verbal_abuse_before_violence', 'Verbal abuse before violence',           '#f59e0b'],
+];
+
+
+const HEATMAP_SHORT_LABELS: Record<string, string> = {
+  refusal_present:                     'Refusal',
+  pressure_after_refusal:              'Pressure',
+  coercion_present:                    'Coercion',
+  threats_present:                     'Threats',
+  physical_force:                      'Phys. force',
+  sexual_assault:                      'Sexual assault',
+  stealthing:                          'Stealthing',
+  robbery_theft:                       'Robbery',
+  non_consensual_substance:            'Substance',
+  loss_of_consciousness:               'Blackout',
+  forced_movement_dragging:            'Forced mvmt',
+  restraint_confinement:               'Restraint',
+  weapon_present_used:                 'Weapon',
+  choking_strangulation:               'Choking',
+  prevented_exit:                      'Exit blocked',
+  movement_relocation_present:         'Movement',
+  trafficking_exploitation_concern:    'Trafficking',
+  third_party_control_indicated:       '3rd-party ctrl',
+  public_safety_bulletin_suitability:  'Bulletin',
+};
+
+const STAGE_NODE_COLORS: Record<string, string> = {
+  'initial contact':      '#64748b',
+  'negotiation':          '#f59e0b',
+  'refusal':              '#f59e0b',
+  'pressure':             '#f59e0b',
+  'movement':             '#6366f1',
+  'environment shift':    '#6366f1',
+  'coercion':             '#ef4444',
+  'physical force':       '#ef4444',
+  'sexual assault':       '#ef4444',
+  'robbery':              '#ef4444',
+  'weapon':               '#ef4444',
+  'choking':              '#ef4444',
+  'substance':            '#8b5cf6',
+  'blackout':             '#8b5cf6',
+  'exit':                 '#10b981',
+  'escape':               '#10b981',
+  'outcome':              '#10b981',
+};
+
+function stageNodeColor(label: string): string {
+  const l = label.toLowerCase();
+  for (const [key, color] of Object.entries(STAGE_NODE_COLORS)) {
+    if (l.includes(key)) return color;
+  }
+  return '#64748b';
+}
+
+// ── Visual sub-components ─────────────────────────────────────────────────────
+
+function SequenceFlowDiagram({ sequences, total }: { sequences: { sequence: string; count: number }[]; total: number }) {
+  const top = sequences.slice(0, 5);
+  if (top.length === 0) return <div style={{ fontSize: 12.5, color: 'var(--text-3)', fontStyle: 'italic' }}>No sequences coded yet.</div>;
+
+  const NODE_W = 132;
+  const GAP = 18;
+  const PAD = 10;
+
+  function wrapLabel(s: string): string[] {
+    if (s.length <= 15) return [s];
+    const mid = Math.ceil(s.length / 2);
+    let idx = s.lastIndexOf(' ', mid);
+    if (idx < 5) idx = s.indexOf(' ', mid);
+    if (idx < 0) return [s];
+    return [s.slice(0, idx), s.slice(idx + 1)];
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {top.map((row, ri) => {
+        const nodes = row.sequence.split(' → ');
+        const wrapped = nodes.map(n => wrapLabel(n));
+        const hasWrapped = wrapped.some(w => w.length > 1);
+        const NODE_H = hasWrapped ? 44 : 32;
+        const ROW_H = NODE_H + 20;
+        const ARROW_Y = ROW_H / 2;
+        const svgW = nodes.length * (NODE_W + GAP) - GAP + PAD * 2;
+        return (
+          <div key={ri} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ overflowX: 'auto' }}>
+              <svg width={svgW} height={ROW_H} viewBox={`0 0 ${svgW} ${ROW_H}`} style={{ display: 'block' }}>
+                <defs>
+                  <marker id={`arr-${ri}`} markerWidth="8" markerHeight="8" refX="7" refY="3.5" orient="auto">
+                    <path d="M0,0 L0,7 L8,3.5 z" fill="#94a3b8" />
+                  </marker>
+                </defs>
+                {nodes.map((node, ni) => {
+                  const x = PAD + ni * (NODE_W + GAP);
+                  const color = stageNodeColor(node);
+                  const lines = wrapped[ni];
+                  return (
+                    <g key={ni}>
+                      {ni < nodes.length - 1 && (
+                        <line x1={x + NODE_W} y1={ARROW_Y} x2={x + NODE_W + GAP - 3} y2={ARROW_Y}
+                          stroke="#94a3b8" strokeWidth="1.5" markerEnd={`url(#arr-${ri})`} />
+                      )}
+                      <rect x={x} y={(ROW_H - NODE_H) / 2} width={NODE_W} height={NODE_H} rx={5}
+                        fill={color + '22'} stroke={color} strokeWidth="1.5" />
+                      {lines.length === 1 ? (
+                        <text x={x + NODE_W / 2} y={ARROW_Y + 4} textAnchor="middle"
+                          fontSize="10.5" fill={color} fontWeight="600"
+                          style={{ fontFamily: 'system-ui, sans-serif' }}>{lines[0]}</text>
+                      ) : (
+                        <>
+                          <text x={x + NODE_W / 2} y={ARROW_Y - 4} textAnchor="middle"
+                            fontSize="10.5" fill={color} fontWeight="600"
+                            style={{ fontFamily: 'system-ui, sans-serif' }}>{lines[0]}</text>
+                          <text x={x + NODE_W / 2} y={ARROW_Y + 10} textAnchor="middle"
+                            fontSize="10.5" fill={color} fontWeight="600"
+                            style={{ fontFamily: 'system-ui, sans-serif' }}>{lines[1]}</text>
+                        </>
+                      )}
+                    </g>
+                  );
+                })}
+              </svg>
+            </div>
+            <span style={{ fontSize: 11.5, color: 'var(--text-3)', whiteSpace: 'nowrap', flexShrink: 0 }}>
+              ×{row.count} ({total > 0 ? fmtPct(row.count, total) : '—'})
+            </span>
+          </div>
+        );
+      })}
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 11, color: 'var(--text-3)', padding: '6px 10px', background: 'var(--surface-2)', borderRadius: 5, marginTop: 4 }}>
+        {([
+          ['#64748b', 'Contact / neutral'],
+          ['#f59e0b', 'Negotiation / pressure'],
+          ['#6366f1', 'Movement / shift'],
+          ['#ef4444', 'Harm / violence'],
+          ['#10b981', 'Exit / outcome'],
+        ] as [string, string][]).map(([color, label]) => (
+          <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <div style={{ width: 12, height: 12, borderRadius: 3, background: color + '44', border: `1.5px solid ${color}`, flexShrink: 0 }} />
+            <span>{label}</span>
+          </div>
+        ))}
+      </div>
+      <div style={{ fontSize: 11, color: 'var(--text-3)', fontStyle: 'italic' }}>
+        Observed coded sequences — not causal inference.
+      </div>
+    </div>
+  );
+}
+
+function EscalationPathwayDiagram({ bigrams }: { bigrams: { pattern: string; count: number }[]; stageFreq?: { stage: string; count: number }[] }) {
+  if (bigrams.length === 0) return <div style={{ fontSize: 12.5, color: 'var(--text-3)', fontStyle: 'italic' }}>No transition data coded yet.</div>;
+
+  type Group = { label: string; color: string; items: typeof bigrams };
+  const groups: Group[] = [
+    { label: 'Contact / setup', color: '#64748b', items: [] },
+    { label: 'Negotiation / pressure', color: '#f59e0b', items: [] },
+    { label: 'Movement / environmental', color: '#6366f1', items: [] },
+    { label: 'Escalation / harm', color: '#ef4444', items: [] },
+    { label: 'Exit / outcome', color: '#10b981', items: [] },
+  ];
+
+  const colorToGroup: Record<string, number> = {
+    '#64748b': 0, '#f59e0b': 1, '#6366f1': 2, '#8b5cf6': 2,
+    '#ef4444': 3, '#10b981': 4,
+  };
+
+  for (const b of bigrams.slice(0, 20)) {
+    const [, to] = b.pattern.split(' → ');
+    const toColor = stageNodeColor(to || '');
+    const gi = colorToGroup[toColor] ?? 0;
+    groups[gi].items.push(b);
+  }
+
+  const maxCount = bigrams[0]?.count ?? 1;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ fontSize: 11, color: 'var(--text-3)' }}>
+        Bar width = frequency of this transition. Grouped by destination stage type.
+        Observed coded pathways — not confirmed causal sequences.
+      </div>
+      {groups.filter(g => g.items.length > 0).map(g => (
+        <div key={g.label}>
+          <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: g.color, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ width: 10, height: 10, borderRadius: 2, background: g.color + '44', border: `1.5px solid ${g.color}` }} />
+            {g.label}
+          </div>
+          {g.items.map((b, i) => {
+            const [from, to] = b.pattern.split(' → ');
+            const pct = maxCount > 0 ? b.count / maxCount * 100 : 0;
+            const fromColor = stageNodeColor(from || '');
+            const toColor = stageNodeColor(to || '');
+            return (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, marginBottom: 5 }}>
+                <div style={{ width: 220, display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: fromColor, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={from}>{from}</span>
+                  <span style={{ color: 'var(--text-3)', fontSize: 12, flexShrink: 0 }}>→</span>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: toColor, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={to}>{to}</span>
+                </div>
+                <div style={{ flex: 1, height: 12, background: 'var(--surface-3)', borderRadius: 6, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', borderRadius: 6, background: toColor, width: `${pct}%`, transition: 'width 0.5s ease' }} />
+                </div>
+                <span style={{ fontSize: 11, color: 'var(--text-3)', width: 28, textAlign: 'right', flexShrink: 0 }}>×{b.count}</span>
+              </div>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CooccurrenceHeatmap({ fields, matrix, total }: { fields: string[]; matrix: number[][]; total: number }) {
+  if (fields.length === 0 || matrix.length === 0) return <div style={{ fontSize: 12.5, color: 'var(--text-3)', fontStyle: 'italic' }}>No data yet.</div>;
+
+  const CELL = 30;
+  const LABEL_W = 140;
+  const LABEL_H = 100;
+
+  function renderGrid(indices: number[], title: string, color: string) {
+    const n = indices.length;
+    const subFields = indices.map(i => fields[i]);
+    const maxVal = Math.max(1, ...indices.flatMap(ri =>
+      indices.filter(ci => ri !== ci).map(ci => matrix[ri]?.[ci] ?? 0)
+    ));
+    return (
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ fontSize: 11.5, fontWeight: 600, color, marginBottom: 8 }}>{title}</div>
+        <div style={{ overflowX: 'auto' }}>
+          <svg
+            width={LABEL_W + n * CELL + 4}
+            height={LABEL_H + n * CELL + 4}
+            viewBox={`0 0 ${LABEL_W + n * CELL + 4} ${LABEL_H + n * CELL + 4}`}
+            style={{ display: 'block' }}
+          >
+            {subFields.map((f, ci) => (
+              <text key={`col-${ci}`}
+                x={LABEL_W + ci * CELL + CELL / 2} y={LABEL_H - 4}
+                fontSize="9.5" fill="var(--text-3)" textAnchor="end"
+                transform={`rotate(-45, ${LABEL_W + ci * CELL + CELL / 2}, ${LABEL_H - 4})`}
+                style={{ fontFamily: 'system-ui, sans-serif' }}>
+                <title>{f.replace(/_/g, ' ')}</title>
+                {HEATMAP_SHORT_LABELS[f] ?? f.replace(/_/g, ' ')}
+              </text>
+            ))}
+            {subFields.map((rf, ri) => (
+              <g key={`row-${ri}`}>
+                <text x={LABEL_W - 4} y={LABEL_H + ri * CELL + CELL / 2 + 3.5}
+                  fontSize="9.5" fill="var(--text-3)" textAnchor="end"
+                  style={{ fontFamily: 'system-ui, sans-serif' }}>
+                  <title>{rf.replace(/_/g, ' ')}</title>
+                  {HEATMAP_SHORT_LABELS[rf] ?? rf.replace(/_/g, ' ')}
+                </text>
+                {subFields.map((cf, ci) => {
+                  const actualRi = indices[ri];
+                  const actualCi = indices[ci];
+                  const val = matrix[actualRi]?.[actualCi] ?? 0;
+                  const isDiag = actualRi === actualCi;
+                  const pctTip = total > 0 ? (val / total * 100) < 10 ? (val / total * 100).toFixed(1) : Math.round(val / total * 100).toString() : '0';
+                  const opacity = isDiag ? 0.12 : (maxVal > 0 ? Math.min(0.88, val / maxVal * 0.88 + 0.08) : 0);
+                  const fill = isDiag ? '#94a3b8' : val === 0 ? 'transparent' : `rgba(239,68,68,${opacity})`;
+                  const fullA = rf.replace(/_/g, ' ');
+                  const fullB = cf.replace(/_/g, ' ');
+                  return (
+                    <g key={`cell-${ri}-${ci}`}>
+                      <rect x={LABEL_W + ci * CELL} y={LABEL_H + ri * CELL}
+                        width={CELL - 1} height={CELL - 1}
+                        fill={fill}
+                        stroke={val > 0 ? 'rgba(239,68,68,0.2)' : 'var(--border)'}
+                        strokeWidth="0.5">
+                        <title>{isDiag ? `${fullA}: ${val} case${val !== 1 ? 's' : ''} (individual count)` : `${fullA} × ${fullB}: ${val} case${val !== 1 ? 's' : ''} (${pctTip}% of coded cases)`}</title>
+                      </rect>
+                      {val > 0 && !isDiag && val >= (maxVal * 0.4) && (
+                        <text x={LABEL_W + ci * CELL + CELL / 2} y={LABEL_H + ri * CELL + CELL / 2 + 3.5}
+                          textAnchor="middle" fontSize="8" fill="var(--text-1)"
+                          style={{ fontFamily: 'system-ui, sans-serif', pointerEvents: 'none' }}>{val}</text>
+                      )}
+                    </g>
+                  );
+                })}
+              </g>
+            ))}
+          </svg>
+        </div>
+      </div>
+    );
+  }
+
+  const harmIndices  = fields.map((_, i) => i).slice(0, 16);
+  const vawgIndices  = fields.map((_, i) => i).slice(12);
+
+  return (
+    <div>
+      <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 12, padding: '8px 10px', background: 'var(--surface-2)', borderRadius: 5, lineHeight: 1.5 }}>
+        Cells show observed co-occurrence within the same case — how often both indicators are present together.
+        This does not establish causation or linkage. Diagonal = individual indicator count.
+        Hover over a cell to see the indicator pair, count, and percentage of coded cases.
+      </div>
+      {renderGrid(harmIndices, 'Harm and control indicators', '#ef4444')}
+      {renderGrid(vawgIndices, 'VAWG / exploitation and public safety indicators', '#f59e0b')}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, fontSize: 11, color: 'var(--text-3)' }}>
+        <span>Low co-occurrence</span>
+        <div style={{ display: 'flex', gap: 1 }}>
+          {[0.08,0.25,0.45,0.65,0.88].map(o => (
+            <div key={o} style={{ width: 16, height: 12, background: `rgba(239,68,68,${o})`, borderRadius: 2 }} />
+          ))}
+        </div>
+        <span>High co-occurrence</span>
+      </div>
+    </div>
+  );
+}
+
+function MovementRiskCard({ counts, total }: { counts: { movement_present: number; public_to_private: number; public_to_secluded: number; entered_vehicle: number; offender_controlled_high: number; cross_municipality: number } | null; total: number }) {
+  if (!counts) return null;
+  const pct = (n: number) => fmtPct(n, total);
+
+  const rows: [string, number, string][] = [
+    ['Movement present',              counts.movement_present,          '#6366f1'],
+    ['Public → private shift',        counts.public_to_private,         '#f59e0b'],
+    ['Public → secluded shift',       counts.public_to_secluded,        '#f59e0b'],
+    ['Entered vehicle',               counts.entered_vehicle,           '#6366f1'],
+    ['Offender-controlled (high)',    counts.offender_controlled_high,  '#ef4444'],
+    ['Cross-municipality',            counts.cross_municipality,        '#8b5cf6'],
+  ];
+  const maxVal = Math.max(1, ...rows.map(r => r[1]));
+
+  return (
+    <div>
+      <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 10 }}>
+        Cases where movement coincides with changed risk conditions.
+        Analyst-coded values only. Movement ≠ causation.
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+        {rows.map(([label, count, color]) => (
+          <div key={label}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+              <span style={{ fontSize: 12, color: 'var(--text-2)' }}>{label}</span>
+              <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>{count} ({pct(count)})</span>
+            </div>
+            <div style={{ height: 6, borderRadius: 10, background: 'var(--surface-3)', overflow: 'hidden' }}>
+              <div style={{ height: '100%', borderRadius: 10, background: color, width: `${maxVal > 0 ? count / maxVal * 100 : 0}%`, transition: 'width 0.5s ease' }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Tab types ─────────────────────────────────────────────────────────────────
 
-type Tab = 'sequences' | 'mobility' | 'environment' | 'caselist' | 'stage_patterns' | 'spatial' | 'linkage_view';
+type Tab = 'encounter_overview' | 'vawg' | 'sequences' | 'mobility' | 'environment' | 'caselist' | 'stage_patterns' | 'spatial' | 'linkage_view';
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'stage_patterns', label: 'Stage Patterns' },
-  { id: 'sequences',      label: 'Encounter Sequences' },
-  { id: 'mobility',       label: 'Mobility Pathways' },
-  { id: 'environment',    label: 'Environmental Patterns' },
-  { id: 'spatial',        label: 'Spatial Overview' },
-  { id: 'linkage_view',   label: 'Case Linkage View' },
-  { id: 'caselist',       label: 'Case Sequence Table' },
+  { id: 'encounter_overview', label: 'Encounter Overview' },
+  { id: 'vawg',               label: 'VAWG / Exploitation' },
+  { id: 'stage_patterns',     label: 'Stage Patterns' },
+  { id: 'sequences',          label: 'Encounter Sequences' },
+  { id: 'mobility',           label: 'Mobility Pathways' },
+  { id: 'environment',        label: 'Environmental Patterns' },
+  { id: 'spatial',            label: 'Spatial Overview' },
+  { id: 'linkage_view',       label: 'Case Linkage View' },
+  { id: 'caselist',           label: 'Case Sequence Table' },
 ];
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -183,6 +641,15 @@ export default function ResearchOutputs() {
   const [filterDateFrom, setFilterDateFrom]         = useState('');
   const [filterDateTo, setFilterDateTo]             = useState('');
 
+  // Case list sorting / filtering
+  const [caseSort, setCaseSort]                     = useState<string>('severity');
+  const [caseSortAsc, setCaseSortAsc]               = useState(false);
+  const [caseFilterSeverity, setCaseFilterSeverity] = useState('');
+  const [caseFilterMovement, setCaseFilterMovement] = useState('');
+  const [caseFilterHarm, setCaseFilterHarm]         = useState('');
+  const [caseFilterEsc, setCaseFilterEsc]           = useState('');
+  const [caseFilterStages, setCaseFilterStages]     = useState('1+');
+
   // Linkage patterns
   const [linkageData, setLinkageData]       = useState<LinkagePatterns | null>(null);
   const [linkageLoading, setLinkageLoading] = useState(false);
@@ -198,11 +665,7 @@ export default function ResearchOutputs() {
   const [noteError, setNoteError]   = useState('');
 
   // Google Maps
-  const { isLoaded: mapsLoaded } = useJsApiLoader({
-    id: 'google-map-script',
-    googleMapsApiKey: GOOGLE_MAPS_API_KEY,
-    libraries: MAP_LIBRARIES,
-  });
+  const { isLoaded: mapsLoaded } = useMaps();
 
   const loadStagePatterns = (params?: { stage_type?: string; visibility?: string; guardianship?: string; isolation?: string; date_from?: string; date_to?: string }) => {
     setStageLoading(true);
@@ -309,24 +772,336 @@ export default function ResearchOutputs() {
   const { sequences, mobility, environment } = data;
   const total = data.total;
 
+  // ── Encounter Overview tab ────────────────────────────────────────────────
+
+  const EncounterOverviewTab = () => {
+    const enc: AggregateEncounter | undefined = data.encounter;
+    if (!enc) {
+      return (
+        <Panel>
+          <div style={{ fontSize: 12.5, color: 'var(--text-3)' }}>
+            Encounter overview data not yet available. Restart the backend to load.
+          </div>
+        </Panel>
+      );
+    }
+
+    const indCounts = enc.indicator_counts;
+    const maxInd = Math.max(1, ...Object.values(indCounts));
+    const maxDist = (arr: { value: string; count: number }[]) => arr[0]?.count ?? 1;
+
+    // Grouped indicator sections
+    type IndicatorGroup = { label: string; color: string; fields: [string, string, string][] };
+    const INDICATOR_GROUPS: IndicatorGroup[] = [
+      {
+        label: 'Negotiation / refusal',
+        color: '#0ea5e9',
+        fields: [
+          ['negotiation_present',    'Negotiation present',          '#0ea5e9'],
+          ['refusal_present',        'Refusal present',              '#0ea5e9'],
+          ['pressure_after_refusal', 'Pressure after refusal',       '#f59e0b'],
+          ['boundary_issue_present', 'Boundary issue present',       '#f59e0b'],
+        ],
+      },
+      {
+        label: 'Coercion / control',
+        color: '#ef4444',
+        fields: [
+          ['coercion_present',  'Coercion present',  '#ef4444'],
+          ['threats_present',   'Threats present',   '#ef4444'],
+          ['verbal_abuse',      'Verbal abuse',      '#ef4444'],
+        ],
+      },
+      {
+        label: 'Physical and sexual violence',
+        color: '#ef4444',
+        fields: [
+          ['physical_force',   'Physical force',               '#ef4444'],
+          ['sexual_assault',   'Sexual assault',               '#ef4444'],
+          ['stealthing',       'Stealthing / condom refusal',  '#ef4444'],
+          ['robbery_theft',    'Robbery / theft',              '#ef4444'],
+          ['weapon_present_used',     'Weapon present / used',         '#ef4444'],
+          ['choking_strangulation',   'Choking / strangulation',       '#ef4444'],
+          ['prevented_exit',          'Prevented exit / blocked escape','#ef4444'],
+          ['forced_movement_dragging','Forced movement / dragging',     '#6366f1'],
+          ['restraint_confinement',   'Restraint / confinement',        '#6366f1'],
+        ],
+      },
+      {
+        label: 'Movement / location',
+        color: '#6366f1',
+        fields: [
+          ['movement_relocation_present','Movement / relocation present','#6366f1'],
+        ],
+      },
+      {
+        label: 'Substance / blackout',
+        color: '#8b5cf6',
+        fields: [
+          ['non_consensual_substance','Non-consensual substance administration','#8b5cf6'],
+          ['loss_of_consciousness',   'Loss of consciousness / blackout',       '#8b5cf6'],
+        ],
+      },
+      {
+        label: 'Early escalation cues',
+        color: '#f59e0b',
+        fields: [
+          ['repeated_pressure',         'Repeated pressure',          '#f59e0b'],
+          ['intimidation_present',      'Intimidation present',       '#f59e0b'],
+          ['abrupt_tone_change',        'Abrupt tone change',         '#f59e0b'],
+          ['verbal_abuse_before_violence','Verbal abuse before violence','f59e0b'],
+        ],
+      },
+    ];
+
+    // Derive top indicators for summary card
+    const sortedInd = INDICATOR_LABELS
+      .map(([field, label]) => ({ field, label, count: indCounts[field as keyof typeof indCounts] ?? 0 }))
+      .filter(x => x.count > 0)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+        {/* Currently coded incident-level signals summary */}
+        {sortedInd.length > 0 && (
+          <Panel>
+            <SectionHeading>Currently coded incident-level signals</SectionHeading>
+            <div style={{
+              fontSize: 11.5, color: 'var(--text-3)', padding: '8px 12px',
+              background: 'var(--surface-2)', borderRadius: 5, marginBottom: 14,
+              lineHeight: 1.6, borderLeft: '3px solid var(--accent)',
+            }}>
+              These indicators appear in analyst-coded fields. They are preliminary coded signals only and do not
+              establish prevalence, causation, linkage, or general patterns across the dataset.
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {sortedInd.map(x => (
+                <div key={x.field} style={{
+                  padding: '5px 10px', borderRadius: 5,
+                  background: 'var(--surface-2)', border: '1px solid var(--border)',
+                  fontSize: 12,
+                }}>
+                  <span style={{ color: 'var(--text-2)' }}>{x.label}</span>
+                  <span style={{ color: 'var(--text-3)', marginLeft: 6 }}>{fmtCountPct(x.count, total)}</span>
+                  {isSparse(x.count) && <SparseBadge />}
+                </div>
+              ))}
+            </div>
+          </Panel>
+        )}
+
+        {/* Distributions row */}
+        {(() => {
+          // Show a distribution card only if at least min(10, 10% of dataset) cases have the field coded
+          const distThreshold = Math.max(MIN_DIST_CASES, Math.min(10, Math.floor(total * 0.1)));
+          const codedIncType  = enc.incident_type_distribution.reduce((s, r) => s + r.count, 0);
+          const codedSeverity = enc.severity_distribution.reduce((s, r) => s + r.count, 0);
+          const codedSuit     = enc.suitability_distribution.reduce((s, r) => s + r.count, 0);
+          const codedClarity  = enc.clarity_distribution.reduce((s, r) => s + r.count, 0);
+          return (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+              <Panel>
+                <SectionHeading>Primary incident type</SectionHeading>
+                {codedIncType < distThreshold ? (
+                  <SparsePlaceholder field="Primary incident type" />
+                ) : (
+                  <>
+                    <ProvenanceNote />
+                    <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '0 0 10px' }}>
+                      {codedIncType} of {total} cases coded — % of all cases shown.
+                    </p>
+                    {enc.incident_type_distribution.map((row, i) => (
+                      <FreqBar key={i} label={row.value} count={row.count}
+                        max={maxDist(enc.incident_type_distribution)} color='var(--accent)'
+                        sub={`${fmtPct(row.count, total)} of all cases`}
+                        sparse={isSparse(row.count)} />
+                    ))}
+                  </>
+                )}
+              </Panel>
+              <Panel>
+                <SectionHeading>Overall severity</SectionHeading>
+                {codedSeverity < distThreshold ? (
+                  <SparsePlaceholder field="Overall severity" />
+                ) : (
+                  <>
+                    <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '0 0 10px' }}>
+                      {codedSeverity} of {total} cases coded — % of all cases shown.
+                    </p>
+                    {enc.severity_distribution.map((row, i) => (
+                      <FreqBar key={i} label={row.value} count={row.count}
+                        max={maxDist(enc.severity_distribution)} color={severityColor(row.value)}
+                        sub={`${fmtPct(row.count, total)} of all cases`}
+                        sparse={isSparse(row.count)} />
+                    ))}
+                  </>
+                )}
+              </Panel>
+              <Panel>
+                <SectionHeading>Stage coding suitability</SectionHeading>
+                {codedSuit < distThreshold ? (
+                  <SparsePlaceholder field="Stage coding suitability" />
+                ) : (
+                  <>
+                    <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '0 0 10px' }}>
+                      {codedSuit} of {total} cases coded — % of all cases shown.
+                    </p>
+                    {enc.suitability_distribution.map((row, i) => (
+                      <FreqBar key={i} label={row.value} count={row.count}
+                        max={maxDist(enc.suitability_distribution)} color='#10b981'
+                        sub={`${fmtPct(row.count, total)} of all cases`}
+                        sparse={isSparse(row.count)} />
+                    ))}
+                  </>
+                )}
+              </Panel>
+              <Panel>
+                <SectionHeading>Sequence clarity</SectionHeading>
+                {codedClarity < distThreshold ? (
+                  <SparsePlaceholder field="Sequence clarity" />
+                ) : (
+                  <>
+                    <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '0 0 10px' }}>
+                      {codedClarity} of {total} cases coded — % of all cases shown.
+                    </p>
+                    {enc.clarity_distribution.map((row, i) => (
+                      <FreqBar key={i} label={row.value} count={row.count}
+                        max={maxDist(enc.clarity_distribution)} color='#0ea5e9'
+                        sub={`${fmtPct(row.count, total)} of all cases`}
+                        sparse={isSparse(row.count)} />
+                    ))}
+                  </>
+                )}
+              </Panel>
+            </div>
+          );
+        })()}
+
+        {/* Grouped harm indicators */}
+        <Panel>
+          <SectionHeading>Incident-level harm and control indicators</SectionHeading>
+          <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: '0 0 8px' }}>
+            Count of cases where each indicator is coded yes, probable, or inferred.
+            Denominator: all {total} cases. Analyst-coded values only; NLP-provisional excluded.
+          </p>
+          <div style={{ fontSize: 11.5, color: 'var(--text-3)', padding: '6px 10px', background: 'var(--surface-2)', borderRadius: 5, border: '1px solid var(--border)', marginBottom: 12, lineHeight: 1.5 }}>
+            <strong style={{ fontWeight: 600, color: 'var(--text-2)' }}>Note:</strong>{' '}
+            "Movement / relocation present" refers to relocation or spatial transition pathway fields coded in the Encounter tab.
+            "Forced movement / dragging" is coded separately as a physical harm/control indicator. These are not the same field.
+          </div>
+          <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '0 0 12px' }}>
+            Indicators with fewer than {SPARSE_MIN} cases are marked{' '}
+            <span style={{ fontSize: 10, fontWeight: 600, padding: '1px 5px', borderRadius: 3, background: 'var(--amber-pale, #fffbeb)', color: 'var(--amber, #f59e0b)', border: '1px solid var(--amber-border, #fcd34d)' }}>sparse</span>
+            {' '}and shown with reduced visual weight.
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 32px' }}>
+            {INDICATOR_GROUPS.map(group => (
+              <div key={group.label} style={{ marginBottom: 18 }}>
+                <div style={{
+                  fontSize: 10, fontWeight: 700, textTransform: 'uppercase',
+                  letterSpacing: '0.06em', color: group.color,
+                  marginBottom: 7, display: 'flex', alignItems: 'center', gap: 5,
+                }}>
+                  <div style={{ width: 8, height: 8, borderRadius: 2, background: group.color + '44', border: `1.5px solid ${group.color}`, flexShrink: 0 }} />
+                  {group.label}
+                </div>
+                {group.fields.map(([field, label, color]) => {
+                  const count = indCounts[field as keyof typeof indCounts] ?? 0;
+                  return (
+                    <FreqBar
+                      key={field} label={label} count={count}
+                      max={maxInd} color={color}
+                      sub={`${count} / ${total} cases`}
+                      sparse={isSparse(count)}
+                    />
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </Panel>
+
+        {/* Cross-tabulations — only show when dataset is large enough */}
+        {total >= MIN_DIST_CASES ? (
+          <Panel>
+            <SectionHeading>Key cross-tabulations</SectionHeading>
+            <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: '0 0 8px' }}>
+              Cases where both coded indicators co-occur. Denominator: all {total} imported cases.
+              Analyst-coded values only. These are observed co-occurrences, not confirmed causal links.
+            </p>
+            <div style={{ fontSize: 11.5, color: 'var(--text-3)', padding: '5px 10px', background: 'var(--surface-2)', borderRadius: 5, border: '1px solid var(--border)', marginBottom: 12, lineHeight: 1.5 }}>
+              "Not coded" means one or both fields do not yet have enough analyst-coded coverage for this comparison.
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+              {[
+                { label: 'Refusal present + coercion present', value: enc.cross_tabs.refusal_then_coercion, color: '#ef4444' },
+                { label: 'Pressure after refusal + physical force', value: enc.cross_tabs.pressure_then_force, color: '#ef4444' },
+                { label: 'Movement / relocation + harm indicator co-present', value: enc.cross_tabs.movement_with_harm, color: '#6366f1' },
+                { label: 'Substance administration + blackout / memory gap', value: enc.cross_tabs.substance_with_blackout, color: '#8b5cf6' },
+              ].map(({ label, value, color }) => (
+                <div key={label} style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  padding: '9px 0', borderBottom: '1px solid var(--border)',
+                }}>
+                  <span style={{ fontSize: 12.5, color: 'var(--text-2)', lineHeight: 1.35 }}>
+                    {label}
+                    {isSparse(value) && <SparseBadge />}
+                  </span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: value > 0 ? color : 'var(--text-3)', marginLeft: 16, flexShrink: 0 }}>
+                    {value > 0 ? fmtCountPct(value, total) : '— not coded'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </Panel>
+        ) : (
+          <Panel>
+            <SectionHeading>Key cross-tabulations</SectionHeading>
+            <SparsePlaceholder field="harm indicators (coercion, movement, substance)" />
+          </Panel>
+        )}
+
+      </div>
+    );
+  };
+
   // ── Sequences tab ─────────────────────────────────────────────────────────
 
   const SequencesTab = () => {
     const maxSeq  = sequences.most_common_sequences[0]?.count ?? 1;
-    const maxBi   = sequences.most_common_bigrams[0]?.count ?? 1;
     const maxStg  = sequences.stage_frequency[0]?.count ?? 1;
-    const maxEsc  = sequences.escalation_pathways[0]?.count ?? 1;
 
     return (
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
 
-        {/* Most common full sequences */}
+        {/* Visual sequence flow diagram */}
         <Panel style={{ gridColumn: '1 / -1' }}>
-          <SectionHeading>Most common encounter sequences</SectionHeading>
+          <SectionHeading>Encounter sequence flow — top 5</SectionHeading>
           <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: '0 0 14px' }}>
-            Full stage-by-stage sequences ranked by frequency across{' '}
+            Observed stage-by-stage sequences as connected node diagrams.
+            Derived from analyst-coded stage fields across{' '}
             <strong style={{ color: 'var(--text-2)' }}>{total}</strong> cases.
-            Each sequence is derived from analyst-coded encounter fields.
+          </p>
+          <SequenceFlowDiagram sequences={sequences.most_common_sequences} total={total} />
+        </Panel>
+
+        {/* Escalation pathway visual */}
+        <Panel style={{ gridColumn: '1 / -1' }}>
+          <SectionHeading>Stage-to-stage transitions</SectionHeading>
+          <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: '0 0 14px' }}>
+            Consecutive stage pairs — which stages are observed to follow each other. Analyst-coded cases only.
+          </p>
+          <EscalationPathwayDiagram bigrams={sequences.most_common_bigrams} stageFreq={sequences.stage_frequency} />
+        </Panel>
+
+        {/* Most common full sequences — text list */}
+        <Panel>
+          <SectionHeading>All sequences (text)</SectionHeading>
+          <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: '0 0 14px' }}>
+            Full sequence text ranked by frequency. Sequences appearing in only one case are
+            labelled "single coded" and are not recurring patterns.
           </p>
           {sequences.most_common_sequences.length === 0 ? (
             <div style={{ fontSize: 12.5, color: 'var(--text-3)' }}>
@@ -340,20 +1115,11 @@ export default function ResearchOutputs() {
                 count={row.count}
                 max={maxSeq}
                 color={i === 0 ? 'var(--accent)' : 'var(--accent-pale-border, #8b5cf670)'}
+                sub={row.count === 1 ? 'single coded sequence' : `${row.count} cases`}
+                sparse={row.count === 1}
               />
             ))
           )}
-        </Panel>
-
-        {/* Stage-transition bigrams */}
-        <Panel>
-          <SectionHeading>Most common stage transitions</SectionHeading>
-          <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: '0 0 14px' }}>
-            Consecutive stage pairs — which stages most often follow each other.
-          </p>
-          {sequences.most_common_bigrams.slice(0, 12).map((row: PatternRow, i: number) => (
-            <FreqBar key={i} label={row.pattern} count={row.count} max={maxBi} color='#0ea5e9' />
-          ))}
         </Panel>
 
         {/* Stage frequency */}
@@ -364,26 +1130,35 @@ export default function ResearchOutputs() {
           </p>
           {sequences.stage_frequency.slice(0, 15).map((row: StageRow, i: number) => (
             <FreqBar key={i} label={row.stage} count={row.count} max={maxStg}
-              sub={total > 0 ? `${Math.round(row.count / total * 100)}%` : undefined}
+              sub={total > 0 ? fmtPct(row.count, total) : undefined}
               color='#10b981'
             />
           ))}
         </Panel>
 
-        {/* Escalation pathways */}
+        {/* Escalation pathways — require count ≥ 2 to be shown as recurring */}
         <Panel style={{ gridColumn: '1 / -1' }}>
-          <SectionHeading>Recurring escalation pathways</SectionHeading>
+          <SectionHeading>Observed escalation pathways</SectionHeading>
           <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: '0 0 14px' }}>
             Sequences of harm-related stages only (coercion, threats, intimidation, physical force,
-            sexual assault, robbery). Shows how harm stages chain together across cases.
+            sexual assault, robbery). Shown only when a pathway appears in 2 or more cases.
+            Single-case observations are excluded — they are not repeating coded pathways.
           </p>
-          {sequences.escalation_pathways.length === 0 ? (
-            <div style={{ fontSize: 12.5, color: 'var(--text-3)' }}>No multi-stage escalation patterns yet.</div>
-          ) : (
-            sequences.escalation_pathways.map((row: PathwayRow, i: number) => (
-              <FreqBar key={i} label={row.pathway} count={row.count} max={maxEsc} color='#ef4444' />
-            ))
-          )}
+          {(() => {
+            const recurringPathways = sequences.escalation_pathways.filter(r => r.count >= 2);
+            if (recurringPathways.length === 0) return (
+              <div style={{ fontSize: 12.5, color: 'var(--text-3)' }}>
+                No recurring escalation pathways yet (minimum 2 cases required). Code additional
+                stage sequences to identify recurring harm-escalation chains.
+              </div>
+            );
+            return recurringPathways.map((row: PathwayRow, i: number) => (
+              <FreqBar key={i} label={row.pathway} count={row.count}
+                max={recurringPathways[0].count} color='#ef4444'
+                sub={`${row.count} cases — ${fmtPct(row.count, total)} of all cases`}
+                sparse={isSparse(row.count)} />
+            ));
+          })()}
         </Panel>
 
       </div>
@@ -394,7 +1169,6 @@ export default function ResearchOutputs() {
 
   const MobilityTab = () => {
     const counts  = mobility.counts;
-    const t       = mobility.total || 1;
     const maxPath = mobility.recurring_pathways[0]?.count ?? 1;
     const maxMode = mobility.mode_breakdown[0]?.count ?? 1;
     const maxRoute = mobility.route_patterns[0]?.count ?? 1;
@@ -417,19 +1191,41 @@ export default function ResearchOutputs() {
     return (
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
 
+        {/* Movement risk card */}
+        <Panel style={{ gridColumn: '1 / -1' }}>
+          <SectionHeading>Movement and risk condition changes</SectionHeading>
+          <MovementRiskCard counts={mobility.counts} total={total} />
+        </Panel>
+
         {/* Indicators overview */}
         <Panel style={{ gridColumn: '1 / -1' }}>
-          <SectionHeading>Mobility indicators — dataset overview</SectionHeading>
+          <SectionHeading>
+            Mobility indicators —{' '}
+            {mobility.counts.movement_present < SPARSE_MIN
+              ? 'coded signals (preliminary)'
+              : 'dataset overview'}
+          </SectionHeading>
           <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: '0 0 14px' }}>
-            Frequency of coded mobility fields across{' '}
-            <strong style={{ color: 'var(--text-2)' }}>{mobility.total}</strong> cases.
+            {mobility.counts.movement_present < SPARSE_MIN ? (
+              <>
+                Fewer than {SPARSE_MIN} cases have movement coded.
+                These are <strong style={{ color: 'var(--text-2)' }}>preliminary coded signals</strong>,
+                not mobility patterns. Code additional cases to identify recurring patterns.
+              </>
+            ) : (
+              <>
+                Frequency of coded mobility fields across{' '}
+                <strong style={{ color: 'var(--text-2)' }}>{mobility.total}</strong> cases.
+              </>
+            )}
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 24px' }}>
             {indicators.map(([label, count, color], i) => (
               <FreqBar
                 key={i} label={label} count={count} max={maxInd}
-                sub={`${Math.round(count / t * 100)}%`}
+                sub={`${count} / ${total} cases`}
                 color={color}
+                sparse={isSparse(count)}
               />
             ))}
           </div>
@@ -437,9 +1233,9 @@ export default function ResearchOutputs() {
 
         {/* Recurring pathway combinations */}
         <Panel>
-          <SectionHeading>Recurring mobility pathway combinations</SectionHeading>
+          <SectionHeading>Co-occurring mobility pathway features</SectionHeading>
           <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: '0 0 14px' }}>
-            Co-occurring mobility features — patterns like "vehicle pickup + offender-controlled".
+            Observed co-occurrence of mobility features — e.g. "vehicle pickup + offender-controlled". Appearing in 2+ cases only.
           </p>
           {mobility.recurring_pathways.length === 0 ? (
             <div style={{ fontSize: 12.5, color: 'var(--text-3)' }}>No pathway combinations yet.</div>
@@ -494,27 +1290,40 @@ export default function ResearchOutputs() {
   // ── Environment tab ───────────────────────────────────────────────────────
 
   const EnvironmentTab = () => {
-    const maxLoc     = environment.location_types[0]?.count ?? 1;
+    const maxLoc      = environment.location_types[0]?.count ?? 1;
+    const maxSpec     = (environment.specific_locations ?? [])[0]?.count ?? 1;
     const maxCombined = environment.combined_patterns[0]?.count ?? 1;
+    const envTotal    = environment.total;
+    const locMentions = environment.location_mentions_total ?? 0;
 
-    const distRows: [string, Record<string, number>, string][] = [
-      ['Indoor / Outdoor',   environment.indoor_outdoor,  '#0ea5e9'],
-      ['Public / Private',   environment.public_private,  '#8b5cf6'],
-      ['Deserted context',   environment.deserted,        '#f59e0b'],
+    const distRows: [string, Record<string, number>, string, string][] = [
+      ['Indoor / Outdoor', environment.indoor_outdoor, '#0ea5e9',
+        'Not enough analyst-coded data yet to display this output. Code the Indoor / Outdoor field in the Encounter tab to populate this section.'],
+      ['Public / Private', environment.public_private, '#8b5cf6',
+        'Not enough analyst-coded data yet to display this output. Code the Public / Private field in the Encounter tab to populate this section.'],
+      ['Deserted context', environment.deserted, '#f59e0b',
+        'Not enough analyst-coded data yet to display this output. Code the Deserted Context field in the Encounter tab to populate this section.'],
     ];
 
     return (
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
 
         {/* Basic distributions */}
-        {distRows.map(([label, distObj, color]) => {
+        {distRows.map(([label, distObj, color, emptyMsg]) => {
           const entries = Object.entries(distObj).sort((a, b) => b[1] - a[1]);
           const maxDist = Math.max(...entries.map(([, c]) => c), 1);
           return (
             <Panel key={label}>
               <SectionHeading>{label}</SectionHeading>
+              {envTotal > 0 && (
+                <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: '0 0 10px' }}>
+                  Across <strong style={{ color: 'var(--text-2)' }}>{envTotal}</strong> cases.
+                </p>
+              )}
               {entries.length === 0 ? (
-                <div style={{ fontSize: 12.5, color: 'var(--text-3)' }}>No data yet.</div>
+                <div style={{ fontSize: 12, color: 'var(--text-3)', fontStyle: 'italic', padding: '7px 10px', background: 'var(--surface-2)', borderRadius: 5, border: '1px dashed var(--border)' }}>
+                  {emptyMsg}
+                </div>
               ) : (
                 entries.map(([val, cnt]) => (
                   <FreqBar
@@ -522,8 +1331,9 @@ export default function ResearchOutputs() {
                     label={val.replace(/_/g, ' ')}
                     count={cnt}
                     max={maxDist}
-                    sub={environment.total > 0 ? `${Math.round(cnt / environment.total * 100)}%` : undefined}
+                    sub={envTotal > 0 ? `${cnt} / ${envTotal} cases` : undefined}
                     color={color}
+                    sparse={isSparse(cnt)}
                   />
                 ))
               )}
@@ -531,22 +1341,61 @@ export default function ResearchOutputs() {
           );
         })}
 
-        {/* Location types */}
+        {/* Classified location types */}
         <Panel>
-          <SectionHeading>Location types</SectionHeading>
-          <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: '0 0 14px' }}>
-            Classified from initial contact, primary, and secondary location fields.
+          <SectionHeading>Location types — classified</SectionHeading>
+          <div style={{ fontSize: 11.5, color: 'var(--text-3)', padding: '6px 10px', background: 'var(--surface-2)', borderRadius: 5, border: '1px solid var(--border)', marginBottom: 10, lineHeight: 1.5 }}>
+            Location types are derived from coded/extracted location fields. Environmental condition outputs (indoor/outdoor, public/private, deserted context) require separate analyst coding in the Encounter tab.
+          </div>
+          <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: '0 0 10px', lineHeight: 1.5 }}>
+            {locMentions > 0 ? (
+              <>
+                Counts are <strong>location field mentions</strong>, not cases —
+                a single case can contribute up to 3 mentions (initial contact, primary,
+                and secondary location). Total mentions:{' '}
+                <strong style={{ color: 'var(--text-2)' }}>{locMentions}</strong>{' '}
+                across <strong style={{ color: 'var(--text-2)' }}>{envTotal}</strong> cases.
+              </>
+            ) : (
+              <>Derived from initial contact, primary, and secondary location fields.</>
+            )}{' '}
+            Narrative fragments excluded.
           </p>
-          {environment.location_types.map((row, i) => (
-            <FreqBar key={i} label={row.type} count={row.count} max={maxLoc} color='#10b981' />
-          ))}
+          {environment.location_types.length === 0 ? (
+            <div style={{ fontSize: 12.5, color: 'var(--text-3)', fontStyle: 'italic' }}>
+              No location data yet. Complete the initial contact location or incident location
+              fields in the Encounter tab to populate this section.
+            </div>
+          ) : (
+            environment.location_types.map((row, i) => (
+              <FreqBar key={i} label={row.type} count={row.count} max={maxLoc}
+                sub={locMentions > 0 ? `${fmtPct(row.count, locMentions)} of mentions` : undefined}
+                color='#10b981' />
+            ))
+          )}
         </Panel>
+
+        {/* Specific named locations */}
+        {(environment.specific_locations ?? []).length > 0 && (
+          <Panel>
+            <SectionHeading>Repeated specific locations</SectionHeading>
+            <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: '0 0 10px', lineHeight: 1.5 }}>
+              Named intersections, neighbourhoods, or municipalities appearing in 2+ cases.
+              Potential linkage only — not confirmed connections between cases.
+            </p>
+            {(environment.specific_locations ?? []).map((row, i) => (
+              <FreqBar key={i} label={row.location} count={row.count} max={maxSpec}
+                sub={fmtCountPct(row.count, envTotal)} color='#f59e0b' />
+            ))}
+          </Panel>
+        )}
 
         {/* Violence × environment cross-tabs */}
         <Panel style={{ gridColumn: '1 / -1' }}>
-          <SectionHeading>Violence and movement by environment</SectionHeading>
-          <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: '0 0 16px' }}>
-            Cross-tabulation: how harm indicators distribute across environmental conditions.
+          <SectionHeading>Observed harm and movement by environment</SectionHeading>
+          <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: '0 0 16px', lineHeight: 1.5 }}>
+            Observed co-occurrence of harm indicators across environmental conditions.
+            Analyst-coded values only. Does not establish causation or environmental linkage.
           </p>
 
           {Object.keys(environment.violence_by_environment).length > 0 && (
@@ -554,7 +1403,7 @@ export default function ResearchOutputs() {
               <SubHeading>By indoor / outdoor</SubHeading>
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
                 {Object.entries(environment.violence_by_environment).map(([val, cross]) => (
-                  <CrossTabCard key={val} label={val} data={cross} total={environment.total} />
+                  <CrossTabCard key={val} label={val} data={cross} total={envTotal} />
                 ))}
               </div>
             </>
@@ -565,7 +1414,7 @@ export default function ResearchOutputs() {
               <SubHeading>By public / private setting</SubHeading>
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
                 {Object.entries(environment.movement_by_setting).map(([val, cross]) => (
-                  <CrossTabCard key={val} label={val} data={cross} total={environment.total} />
+                  <CrossTabCard key={val} label={val} data={cross} total={envTotal} />
                 ))}
               </div>
             </>
@@ -576,10 +1425,19 @@ export default function ResearchOutputs() {
               <SubHeading>By deserted context</SubHeading>
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                 {Object.entries(environment.deserted_analysis).map(([val, cross]) => (
-                  <CrossTabCard key={val} label={val.replace(/_/g, ' ')} data={cross} total={environment.total} />
+                  <CrossTabCard key={val} label={val.replace(/_/g, ' ')} data={cross} total={envTotal} />
                 ))}
               </div>
             </>
+          )}
+
+          {Object.keys(environment.violence_by_environment).length === 0
+            && Object.keys(environment.movement_by_setting).length === 0
+            && Object.keys(environment.deserted_analysis).length === 0 && (
+            <div style={{ fontSize: 12.5, color: 'var(--text-3)', fontStyle: 'italic' }}>
+              No cross-tabulation data yet. Code indoor / outdoor, public / private, and harm fields
+              in the Encounter tab to populate these comparisons.
+            </div>
           )}
         </Panel>
 
@@ -587,11 +1445,14 @@ export default function ResearchOutputs() {
         {environment.combined_patterns.length > 0 && (
           <Panel style={{ gridColumn: '1 / -1' }}>
             <SectionHeading>Combined environment + movement + harm patterns</SectionHeading>
-            <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: '0 0 14px' }}>
-              Co-occurring environment, movement, and harm conditions — identifies situational contexts.
+            <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: '0 0 14px', lineHeight: 1.5 }}>
+              Observed co-occurrence of environmental setting, movement, and harm indicators.
+              Across <strong style={{ color: 'var(--text-2)' }}>{envTotal}</strong> cases with coded environmental fields.
+              Analyst-coded values only.
             </p>
             {environment.combined_patterns.map((row: PatternRow, i: number) => (
-              <FreqBar key={i} label={row.pattern} count={row.count} max={maxCombined} color='#ef4444' />
+              <FreqBar key={i} label={row.pattern} count={row.count} max={maxCombined}
+                sub={fmtPct(row.count, envTotal)} color='#ef4444' />
             ))}
           </Panel>
         )}
@@ -600,20 +1461,367 @@ export default function ResearchOutputs() {
     );
   };
 
+  // ── VAWG / Exploitation tab ───────────────────────────────────────────────
+
+  const VawgTab = () => {
+    const vawg: AggregateVawg | undefined = data.vawg;
+    if (!vawg) {
+      return (
+        <Panel>
+          <div style={{ fontSize: 12.5, color: 'var(--text-3)' }}>
+            VAWG / Exploitation data not yet available. Restart the backend to load.
+          </div>
+        </Panel>
+      );
+    }
+
+    const fc = vawg.flag_counts;
+
+    const FLAG_LABELS: [keyof typeof fc, string, string][] = [
+      ['trafficking_exploitation_concern',    'Trafficking / exploitation concern',       '#ef4444'],
+      ['third_party_control_indicated',       'Third-party control indicated',            '#ef4444'],
+      ['worker_appears_controlled',           'Worker appears controlled',                '#f59e0b'],
+      ['client_connected_to_controller',      'Client connected to controller',           '#f59e0b'],
+      ['movement_to_unknown_unsafe_location', 'Movement to unknown / unsafe location',    '#6366f1'],
+      ['worker_unaware_how_arrived',          'Worker unaware how they arrived',          '#8b5cf6'],
+      ['grooming_recruitment_concern',        'Grooming / recruitment concern',           '#f59e0b'],
+      ['repeat_targeting_concern',            'Repeat targeting concern',                 '#f59e0b'],
+      ['multiple_women_referenced',           'Multiple women / victims referenced',      '#ef4444'],
+      ['organized_group_offending_concern',   'Organized / group offending concern',      '#ef4444'],
+      ['public_safety_bulletin_suitability_positive', 'Bulletin suitability — positive', '#dc2626'],
+      ['public_safety_urgency_urgent_high',           'Urgency: urgent or high',          '#dc2626'],
+    ];
+
+    const maxFlag = Math.max(1, ...FLAG_LABELS.map(([k]) => fc[k] ?? 0));
+
+    const CROSS_LABELS: [keyof typeof vawg.cross_tabs, string][] = [
+      ['trafficking_with_movement',            'Trafficking / exploitation concern + movement / relocation'],
+      ['trafficking_with_substance',           'Trafficking / exploitation concern + substance administration'],
+      ['trafficking_with_blackout',            'Trafficking / exploitation concern + blackout / memory gap'],
+      ['third_party_with_unknown_location',    'Third-party control indicated + unknown / unsafe location'],
+      ['group_offending_with_sexual_violence', 'Organized / group offending concern + sexual violence'],
+      ['bulletin_suitable_with_repeat_target', 'Bulletin suitable + repeat targeting concern'],
+    ];
+
+    // Cases requiring review — highlight key counts
+    const reviewItems: [string, number, string][] = [
+      ['Trafficking / exploitation concern', fc.trafficking_exploitation_concern ?? 0, '#ef4444'],
+      ['Third-party control indicated',      fc.third_party_control_indicated ?? 0,    '#ef4444'],
+      ['Grooming / recruitment concern',     fc.grooming_recruitment_concern ?? 0,     '#f59e0b'],
+      ['Organized / group offending concern',fc.organized_group_offending_concern ?? 0,'#ef4444'],
+      ['Urgent or high public safety urgency',fc.public_safety_urgency_urgent_high ?? 0,'#dc2626'],
+      ['Bulletin suitable',                  fc.public_safety_bulletin_suitability_positive ?? 0,'#dc2626'],
+    ];
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+        {/* Cases requiring review — top summary */}
+        <Panel>
+          <SectionHeading>Cases requiring review</SectionHeading>
+          <ProvenanceNote />
+          <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: '0 0 14px', lineHeight: 1.5 }}>
+            Cases coded with concern flags, possible indicators, or public safety considerations.
+            These are analyst-coded observations — not confirmed findings. Across{' '}
+            <strong style={{ color: 'var(--text-2)' }}>{vawg.total}</strong> cases.
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+            {reviewItems.map(([label, count, color]) => (
+              <div key={label} style={{
+                padding: '10px 14px', border: `1px solid ${count > 0 ? color + '44' : 'var(--border)'}`,
+                borderRadius: 8, background: count > 0 ? color + '08' : 'var(--surface)',
+              }}>
+                {count === 0 ? (
+                  <div style={{ fontSize: 12, color: 'var(--text-3)', fontStyle: 'italic', marginBottom: 3 }}>not coded</div>
+                ) : (
+                  <div style={{ fontSize: 22, fontWeight: 700, color, marginBottom: 3, fontFamily: 'Lora, serif' }}>
+                    {count}
+                    {isSparse(count) && <SparseBadge />}
+                  </div>
+                )}
+                <div style={{ fontSize: 11.5, color: count > 0 ? 'var(--text-2)' : 'var(--text-3)', lineHeight: 1.35 }}>{label}</div>
+                {count > 0 && <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 3 }}>{fmtPct(count, vawg.total)} of cases</div>}
+              </div>
+            ))}
+          </div>
+        </Panel>
+
+        {/* Flagged for review — moved up */}
+        <Panel>
+          <SectionHeading>Flagged cases — requires review</SectionHeading>
+          <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: '0 0 14px', lineHeight: 1.5 }}>
+            Cases flagged for trafficking / exploitation concern, third-party control, bulletin suitability, or urgent / high urgency.
+            Sorted by urgency level. Click a report ID to open it in the coding workstation.
+            These are analyst-coded concern indicators only — not confirmed findings.
+          </p>
+          {vawg.flagged_for_review.length === 0 ? (
+            <div style={{ fontSize: 12.5, color: 'var(--text-3)', fontStyle: 'italic' }}>
+              No cases flagged yet. Code VAWG / Exploitation fields in the Encounter tab to populate this list.
+            </div>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                    {['Report ID', 'Date', 'City', 'Incident type', 'Severity', 'Urgency', 'Bulletin', 'Concern flags'].map(h => (
+                      <th key={h} style={{ textAlign: 'left', padding: '6px 10px', fontSize: 11, color: 'var(--text-3)', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...vawg.flagged_for_review]
+                    .sort((a, b) => {
+                      const urgScore = (s: string) => s.includes('urgent') ? 3 : s.includes('high') ? 2 : s.includes('moderate') ? 1 : 0;
+                      return urgScore(b.public_safety_urgency_level || '') - urgScore(a.public_safety_urgency_level || '');
+                    })
+                    .map((row, i) => {
+                      const urgColor = (row.public_safety_urgency_level || '').includes('urgent') ? '#dc2626'
+                        : (row.public_safety_urgency_level || '').includes('high') ? '#f59e0b' : 'var(--text-2)';
+                      const bulletinOk = SUITABILITY_RE.test(row.public_safety_bulletin_suitability || '');
+                      return (
+                        <tr
+                          key={row.report_id}
+                          style={{ borderBottom: '1px solid var(--border)', background: i % 2 === 0 ? 'transparent' : 'var(--surface-2)', cursor: 'pointer' }}
+                          onClick={() => navigate(`/code/${row.report_id}`)}
+                          title="Open in coding workstation"
+                        >
+                          <td style={{ padding: '7px 10px', fontFamily: 'DM Mono, monospace', fontSize: 11.5, color: 'var(--accent)', whiteSpace: 'nowrap' }}>{row.report_id}</td>
+                          <td style={{ padding: '7px 10px', fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>{row.incident_date || '—'}</td>
+                          <td style={{ padding: '7px 10px', fontSize: 11, color: 'var(--text-2)', whiteSpace: 'nowrap' }}>{row.city || '—'}</td>
+                          <td style={{ padding: '7px 10px', fontSize: 11, color: 'var(--text-2)', maxWidth: 130, lineHeight: 1.3 }}>{row.primary_incident_type || <em style={{ color: 'var(--text-3)' }}>—</em>}</td>
+                          <td style={{ padding: '7px 10px', fontSize: 11, color: severityColor(row.overall_severity || ''), whiteSpace: 'nowrap' }}>{row.overall_severity || '—'}</td>
+                          <td style={{ padding: '7px 10px', fontSize: 11, fontWeight: 600, color: urgColor, whiteSpace: 'nowrap' }}>{row.public_safety_urgency_level || '—'}</td>
+                          <td style={{ padding: '7px 10px', fontSize: 11, color: bulletinOk ? '#10b981' : 'var(--text-3)', whiteSpace: 'nowrap' }}>{row.public_safety_bulletin_suitability || '—'}</td>
+                          <td style={{ padding: '7px 10px', fontSize: 11, color: 'var(--text-2)', lineHeight: 1.4, maxWidth: 200 }}>{(row.reasons || []).join(', ')}</td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Panel>
+
+        {/* Distributions */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+          <Panel>
+            <SectionHeading>VAWG / Exploitation flag counts</SectionHeading>
+            <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: '0 0 12px' }}>
+              Cases coded yes, probable, or inferred for each indicator.
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 20px' }}>
+              <div>
+                {FLAG_LABELS.slice(0, 6).map(([key, label, color]) => {
+                  const count = fc[key] ?? 0;
+                  return (
+                    <FreqBar key={key} label={label} count={count} max={maxFlag} color={color}
+                      sub={count === 0 ? 'not coded' : `${count} / ${vawg.total} cases`}
+                      sparse={isSparse(count)} />
+                  );
+                })}
+              </div>
+              <div>
+                {FLAG_LABELS.slice(6).map(([key, label, color]) => {
+                  const count = fc[key] ?? 0;
+                  return (
+                    <FreqBar key={key} label={label} count={count} max={maxFlag} color={color}
+                      sub={count === 0 ? 'not coded' : `${count} / ${vawg.total} cases`}
+                      sparse={isSparse(count)} />
+                  );
+                })}
+              </div>
+            </div>
+          </Panel>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <Panel>
+              <SectionHeading>Public safety urgency distribution</SectionHeading>
+              {vawg.urgency_distribution.length === 0
+                ? <div style={{ fontSize: 12.5, color: 'var(--text-3)', fontStyle: 'italic' }}>No urgency levels coded yet.</div>
+                : vawg.urgency_distribution.map((row, i) => {
+                  const color = row.value.includes('urgent') ? '#dc2626' : row.value.includes('high') ? '#f59e0b' : 'var(--text-3)';
+                  return <FreqBar key={i} label={row.value} count={row.count}
+                    max={vawg.urgency_distribution[0]?.count ?? 1} color={color}
+                    sub={fmtPct(row.count, vawg.total)} />;
+                })}
+            </Panel>
+            <Panel>
+              <SectionHeading>Bulletin suitability distribution</SectionHeading>
+              {vawg.bulletin_suitability_distribution.length === 0
+                ? <div style={{ fontSize: 12.5, color: 'var(--text-3)', fontStyle: 'italic' }}>No bulletin suitability coded yet.</div>
+                : vawg.bulletin_suitability_distribution.map((row, i) => (
+                  <FreqBar key={i} label={row.value} count={row.count}
+                    max={vawg.bulletin_suitability_distribution[0]?.count ?? 1} color='#6366f1'
+                    sub={fmtPct(row.count, vawg.total)} />
+                ))}
+            </Panel>
+          </div>
+        </div>
+
+        {/* Cross-tabulations */}
+        <Panel>
+          <SectionHeading>VAWG / Exploitation cross-tabulations</SectionHeading>
+          <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: '0 0 14px', lineHeight: 1.5 }}>
+            Cases where both coded indicators are observed in the same case. Analyst-coded values only.
+            These are observed co-occurrences — not confirmed causal links or established patterns.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+            {CROSS_LABELS.map(([key, label]) => {
+              const count = vawg.cross_tabs[key] ?? 0;
+              return (
+                <div key={key} style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  padding: '9px 0', borderBottom: '1px solid var(--border)',
+                }}>
+                  <span style={{ fontSize: 12.5, color: 'var(--text-2)', flex: 1, lineHeight: 1.35 }}>
+                    {label}
+                    {isSparse(count) && <SparseBadge />}
+                  </span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: count > 0 ? '#ef4444' : 'var(--text-3)', marginLeft: 16, flexShrink: 0 }}>
+                    {count === 0 ? '— not coded' : fmtCountPct(count, vawg.total)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </Panel>
+
+        {/* Co-occurrence heatmap */}
+        <Panel>
+          <SectionHeading>Co-occurrence heatmap</SectionHeading>
+          <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: '0 0 14px' }}>
+            How often harm, control, movement, and VAWG / Exploitation indicators appear together in the same case.
+            Analyst-coded values only. Hover over a cell to see the indicator pair, count, and percentage of coded cases.
+          </p>
+          <CooccurrenceHeatmap fields={vawg.cooccurrence.fields} matrix={vawg.cooccurrence.matrix} total={vawg.total} />
+        </Panel>
+
+      </div>
+    );
+  };
+
   // ── Case list tab ─────────────────────────────────────────────────────────
 
   const CaseListTab = () => {
+    const sortField = caseSort;
+    const setSortField = setCaseSort;
+    const sortAsc = caseSortAsc;
+    const setSortAsc = setCaseSortAsc;
+    const filterSeverity   = caseFilterSeverity;
+    const setFilterSeverity = setCaseFilterSeverity;
+    const filterMovement   = caseFilterMovement;
+    const setFilterMovement = setCaseFilterMovement;
+    const filterHarm       = caseFilterHarm;
+    const setFilterHarm    = setCaseFilterHarm;
+    const filterEsc        = caseFilterEsc;
+    const setFilterEsc     = setCaseFilterEsc;
+    const filterStages     = caseFilterStages;
+    const setFilterStages  = setCaseFilterStages;
+
     const cases = sequences.per_case;
+
+    const sevOrder = (s: string) => {
+      const l = s.toLowerCase();
+      if (l.includes('severe') || l.includes('high risk')) return 4;
+      if (l.includes('high concern')) return 3;
+      if (l.includes('moderate')) return 2;
+      if (l.includes('low')) return 1;
+      return 0;
+    };
+
+    const filtered = cases.filter(row => {
+      if (filterSeverity && !(row.overall_severity || '').toLowerCase().includes(filterSeverity.toLowerCase())) return false;
+      if (filterMovement === 'yes' && !(row.movement_relocation_present || '').toLowerCase().startsWith('y')) return false;
+      if (filterHarm === 'yes' && !row.main_harms) return false;
+      if (filterEsc === 'yes' && row.escalation_cue !== 'yes') return false;
+      if (filterStages === '1+' && (row.stage_count || 0) < 1) return false;
+      if (filterStages === '2+' && (row.stage_count || 0) < 2) return false;
+      if (filterStages === '1' && (row.stage_count || 0) !== 1) return false;
+      if (filterStages === '0' && (row.stage_count || 0) !== 0) return false;
+      return true;
+    });
+
+    const sorted = [...filtered].sort((a, b) => {
+      let cmp = 0;
+      if (sortField === 'severity') cmp = sevOrder(a.overall_severity || '') - sevOrder(b.overall_severity || '');
+      else if (sortField === 'report_id') cmp = a.report_id.localeCompare(b.report_id);
+      else if (sortField === 'stages') cmp = (a.stage_count || 0) - (b.stage_count || 0);
+      return sortAsc ? cmp : -cmp;
+    });
+
+    const toggleSort = (f: string) => {
+      if (sortField === f) setSortAsc((a: boolean) => !a);
+      else { setSortField(f); setSortAsc(false); }
+    };
+    const SortTh = ({ field, label }: { field: string; label: string }) => (
+      <th
+        onClick={() => toggleSort(field)}
+        style={{ textAlign: 'left', padding: '6px 10px', fontSize: 11, color: sortField === field ? 'var(--accent)' : 'var(--text-3)', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}
+      >
+        {label}{sortField === field ? (sortAsc ? ' ↑' : ' ↓') : ''}
+      </th>
+    );
+
     return (
       <Panel>
-        <SectionHeading>Per-case encounter sequences</SectionHeading>
-        <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: '0 0 14px' }}>
-          Derived encounter sequence for each case. Click a report ID to open it in the coding workstation.
-          Download the full per-case summary table (with mobility, environment, and harm summaries)
-          using the export button above.
+        <SectionHeading>Case Sequence Table</SectionHeading>
+        <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: '0 0 12px' }}>
+          Encounter-level overview for each case. Click a report ID to open it.
+          Default: stage-coded cases only. Use the Stages filter to show all cases.
+          Default sort: severity (high → low). Click column headers to re-sort.
         </p>
+
+        {/* Filters */}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 14 }}>
+          {([
+            ['Severity', filterSeverity, setFilterSeverity, [
+              ['', 'All'],
+              ['severe', 'Severe / high risk'],
+              ['high concern', 'High concern'],
+              ['moderate', 'Moderate'],
+              ['low', 'Low concern'],
+            ]],
+            ['Stages', filterStages, setFilterStages, [
+              ['', 'All cases'],
+              ['1+', 'Stage-coded only'],
+              ['2+', '2+ stages'],
+              ['1', '1 stage only'],
+              ['0', 'No stages coded'],
+            ]],
+            ['Movement', filterMovement, setFilterMovement, [
+              ['', 'All'],
+              ['yes', 'Movement present'],
+            ]],
+            ['Harm coded', filterHarm, setFilterHarm, [
+              ['', 'All'],
+              ['yes', 'Harm indicators present'],
+            ]],
+            ['Escalation cue', filterEsc, setFilterEsc, [
+              ['', 'All'],
+              ['yes', 'Escalation cue coded'],
+            ]],
+          ] as [string, string, (v: string) => void, [string, string][]][]).map(([label, val, setter, opts]) => (
+            <div key={label}>
+              <div style={{ fontSize: 10.5, color: 'var(--text-3)', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</div>
+              <select value={val} onChange={e => setter(e.target.value)}
+                style={{ padding: '5px 8px', fontSize: 12, border: `1px solid ${val ? 'var(--accent)' : 'var(--border)'}`, borderRadius: 4, background: 'var(--bg)', color: val ? 'var(--accent)' : 'var(--text-1)', fontWeight: val ? 600 : 400 }}>
+                {opts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+            </div>
+          ))}
+          {(filterSeverity || filterMovement || filterHarm || filterEsc || filterStages !== '1+') && (
+            <button
+              onClick={() => { setFilterSeverity(''); setFilterMovement(''); setFilterHarm(''); setFilterEsc(''); setFilterStages('1+'); }}
+              style={{ padding: '5px 10px', fontSize: 12, border: '1px solid var(--border)', borderRadius: 4, background: 'var(--surface)', color: 'var(--text-3)', cursor: 'pointer', alignSelf: 'flex-end' }}>
+              Reset filters
+            </button>
+          )}
+          <span style={{ fontSize: 11.5, color: 'var(--text-3)', alignSelf: 'flex-end', paddingBottom: 6 }}>
+            {filtered.length} of {cases.length} cases
+          </span>
+        </div>
+
         {cases.length === 0 ? (
-          <div style={{ fontSize: 12.5, color: 'var(--text-3)' }}>
+          <div style={{ fontSize: 12.5, color: 'var(--text-3)', fontStyle: 'italic' }}>
             No coded cases yet. Code cases to see per-case sequences.
           </div>
         ) : (
@@ -621,41 +1829,52 @@ export default function ResearchOutputs() {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                  {['Report ID', 'Stage count', 'Encounter sequence'].map(h => (
-                    <th key={h} style={{
-                      textAlign: 'left', padding: '6px 10px',
-                      fontSize: 11, color: 'var(--text-3)', fontWeight: 600,
-                      letterSpacing: '0.04em', textTransform: 'uppercase',
-                      whiteSpace: 'nowrap',
-                    }}>
-                      {h}
-                    </th>
-                  ))}
+                  <SortTh field="report_id" label="Report ID" />
+                  <th style={{ textAlign: 'left', padding: '6px 10px', fontSize: 11, color: 'var(--text-3)', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>Incident type</th>
+                  <SortTh field="severity" label="Severity" />
+                  <th style={{ textAlign: 'left', padding: '6px 10px', fontSize: 11, color: 'var(--text-3)', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>Suitability</th>
+                  <th style={{ textAlign: 'left', padding: '6px 10px', fontSize: 11, color: 'var(--text-3)', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>Harms</th>
+                  <th style={{ textAlign: 'left', padding: '6px 10px', fontSize: 11, color: 'var(--text-3)', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>Esc. cue</th>
+                  <SortTh field="stages" label="Stages" />
+                  <th style={{ textAlign: 'left', padding: '6px 10px', fontSize: 11, color: 'var(--text-3)', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>Movement</th>
+                  <th style={{ textAlign: 'left', padding: '6px 10px', fontSize: 11, color: 'var(--text-3)', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>Encounter sequence</th>
                 </tr>
               </thead>
               <tbody>
-                {cases.map((row, i) => (
-                  <tr
-                    key={row.report_id}
-                    style={{
-                      borderBottom: '1px solid var(--border)',
-                      background: i % 2 === 0 ? 'transparent' : 'var(--surface-2)',
-                      cursor: 'pointer',
-                    }}
-                    onClick={() => navigate(`/code/${row.report_id}`)}
-                    title="Open in coding workstation"
-                  >
-                    <td style={{ padding: '7px 10px', fontFamily: 'DM Mono, monospace', fontSize: 11.5, color: 'var(--accent)', whiteSpace: 'nowrap' }}>
-                      {row.report_id}
-                    </td>
-                    <td style={{ padding: '7px 10px', color: 'var(--text-3)', textAlign: 'center' }}>
-                      {row.stage_count}
-                    </td>
-                    <td style={{ padding: '7px 10px', color: 'var(--text-2)', lineHeight: 1.4, fontSize: 12 }}>
-                      {row.sequence || <em style={{ color: 'var(--text-3)' }}>— no sequence data</em>}
-                    </td>
-                  </tr>
-                ))}
+                {sorted.map((row, i) => {
+                  const sevColor = severityColor(row.overall_severity || '').replace('var(--green)', 'var(--text-2)');
+                  const isHigh = (row.overall_severity || '').toLowerCase().includes('severe')
+                    || (row.overall_severity || '').toLowerCase().includes('high');
+                  const movPresent = (row.movement_relocation_present || '').toLowerCase().startsWith('y');
+                  return (
+                    <tr
+                      key={row.report_id}
+                      style={{ borderBottom: '1px solid var(--border)', background: i % 2 === 0 ? 'transparent' : 'var(--surface-2)', cursor: 'pointer' }}
+                      onClick={() => navigate(`/code/${row.report_id}`)}
+                      title="Open in coding workstation"
+                    >
+                      <td style={{ padding: '7px 10px', fontFamily: 'DM Mono, monospace', fontSize: 11.5, color: 'var(--accent)', whiteSpace: 'nowrap' }}>{row.report_id}</td>
+                      <td style={{ padding: '7px 10px', color: 'var(--text-2)', fontSize: 11.5, maxWidth: 150, lineHeight: 1.3 }}>{row.primary_incident_type || <em style={{ color: 'var(--text-3)' }}>—</em>}</td>
+                      <td style={{ padding: '7px 10px', fontSize: 11.5, color: sevColor, fontWeight: isHigh ? 600 : 400, whiteSpace: 'nowrap' }}>{row.overall_severity || <em style={{ color: 'var(--text-3)' }}>—</em>}</td>
+                      <td style={{ padding: '7px 10px', color: 'var(--text-3)', fontSize: 11, maxWidth: 120, lineHeight: 1.3 }}>
+                        {row.stage_coding_suitability ? row.stage_coding_suitability.replace(SUITABILITY_RE, (m: string) => m.charAt(0).toUpperCase() + m.slice(1) + ':') : <em>—</em>}
+                      </td>
+                      <td style={{ padding: '7px 10px', color: row.main_harms ? 'var(--text-2)' : 'var(--text-3)', fontSize: 11, maxWidth: 150, lineHeight: 1.3 }}>{row.main_harms || <em>—</em>}</td>
+                      <td style={{ padding: '7px 10px', textAlign: 'center' }}>
+                        {row.escalation_cue === 'yes'
+                          ? <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: 'var(--amber-pale)', color: 'var(--amber)', border: '1px solid var(--amber-border)' }}>yes</span>
+                          : <span style={{ color: 'var(--text-3)', fontSize: 11 }}>—</span>}
+                      </td>
+                      <td style={{ padding: '7px 10px', color: 'var(--text-3)', textAlign: 'center' }}>{row.stage_count}</td>
+                      <td style={{ padding: '7px 10px', textAlign: 'center' }}>
+                        {movPresent
+                          ? <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 4, background: '#6366f122', color: '#6366f1', border: '1px solid #6366f144' }}>yes</span>
+                          : <span style={{ color: 'var(--text-3)', fontSize: 11 }}>—</span>}
+                      </td>
+                      <td style={{ padding: '7px 10px', color: 'var(--text-2)', lineHeight: 1.4, fontSize: 11.5 }}>{row.sequence || <em style={{ color: 'var(--text-3)' }}>— no sequence data</em>}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -840,7 +2059,7 @@ export default function ResearchOutputs() {
           <Panel>
             <SectionHeading>Stage Sequences</SectionHeading>
             <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginBottom: 10 }}>
-              Most common analyst-coded stage orderings across cases.
+              Observed analyst-coded stage orderings across cases.
             </div>
             {sd.sequence_frequency.length === 0 ? (
               <div style={{ fontSize: 12.5, color: 'var(--text-3)', fontStyle: 'italic' }}>No multi-stage cases yet.</div>
@@ -1076,7 +2295,11 @@ export default function ResearchOutputs() {
         border: '1px solid var(--border)', marginBottom: 16,
       }}>
         <AlertTriangle size={13} style={{ flexShrink: 0, marginTop: 1, color: 'var(--amber)' }} />
-        <span>All matches below are <strong style={{ color: 'var(--amber)', fontWeight: 600 }}>potential linkage only</strong> — not confirmed connections. Review individual cases before drawing conclusions.</span>
+        <span>
+          All matches below are <strong style={{ color: 'var(--amber)', fontWeight: 600 }}>potential linkage prompts</strong> — not confirmed connections.
+          Repeated descriptors are prompts for analyst review only. They do not establish that cases are connected.
+          Review individual cases before drawing any conclusions.
+        </span>
       </div>
     );
 
@@ -1120,7 +2343,7 @@ export default function ResearchOutputs() {
           <Panel>
             <SectionHeading>Case Linkage View</SectionHeading>
             <div style={{ fontSize: 12.5, color: 'var(--text-3)' }}>
-              No repeated descriptors found across cases yet. As more cases are coded, shared vehicle descriptions, locations, and behavior patterns will appear here.
+              No repeated descriptors found across cases yet. As more cases are coded, shared vehicle descriptions, locations, and behaviour indicators will appear here as potential linkage prompts for analyst review.
             </div>
           </Panel>
         ) : (
@@ -1129,23 +2352,23 @@ export default function ResearchOutputs() {
             <Panel>
               <SectionHeading>Repeated Vehicle Descriptors</SectionHeading>
               <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: '0 0 12px' }}>
-                Plates or make/colour combinations appearing in 2+ cases.
+                Plates or make/colour combinations appearing in 2+ cases. These are potential linkage prompts only — not confirmed vehicle matches.
               </p>
-              <LinkageTable items={repeated_vehicles} emptyMsg="No repeated vehicle descriptors." />
+              <LinkageTable items={repeated_vehicles} emptyMsg="No repeated vehicle descriptors found." />
             </Panel>
             <Panel>
               <SectionHeading>Repeated Locations</SectionHeading>
               <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: '0 0 12px' }}>
-                Initial contact or incident locations shared across 2+ cases.
+                Initial contact or incident locations shared across 2+ cases. These are potential linkage prompts only — not confirmed connected incidents.
               </p>
-              <LinkageTable items={repeated_locations} emptyMsg="No repeated locations." />
+              <LinkageTable items={repeated_locations} emptyMsg="No repeated locations found." />
             </Panel>
             <Panel>
-              <SectionHeading>Behaviour Clusters</SectionHeading>
+              <SectionHeading>Behaviour Indicators — Shared Across Cases</SectionHeading>
               <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: '0 0 12px' }}>
-                Co-occurring violence indicators seen in 2+ cases.
+                Observed co-occurring harm/control indicators seen in 2+ cases. Potential linkage prompts only — requires analyst review.
               </p>
-              <LinkageTable items={behavior_clusters} emptyMsg="No shared behavior clusters." />
+              <LinkageTable items={behavior_clusters} emptyMsg="No shared behaviour indicators found." />
             </Panel>
           </>
         )}
@@ -1270,72 +2493,116 @@ export default function ResearchOutputs() {
       <div style={{ maxWidth: 1060, margin: '0 auto' }}>
 
         {/* Page header */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20 }}>
-          <div>
-            <h2 style={{
-              fontFamily: 'Lora, serif', fontSize: 22, fontWeight: 500,
-              margin: '0 0 4px', color: 'var(--text-1)',
-            }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 24 }}>
+          <div style={{ flex: 1, minWidth: 320 }}>
+            <h2 style={{ fontFamily: 'Lora, serif', fontSize: 22, fontWeight: 500, margin: '0 0 6px', color: 'var(--text-1)' }}>
               Research Outputs
             </h2>
-            <p style={{ fontSize: 13, color: 'var(--text-3)', margin: 0 }}>
-              Methodological analysis layer · sequence reconstruction · mobility pathways · environmental patterns
+            <p style={{ fontSize: 13, color: 'var(--text-3)', margin: 0, maxWidth: 560, lineHeight: 1.55 }}>
+              Exportable tables and summaries for dissertation analysis, sequence reconstruction, mobility pathways, and spatial intelligence.
             </p>
           </div>
-          <div style={{ display: 'flex', gap: 8, flexShrink: 0, flexWrap: 'wrap' }}>
-            <button
-              onClick={load}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6,
-                padding: '7px 12px', borderRadius: 6, border: '1px solid var(--border)',
-                background: 'var(--surface)', color: 'var(--text-2)',
-                fontSize: 12, cursor: 'pointer',
-              }}
-              title="Refresh analysis"
-            >
-              <RefreshCw size={13} /> Refresh
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'flex-end' }}>
+            <button onClick={load} title="Refresh analysis"
+              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 11px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-2)', fontSize: 11.5, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              <RefreshCw size={11} style={{ flexShrink: 0 }} /> Refresh
             </button>
-            <button
-              onClick={() => api.exportCaseSummaries()}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6,
-                padding: '7px 12px', borderRadius: 6, border: '1px solid var(--border)',
-                background: 'var(--surface)', color: 'var(--text-2)',
-                fontSize: 12, cursor: 'pointer',
-              }}
-              title="Download per-case summary CSV"
-            >
-              <Download size={13} /> Case summaries CSV
-            </button>
-            <button
-              onClick={() => api.exportResearchTables()}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6,
-                padding: '7px 12px', borderRadius: 6, border: '1px solid var(--border)',
-                background: 'var(--surface)', color: 'var(--text-2)',
-                fontSize: 12, cursor: 'pointer',
-              }}
-              title="Download all aggregate research tables as ZIP"
-            >
-              <Download size={13} /> Research tables ZIP
-            </button>
-            <button
-              onClick={() => navigate('/bulletin')}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6,
-                padding: '7px 12px', borderRadius: 6,
-                border: '1px solid var(--accent)',
-                background: 'var(--accent-pale)', color: 'var(--accent)',
-                fontSize: 12, cursor: 'pointer', fontWeight: 500,
-              }}
-              title="Generate a structured analytic bulletin"
-            >
-              <FileText size={13} /> Generate Bulletin
+            {([
+              { label: 'Export coded dataset CSV',  title: 'All coded cases as CSV — for quantitative analysis',             action: () => api.exportCsv()                   },
+              { label: 'Export case summaries',     title: 'Per-case summary CSV — narrative, harm, mobility, GIS',          action: () => api.exportCaseSummaries()         },
+              { label: 'Export stage sequences',    title: 'Stage sequences + transitions ZIP — for sequence analysis',      action: () => api.exportResearchTables()        },
+              { label: 'Export GeoJSON',            title: 'Geocoded points as GeoJSON — for QGIS / ArcGIS',                action: () => api.exportGeoJson()               },
+              { label: 'Export codebook',           title: 'Field definitions and allowed values — for methodology appendix',action: () => api.exportCodebook()              },
+              { label: 'Methodology summary',       title: 'Coding coverage report — for dissertation methods chapter',      action: () => api.exportMethodologySummary()    },
+            ] as { label: string; title: string; action: () => void }[]).map(({ label, title, action }) => (
+              <button key={label} onClick={action} title={title}
+                style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 11px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-2)', fontSize: 11.5, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                <Download size={11} style={{ flexShrink: 0 }} /> {label}
+              </button>
+            ))}
+            <button onClick={() => navigate('/bulletin')} title="Public safety bulletin review"
+              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 11px', borderRadius: 6, border: '1px solid var(--accent)', background: 'var(--accent-pale)', color: 'var(--accent)', fontSize: 11.5, cursor: 'pointer', fontWeight: 500, whiteSpace: 'nowrap' }}>
+              <FileText size={11} style={{ flexShrink: 0 }} /> Generate bulletin
             </button>
           </div>
         </div>
 
         <ProvenanceNote />
+
+        {/* Data quality banner */}
+        {data.data_quality && (() => {
+          const dq: DataQuality = data.data_quality;
+          const pct = (n: number) => dq.total_imported > 0 ? fmtPct(n, dq.total_imported) : '—';
+          type CoverageItem = [string, number, string];
+          const groups: { label: string; items: CoverageItem[] }[] = [
+            {
+              label: 'Core dataset',
+              items: [
+                ['Imported cases',       dq.total_imported,       '#64748b'],
+                ['Location field coded', dq.with_location_coded,  '#f59e0b'],
+              ],
+            },
+            {
+              label: 'Encounter coding',
+              items: [
+                ['Encounter coded',      dq.with_encounter_coded,   '#0ea5e9'],
+                ['Stage coding done',    dq.with_stage_coding,      '#10b981'],
+                ['Severity coded',       dq.with_severity_coded,    '#10b981'],
+                ['Suitability coded',    dq.with_suitability_coded, '#10b981'],
+                ['Clarity coded',        dq.with_clarity_coded,     '#0ea5e9'],
+                ['Harm fields coded',    dq.with_harm_coded,        '#ef4444'],
+                ['Movement coded',       dq.with_movement_coded,    '#6366f1'],
+              ],
+            },
+            {
+              label: 'Public safety coding',
+              items: [
+                ['VAWG flags coded',     dq.with_vawg_coded,        '#ef4444'],
+              ],
+            },
+          ];
+          const allItems = groups.flatMap(g => g.items);
+          const anyLow = allItems.slice(1).some(([, n]) => n / Math.max(dq.total_imported, 1) < 0.1);
+          return (
+            <div style={{
+              marginBottom: 20, padding: '12px 16px',
+              border: `1px solid ${anyLow ? 'var(--amber-border, #fcd34d)' : 'var(--border)'}`,
+              borderRadius: 8, background: anyLow ? 'var(--amber-pale, #fffbeb)' : 'var(--surface)',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 12 }}>
+                {anyLow && <AlertTriangle size={13} style={{ color: 'var(--amber)', flexShrink: 0 }} />}
+                <span style={{ fontSize: 11.5, fontWeight: 600, color: anyLow ? 'var(--amber)' : 'var(--text-2)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Dataset coding coverage
+                </span>
+                <span style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 400 }}>
+                  — outputs based on currently coded fields only; sparse coding should be treated as preliminary
+                </span>
+              </div>
+              <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+                {groups.map(group => (
+                  <div key={group.label}>
+                    <div style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6, paddingBottom: 4, borderBottom: '1px solid var(--border)' }}>
+                      {group.label}
+                    </div>
+                    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                      {group.items.map(([label, count, color]) => (
+                        <div key={label} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          <span style={{ fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</span>
+                          <span style={{ fontSize: 14, fontWeight: 600, color }}>
+                            {count}
+                            {label !== 'Imported cases' && (
+                              <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-3)', marginLeft: 4 }}>({pct(count)})</span>
+                            )}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Summary count strip */}
         <div style={{
@@ -1364,13 +2631,15 @@ export default function ResearchOutputs() {
 
         <TabBar />
 
-        {tab === 'stage_patterns' && <StagePatternsTab />}
-        {tab === 'sequences'      && <SequencesTab />}
-        {tab === 'mobility'       && <MobilityTab />}
-        {tab === 'environment'    && <EnvironmentTab />}
-        {tab === 'spatial'        && <SpatialOverviewTab />}
-        {tab === 'linkage_view'   && <LinkageViewTab />}
-        {tab === 'caselist'       && <CaseListTab />}
+        {tab === 'encounter_overview' && <EncounterOverviewTab />}
+        {tab === 'vawg'            && <VawgTab />}
+        {tab === 'stage_patterns'  && <StagePatternsTab />}
+        {tab === 'sequences'       && <SequencesTab />}
+        {tab === 'mobility'        && <MobilityTab />}
+        {tab === 'environment'     && <EnvironmentTab />}
+        {tab === 'spatial'         && <SpatialOverviewTab />}
+        {tab === 'linkage_view'    && <LinkageViewTab />}
+        {tab === 'caselist'        && <CaseListTab />}
 
         <ResearchNotesPanel />
 

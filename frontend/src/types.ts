@@ -127,6 +127,16 @@ export interface Report {
   escalation_trigger: string;
   verbal_abuse_before_violence: string;
 
+  // Incident Overview (Encounter tab)
+  primary_incident_type: string;
+  overall_severity: string;
+  overall_incident_summary: string;
+  stage_coding_suitability: string;
+  sequence_clarity: string;
+  boundary_issue_present: string;
+  movement_relocation_present: string;
+  key_supporting_excerpts: string;
+
   // GIS confidence — initial contact
   initial_contact_address_normalized: string;
   initial_contact_precision: string;
@@ -160,38 +170,107 @@ export interface Report {
   // Source provenance — PDF attachment
   source_bulletin_text: string;
   source_bulletin_session_id: string;
+
+  // VAWG / Exploitation and Public Safety Flags
+  trafficking_exploitation_concern: string;
+  third_party_control_indicated: string;
+  worker_appears_controlled: string;
+  client_connected_to_controller: string;
+  movement_to_unknown_unsafe_location: string;
+  worker_unaware_how_arrived: string;
+  grooming_recruitment_concern: string;
+  repeat_targeting_concern: string;
+  multiple_women_referenced: string;
+  organized_group_offending_concern: string;
+  public_safety_bulletin_suitability: string;
+  public_safety_urgency_level: string;
+  vawg_exploitation_notes: string;
+  vawg_key_excerpts: string;
+
+  // Mobility — new fields
+  movement_purpose: string;
+  basis_for_movement_coding: string;
+
+  // Suspect — expanded
+  suspect_distinctive_features: string;
+  suspect_clothing: string;
+  suspect_speech_notes: string;
+  suspect_behavioural_descriptors: string;
+  known_repeat_suspect: string;
+
+  // Vehicle — expanded
+  vehicle_role_in_encounter: string;
+  vehicle_ownership_association: string;
+  vehicle_confidence: string;
+
+  // Concern flags (Suspect/Vehicle tab)
+  concern_trafficking: string;
+  concern_third_party_control: string;
+  concern_grooming: string;
+  concern_organized_offending: string;
+  concern_repeat_suspect: string;
+  concern_repeat_vehicle: string;
+  concern_urgent_public_safety: string;
+  concern_bulletin_suitable: string;
+  concern_flag_rationale: string;
+
+  // GIS — per-block location type and geocoding status
+  initial_contact_location_type: string;
+  incident_location_type: string;
+  initial_contact_geocoding_status: string;
+  incident_geocoding_status: string;
+  destination_geocoding_status: string;
+
+  // Harm classification — multi-harm support
+  primary_harm: string;
+  multi_harm_flag: string;
 }
 
 export interface ReportStage {
   id: number;
   report_id: string;
   stage_order: number;
+  // Core fields
   stage_type: string;
   client_behaviors: string[];
-  victim_responses: string[];
-  turning_point_notes: string;
+  victim_responses: string[];        // DB column name kept; UI label → "Worker Responses"
+  escalation_level: string;
+  location_type: string;
+  movement_type_to_here: string;
+  turning_point_notes: string;       // UI label → "Turning Point / Stage Summary"
+  supporting_excerpt: string;
+  // Situational conditions (More Details)
   visibility: string;
   guardianship: string;
   isolation_level: string;
   control_type: string;
+  // Location details (More Details)
   location_label: string;
-  location_type: string;
-  movement_type_to_here: string;
+  spatial_precision: string;
+  // Movement impact (More Details)
+  movement_impact: string;
+  able_to_leave: string;
+  // Coding notes (More Details)
+  coder_notes_stage: string;
+  coding_confidence: string;
+  temporal_sequence_note: string;
 }
 
 export interface StagePatterns {
-  stage_type_frequency:    { value: string; count: number }[];
-  visibility_by_stage:     Record<string, { value: string; count: number }[]>;
-  guardianship_by_stage:   Record<string, { value: string; count: number }[]>;
-  isolation_by_stage:      Record<string, { value: string; count: number }[]>;
-  control_by_stage:        Record<string, { value: string; count: number }[]>;
-  movement_by_stage:       Record<string, { value: string; count: number }[]>;
-  behavior_frequency:      { value: string; count: number }[];
-  response_frequency:      { value: string; count: number }[];
-  matching_cases:          string[];
-  sequence_frequency:      { value: string; count: number }[];
-  total_stages:            number;
-  total_cases_with_stages: number;
+  stage_type_frequency:      { value: string; count: number }[];
+  visibility_by_stage:       Record<string, { value: string; count: number }[]>;
+  guardianship_by_stage:     Record<string, { value: string; count: number }[]>;
+  isolation_by_stage:        Record<string, { value: string; count: number }[]>;
+  control_by_stage:          Record<string, { value: string; count: number }[]>;
+  movement_by_stage:         Record<string, { value: string; count: number }[]>;
+  behavior_frequency:        { value: string; count: number }[];
+  response_frequency:        { value: string; count: number }[];
+  escalation_frequency:      { value: string; count: number }[];
+  movement_impact_frequency: { value: string; count: number }[];
+  matching_cases:            string[];
+  sequence_frequency:        { value: string; count: number }[];
+  total_stages:              number;
+  total_cases_with_stages:   number;
 }
 
 export interface SimilarityDimension {
@@ -346,7 +425,17 @@ export interface AggregateSequences {
   most_common_bigrams:    PatternRow[];
   stage_frequency:        StageRow[];
   escalation_pathways:    PathwayRow[];
-  per_case:               { report_id: string; sequence: string; stage_count: number }[];
+  per_case:               {
+    report_id: string;
+    sequence: string;
+    stage_count: number;
+    primary_incident_type: string;
+    overall_severity: string;
+    stage_coding_suitability: string;
+    movement_relocation_present: string;
+    escalation_cue: string;
+    main_harms: string;
+  }[];
   total_cases:            number;
 }
 
@@ -386,6 +475,8 @@ export interface AggregateEnvironment {
   public_private:          Record<string, number>;
   deserted:                Record<string, number>;
   location_types:          { type: string; count: number }[];
+  specific_locations:      { location: string; count: number }[];
+  location_mentions_total: number;
   violence_by_environment: Record<string, EnvCross>;
   movement_by_setting:     Record<string, EnvCross>;
   deserted_analysis:       Record<string, EnvCross>;
@@ -393,11 +484,116 @@ export interface AggregateEnvironment {
   total:                   number;
 }
 
+export interface EncounterIndicatorCounts {
+  negotiation_present: number;
+  refusal_present: number;
+  pressure_after_refusal: number;
+  boundary_issue_present: number;
+  coercion_present: number;
+  threats_present: number;
+  verbal_abuse: number;
+  physical_force: number;
+  non_consensual_substance: number;
+  sexual_assault: number;
+  stealthing: number;
+  robbery_theft: number;
+  loss_of_consciousness: number;
+  forced_movement_dragging: number;
+  restraint_confinement: number;
+  weapon_present_used: number;
+  choking_strangulation: number;
+  prevented_exit: number;
+  movement_relocation_present: number;
+  repeated_pressure: number;
+  intimidation_present: number;
+  abrupt_tone_change: number;
+  verbal_abuse_before_violence: number;
+}
+
+export interface AggregateEncounter {
+  incident_type_distribution: { value: string; count: number }[];
+  severity_distribution:      { value: string; count: number }[];
+  suitability_distribution:   { value: string; count: number }[];
+  clarity_distribution:       { value: string; count: number }[];
+  indicator_counts:           EncounterIndicatorCounts;
+  cross_tabs: {
+    refusal_then_coercion:   number;
+    pressure_then_force:     number;
+    movement_with_harm:      number;
+    substance_with_blackout: number;
+  };
+  total: number;
+}
+
+export interface AggregateVawgFlagCounts {
+  trafficking_exploitation_concern: number;
+  third_party_control_indicated: number;
+  worker_appears_controlled: number;
+  client_connected_to_controller: number;
+  movement_to_unknown_unsafe_location: number;
+  worker_unaware_how_arrived: number;
+  grooming_recruitment_concern: number;
+  repeat_targeting_concern: number;
+  multiple_women_referenced: number;
+  organized_group_offending_concern: number;
+  public_safety_bulletin_suitability_positive: number;
+  public_safety_urgency_urgent_high: number;
+}
+
+export interface AggregateVawgFlaggedRow {
+  report_id: string;
+  incident_date: string;
+  city: string;
+  primary_incident_type: string;
+  overall_severity: string;
+  public_safety_urgency_level: string;
+  public_safety_bulletin_suitability: string;
+  coding_status: string;
+  vawg_key_excerpts: string;
+  reasons: string[];
+}
+
+export interface AggregateVawg {
+  flag_counts: AggregateVawgFlagCounts;
+  urgency_distribution: { value: string; count: number }[];
+  bulletin_suitability_distribution: { value: string; count: number }[];
+  cross_tabs: {
+    trafficking_with_movement: number;
+    trafficking_with_substance: number;
+    trafficking_with_blackout: number;
+    third_party_with_unknown_location: number;
+    group_offending_with_sexual_violence: number;
+    bulletin_suitable_with_repeat_target: number;
+  };
+  cooccurrence: {
+    fields: string[];
+    matrix: number[][];
+  };
+  flagged_for_review: AggregateVawgFlaggedRow[];
+  total: number;
+}
+
+export interface DataQuality {
+  total_imported:         number;
+  with_encounter_coded:   number;
+  with_stage_coding:      number;
+  with_location_coded:    number;
+  with_movement_coded:    number;
+  with_vawg_coded:        number;
+  with_severity_coded:    number;
+  with_suitability_coded: number;
+  with_clarity_coded:     number;
+  with_harm_coded:        number;
+}
+
 export interface ResearchAggregate {
-  sequences:   AggregateSequences;
-  mobility:    AggregateMobility;
-  environment: AggregateEnvironment;
-  total:       number;
+  sequences:    AggregateSequences;
+  mobility:     AggregateMobility;
+  environment:  AggregateEnvironment;
+  encounter:    AggregateEncounter;
+  vawg:         AggregateVawg;
+  data_quality: DataQuality;
+  total:        number;
 }
 
 export interface MapPoint {
@@ -417,7 +613,10 @@ export interface MapPoint {
   movement: string;
   movement_completed: string;
   entered_vehicle: string;
+  mode_of_movement: string;
+  offender_control_over_movement: string;
   public_to_private_shift: string;
+  public_to_secluded_shift: string;
   cross_municipality: string;
   // sequence
   highest_stage_reached: string;
@@ -430,6 +629,22 @@ export interface MapPoint {
   initial_contact_city_confidence: string;
   incident_city_confidence: string;
   destination_city_confidence: string;
+  // enriched for map workspace
+  neighbourhood: string;
+  repeat_suspect_flag: string;
+  known_repeat_suspect: string;
+  repeat_vehicle_flag: string;
+  vehicle_present: string;
+  plate_partial: string;
+  suspect_distinctive_features: string;
+  vehicle_description: string;
+  initial_contact_address_raw: string;
+  initial_contact_precision: string;
+  initial_contact_geocoding_status: string;
+  incident_address_raw: string;
+  incident_precision: string;
+  incident_geocoding_status: string;
+  primary_harm: string;
 }
 
 // ── Research Notes ────────────────────────────────────────────────────────────
@@ -466,6 +681,17 @@ export interface BulletinOverview {
   top_cities: { city: string; count: number }[];
   location_type_dist: { type: string; count: number }[];
   coded_count: number;
+  geocoded_count: number;
+  harm_counts: {
+    coercion: number;
+    physical_force: number;
+    sexual_assault: number;
+    robbery_theft: number;
+    threats: number;
+    weapon: number;
+    restraint: number;
+    choking: number;
+  };
 }
 
 export interface BulletinBehavioral {

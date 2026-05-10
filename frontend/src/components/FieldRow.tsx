@@ -27,6 +27,7 @@ interface Props {
   span?: boolean;
   badge?: React.ReactNode;
   provenance?: ProvenanceState;
+  helper?: string;
 }
 
 const YES_NO_OPTIONS = ['yes', 'no', 'unclear'];
@@ -52,7 +53,7 @@ function yesnoButtonStyle(opt: string, value: string): React.CSSProperties {
 export default function FieldRow({
   label, value, onChange, onMarkReviewed, type = 'text',
   options, suggested, onAcceptSuggestion, placeholder, span, badge,
-  provenance,
+  provenance, helper,
 }: Props) {
   const hasSuggestion = suggested && suggested !== value && suggested !== '';
   const borderColor = provenance ? PROVENANCE_BORDER[provenance] : 'transparent';
@@ -83,6 +84,7 @@ export default function FieldRow({
           flex: 1,
         }}>
           {label}
+          {helper && <div style={{ fontSize: 10.5, color: 'var(--text-3)', fontWeight: 400, lineHeight: 1.35, marginTop: 2, fontStyle: 'italic' }}>{helper}</div>}
         </label>
         {/* Compact provenance dot — only when field has a value */}
         {provDot && value && (

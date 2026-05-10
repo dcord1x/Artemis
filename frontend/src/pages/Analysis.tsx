@@ -1,405 +1,930 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { GoogleMap, Marker } from '@react-google-maps/api';
 import { api } from '../api';
-import type { Stats } from '../types';
-import { Car, MapPin, AlertTriangle, TrendingUp, Shield, BarChart2, RefreshCw, User } from 'lucide-react';
+import type { Stats, ResearchAggregate } from '../types';
+import { useMaps } from '../context/MapsContext';
+import {
+  RefreshCw, AlertTriangle, MapPin, Shield,
+  ArrowRight, Database, Activity, Target, FileText,
+  Link2, Layers, GitBranch, Globe, Navigation,
+  CheckCircle, Clock, Zap, ExternalLink,
+  FileOutput, TrendingUp,
+} from 'lucide-react';
 
-function StatCard({ label, value, sub, icon, color = 'var(--text-1)', onClick }: {
-  label: string; value: string | number; sub?: string; icon: React.ReactNode;
-  color?: string; onClick?: () => void;
+// ── Colour palette ─────────────────────────────────────────────────────────────
+const C = {
+  green:  '#22C55E',
+  amber:  '#F59E0B',
+  red:    '#EF4444',
+  coral:  '#F97316',
+  blue:   '#4A90D9',
+  purple: '#8B5CF6',
+  slate:  '#94A3B8',
+  indigo: '#6366F1',
+  teal:   '#14B8A6',
+};
+
+const STAGE_LABELS: Record<string, string> = {
+  initial_contact:   'Contact',
+  negotiation:       'Negotiation',
+  pickup_meeting:    'Pickup',
+  movement_travel:   'Movement',
+  arrival_location:  'Arrival',
+  escalation:        'Escalation',
+  violence_coercion: 'Violence',
+  exit_escape:       'Exit',
+  aftermath:         'Aftermath',
+  other:             'Other',
+  unknown_unclear:   'Unknown',
+};
+
+const STAGE_COLORS: Record<string, string> = {
+  initial_contact:   C.blue,
+  negotiation:       '#34D399',
+  pickup_meeting:    '#FBBF24',
+  movement_travel:   C.amber,
+  arrival_location:  '#60A5FA',
+  escalation:        C.coral,
+  violence_coercion: C.red,
+  exit_escape:       '#10B981',
+  aftermath:         C.purple,
+  other:             C.slate,
+  unknown_unclear:   C.slate,
+};
+
+const DARK_MAP_STYLES: google.maps.MapTypeStyle[] = [
+  { elementType: 'geometry', stylers: [{ color: '#0d1b2a' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#0d1b2a' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#6b7fa3' }] },
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#1e3a5f' }] },
+  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#0b1f33' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#071520' }] },
+  { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+  { featureType: 'transit', stylers: [{ visibility: 'off' }] },
+  { featureType: 'administrative', elementType: 'geometry', stylers: [{ color: '#1e3a5f' }] },
+];
+
+// ── Sub-components ─────────────────────────────────────────────────────────────
+
+function SectionLabel({ text, icon }: { text: string; icon?: React.ReactNode }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 12 }}>
+      {icon && <span style={{ color: 'var(--text-3)', opacity: 0.7 }}>{icon}</span>}
+      <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-3)' }}>
+        {text}
+      </div>
+      <div style={{ flex: 1, height: 1, background: 'var(--border)', marginLeft: 4 }} />
+    </div>
+  );
+}
+
+function Badge({ label, variant }: { label: string; variant: 'coded' | 'nlp' | 'spatial' | 'review' }) {
+  const styles: Record<string, { bg: string; color: string; border: string }> = {
+    coded:   { bg: `${C.green}14`,  color: C.green,  border: `${C.green}40` },
+    nlp:     { bg: `${C.amber}14`,  color: C.amber,  border: `${C.amber}40` },
+    spatial: { bg: `${C.blue}14`,   color: C.blue,   border: `${C.blue}40` },
+    review:  { bg: `${C.coral}14`,  color: C.coral,  border: `${C.coral}40` },
+  };
+  const s = styles[variant];
+  return (
+    <span style={{ fontSize: 8.5, padding: '1px 5px', borderRadius: 3, background: s.bg, color: s.color, border: `1px solid ${s.border}`, fontWeight: 700, letterSpacing: '0.04em' }}>
+      {label}
+    </span>
+  );
+}
+
+function CountBar({ label, count, max, color = 'var(--accent)', sub, onClick, tag, barHeight = 4 }: {
+  label: string; count: number; max: number; color?: string; sub?: string;
+  onClick?: () => void; tag?: string; barHeight?: number;
 }) {
+  const pct = max > 0 ? (count / max) * 100 : 0;
+  return (
+    <div style={{ marginBottom: 9, cursor: onClick ? 'pointer' : 'default' }} onClick={onClick}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3, alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <span style={{ fontSize: 11.5, color: onClick ? 'var(--text-1)' : 'var(--text-2)', fontWeight: onClick ? 500 : 400 }}>{label}</span>
+          {tag && <span style={{ fontSize: 8, padding: '1px 4px', borderRadius: 2, background: `${C.amber}14`, color: C.amber, border: `1px solid ${C.amber}44`, fontWeight: 700 }}>{tag}</span>}
+          {sub && <span style={{ fontSize: 10, color: 'var(--text-3)' }}>{sub}</span>}
+        </div>
+        <span style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 600, minWidth: 20, textAlign: 'right' }}>{count}</span>
+      </div>
+      <div style={{ height: barHeight, borderRadius: 10, background: 'var(--surface-3)', overflow: 'hidden' }}>
+        <div style={{ height: '100%', borderRadius: 10, background: color, width: `${pct}%`, transition: 'width 0.7s ease' }} />
+      </div>
+    </div>
+  );
+}
+
+function MetricCard({ label, value, sub, color, onClick, tag, icon }: {
+  label: string; value: string | number; sub?: string; color?: string;
+  onClick?: () => void; tag?: string; icon?: React.ReactNode;
+}) {
+  const isClick = !!onClick;
   return (
     <div
       className="card"
       onClick={onClick}
-      style={{
-        padding: '20px 24px',
-        cursor: onClick ? 'pointer' : 'default',
-        transition: onClick ? 'box-shadow 0.15s, transform 0.1s' : undefined,
-      }}
-      onMouseEnter={(e) => { if (onClick) { (e.currentTarget as HTMLDivElement).style.boxShadow = '0 0 0 2px var(--accent)'; } }}
-      onMouseLeave={(e) => { if (onClick) { (e.currentTarget as HTMLDivElement).style.boxShadow = ''; } }}
-      title={onClick ? 'Click to view matching cases' : undefined}
+      style={{ padding: '12px 13px', cursor: isClick ? 'pointer' : 'default', position: 'relative', transition: 'box-shadow 0.15s', borderLeft: `3px solid ${color || 'var(--border)'}` }}
+      onMouseEnter={e => { if (isClick) (e.currentTarget as HTMLDivElement).style.boxShadow = `0 0 0 1.5px ${color || 'var(--accent)'}55`; }}
+      onMouseLeave={e => { if (isClick) (e.currentTarget as HTMLDivElement).style.boxShadow = ''; }}
     >
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
-        <span style={{ fontSize: 11.5, color: 'var(--text-3)', fontWeight: 500, letterSpacing: '0.05em', textTransform: 'uppercase' }}>{label}</span>
-        <span style={{ color: onClick ? 'var(--accent)' : 'var(--border-mid)' }}>{icon}</span>
+      {tag && (
+        <div style={{ position: 'absolute', top: 7, right: 7, fontSize: 8, padding: '1px 4px', borderRadius: 3, background: 'var(--surface-3)', color: 'var(--text-3)', fontWeight: 700 }}>
+          {tag}
+        </div>
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 5 }}>
+        {icon && <span style={{ color: color || 'var(--text-3)', opacity: 0.75 }}>{icon}</span>}
+        <span style={{ fontSize: 9.5, color: 'var(--text-3)', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' }}>{label}</span>
       </div>
-      <div style={{ fontFamily: 'Lora, serif', fontSize: 32, fontWeight: 500, color, lineHeight: 1 }}>{value}</div>
-      {sub && <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 6 }}>{sub}</div>}
-      {onClick && (
-        <div style={{ fontSize: 10.5, color: 'var(--accent)', marginTop: 8, opacity: 0.7 }}>View cases →</div>
+      <div style={{ fontFamily: 'Lora, serif', fontSize: 24, fontWeight: 500, color: color || 'var(--text-1)', lineHeight: 1 }}>{value}</div>
+      {sub && <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 3 }}>{sub}</div>}
+      {isClick && <div style={{ fontSize: 9.5, color: color || 'var(--accent)', marginTop: 4, opacity: 0.7 }}>View →</div>}
+    </div>
+  );
+}
+
+function QueueRow({ label, count, desc, color, onClick }: {
+  label: string; count: number; desc: string; color: string; onClick: () => void;
+}) {
+  return (
+    <div
+      onClick={onClick}
+      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 5, cursor: 'pointer', borderLeft: `3px solid ${color}`, background: 'var(--surface-2)', transition: 'background 0.12s' }}
+      onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = `${color}10`; }}
+      onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'var(--surface-2)'; }}
+    >
+      <div style={{ minWidth: 32, textAlign: 'center' }}>
+        <div style={{ fontFamily: 'Lora, serif', fontSize: 18, fontWeight: 500, color, lineHeight: 1 }}>{count}</div>
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-1)', marginBottom: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
+        <div style={{ fontSize: 10, color: 'var(--text-3)' }}>{desc}</div>
+      </div>
+      <ArrowRight size={11} style={{ color, flexShrink: 0, opacity: 0.7 }} />
+    </div>
+  );
+}
+
+function PipelineStep({ label, count, pct, color, isLast, onClick, sub }: {
+  label: string; count: number; pct?: number; color: string; isLast?: boolean;
+  onClick?: () => void; sub?: string;
+}) {
+  const isClick = !!onClick;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', flex: 1, minWidth: 0 }}>
+      <div
+        onClick={onClick}
+        style={{ flex: 1, padding: '8px 10px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, borderTop: `3px solid ${color}`, cursor: isClick ? 'pointer' : 'default', transition: 'box-shadow 0.15s', minWidth: 0 }}
+        onMouseEnter={e => { if (isClick) (e.currentTarget as HTMLDivElement).style.boxShadow = `0 0 0 1.5px ${color}55`; }}
+        onMouseLeave={e => { if (isClick) (e.currentTarget as HTMLDivElement).style.boxShadow = ''; }}
+      >
+        <div style={{ fontSize: 9, color: 'var(--text-3)', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
+        <div style={{ fontFamily: 'Lora, serif', fontSize: 20, fontWeight: 500, color, lineHeight: 1 }}>{count.toLocaleString()}</div>
+        {pct !== undefined && (
+          <div style={{ fontSize: 9, color: 'var(--text-3)', marginTop: 2 }}>
+            {Math.min(pct, 100)}%
+          </div>
+        )}
+        {sub && <div style={{ fontSize: 9, color: 'var(--text-3)', marginTop: 1, fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sub}</div>}
+      </div>
+      {!isLast && (
+        <div style={{ color: 'var(--border-mid)', padding: '0 4px', flexShrink: 0 }}>
+          <ArrowRight size={11} />
+        </div>
       )}
     </div>
   );
 }
 
-/** Simple horizontal bar for count-based lists */
-function CountBar({ label, count, max, color = 'var(--accent)', sub, onClick }: {
-  label: string; count: number; max: number; color?: string; sub?: string; onClick?: () => void;
+function OutputTile({ label, desc, icon, onClick, color = 'var(--accent)' }: {
+  label: string; desc: string; icon: React.ReactNode; onClick: () => void; color?: string;
 }) {
-  const pct = max > 0 ? (count / max) * 100 : 0;
   return (
     <div
-      style={{ marginBottom: 10, cursor: onClick ? 'pointer' : 'default' }}
       onClick={onClick}
-      title={onClick ? `View ${count} cases — click to filter` : undefined}
+      style={{ padding: '12px 14px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--surface)', cursor: 'pointer', transition: 'all 0.14s' }}
+      onMouseEnter={e => {
+        const el = e.currentTarget as HTMLDivElement;
+        el.style.borderColor = color;
+        el.style.background = `${color}0a`;
+      }}
+      onMouseLeave={e => {
+        const el = e.currentTarget as HTMLDivElement;
+        el.style.borderColor = 'var(--border)';
+        el.style.background = 'var(--surface)';
+      }}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, alignItems: 'baseline' }}>
-        <span style={{ fontSize: 12.5, color: onClick ? color : 'var(--text-2)', fontWeight: onClick ? 500 : 400 }}>
-          {label}{sub && <span style={{ fontSize: 11, color: 'var(--text-3)', marginLeft: 4 }}>{sub}</span>}
-        </span>
-        <span style={{ fontSize: 12, color: 'var(--text-3)', fontWeight: 500 }}>{count}</span>
-      </div>
-      <div style={{ height: 5, borderRadius: 10, background: 'var(--surface-3)', overflow: 'hidden' }}>
-        <div style={{ height: '100%', borderRadius: 10, background: color, width: `${pct}%`, transition: 'width 0.6s ease' }} />
-      </div>
+      <div style={{ color, marginBottom: 6, opacity: 0.85 }}>{icon}</div>
+      <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-1)', marginBottom: 2 }}>{label}</div>
+      <div style={{ fontSize: 10, color: 'var(--text-3)', lineHeight: 1.4 }}>{desc}</div>
     </div>
   );
 }
 
-/** Thin year-over-year bar chart */
-function YearChart({ data }: { data: { year: number; count: number }[] }) {
-  if (!data || data.length === 0) return null;
-  const max = Math.max(...data.map(d => d.count));
-  const BAR_MAX_H = 60;
+function EmptyState({ message }: { message: string }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: BAR_MAX_H + 28, paddingTop: 8 }}>
-      {data.map(({ year, count }) => {
-        const h = max > 0 ? Math.max(4, Math.round((count / max) * BAR_MAX_H)) : 4;
-        return (
-          <div key={year} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
-            <span style={{ fontSize: 10, color: 'var(--text-3)', marginBottom: 3 }}>{count}</span>
-            <div
-              title={`${year}: ${count} reports`}
-              style={{
-                width: '100%', borderRadius: '3px 3px 0 0',
-                height: h, background: 'var(--accent)', opacity: 0.85,
-                transition: 'height 0.5s ease',
-              }}
-            />
-            <span style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 4 }}>{String(year).slice(2)}</span>
-          </div>
-        );
-      })}
+    <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-3)', fontSize: 11.5, fontStyle: 'italic', background: 'var(--surface-2)', borderRadius: 5, border: '1px dashed var(--border)' }}>
+      {message}
     </div>
   );
 }
 
+// Renders a full sequence string as a horizontal pill chain
+function PathwayChain({ sequence, count, rank }: { sequence: string; count: number; rank: number }) {
+  const stages = sequence.split(' → ');
+  return (
+    <div style={{ padding: '9px 12px', background: 'var(--surface-2)', borderRadius: 7, border: '1px solid var(--border)', marginBottom: 7 }}>
+      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4, rowGap: 4 }}>
+        <span style={{ fontSize: 10.5, color: 'var(--text-3)', fontFamily: 'Lora, serif', marginRight: 2, flexShrink: 0 }}>{rank}.</span>
+        {stages.map((s, i) => {
+          const lbl = STAGE_LABELS[s] || s;
+          const col = STAGE_COLORS[s] || C.slate;
+          return (
+            <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              {i > 0 && <span style={{ color: 'var(--text-3)', fontSize: 9, flexShrink: 0 }}>→</span>}
+              <span style={{ fontSize: 10.5, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: col + '18', color: col, border: `1px solid ${col}30`, whiteSpace: 'nowrap' }}>
+                {lbl}
+              </span>
+            </span>
+          );
+        })}
+        <span style={{ marginLeft: 'auto', fontSize: 10.5, color: 'var(--text-3)', fontWeight: 600, flexShrink: 0, paddingLeft: 6 }}>{count}×</span>
+      </div>
+    </div>
+  );
+}
+
+// ── Main component ─────────────────────────────────────────────────────────────
 
 export default function Analysis() {
   const navigate = useNavigate();
+  const { isLoaded: mapsLoaded } = useMaps();
+
   const [stats, setStats] = useState<Stats | null>(null);
+  const [agg, setAgg] = useState<ResearchAggregate | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
 
-  const load = () => {
+  const load = useCallback(() => {
     setLoading(true);
     setLoadError(null);
-    api.getStats()
-      .then((s) => { setStats(s); setLoading(false); })
-      .catch(() => { setLoading(false); setLoadError('Could not load stats — is the backend running?'); });
-  };
+    Promise.all([api.getStats(), api.getResearchAggregate()])
+      .then(([s, a]) => { setStats(s); setAgg(a); setLoading(false); setLastRefresh(new Date()); })
+      .catch(() => { setLoading(false); setLoadError('Could not load data — is the backend running?'); });
+  }, []);
 
-  useEffect(() => { load(); }, []);
-
-  if (loading) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-3)', fontSize: 14 }}>
-      Loading…
-    </div>
-  );
-  if (loadError) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-3)', fontSize: 14, flexDirection: 'column', gap: 8 }}>
-      <span>{loadError}</span>
-      <button className="btn-ghost" onClick={load} style={{ fontSize: 12.5 }}>Retry</button>
-    </div>
-  );
-  if (!stats) return null;
-
-  const { total } = stats;
-  const codingPct = total ? Math.round(stats.coded / total * 100) : 0;
-  const totalVehApproach = (stats.approach_foot ?? 0) + (stats.approach_vehicle ?? 0);
-  const footPct = totalVehApproach > 0 ? Math.round((stats.approach_foot / totalVehApproach) * 100) : 0;
-  const vehPct  = totalVehApproach > 0 ? Math.round((stats.approach_vehicle / totalVehApproach) * 100) : 0;
-
-  const maxColour = stats.vehicle_colours?.length ? Math.max(...stats.vehicle_colours.map(c => c.count)) : 1;
-  const maxType   = stats.vehicle_types?.length   ? Math.max(...stats.vehicle_types.map(t => t.count))   : 1;
-  const maxMake   = stats.vehicle_makes?.length   ? Math.max(...stats.vehicle_makes.map(m => m.count))   : 1;
-  const vehCount  = stats.vehicle_present_count ?? stats.approach_vehicle ?? 0;
+  useEffect(() => { load(); }, [load]);
 
   const go = (qs: Record<string, string>) =>
     navigate('/cases?' + new URLSearchParams(qs).toString());
 
-  return (
-    <div style={{ height: '100%', overflow: 'auto', background: 'var(--bg)', padding: '24px' }}>
-      <div style={{ maxWidth: 1020, margin: '0 auto' }}>
+  const d = useMemo(() => {
+    if (!stats || !agg) return null;
+    const total    = stats.total;
+    const coded    = stats.coded;
+    const geocoded = stats.map_points.length;
+    const dq       = agg.data_quality;
+    const nlp      = stats.nlp_violence;
 
-        {/* Page header */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24 }}>
+    const nlpCoercionSignals = nlp.coercion.rank1 + nlp.coercion.rank2;
+    const nlpPhysSignals     = nlp.physical.rank1 + nlp.physical.rank2;
+    const nlpSexSignals      = nlp.sexual.rank1   + nlp.sexual.rank2;
+    const nlpMovSignals      = nlp.movement.rank1 + nlp.movement.rank2;
+    const nlpTotal           = nlpCoercionSignals + nlpPhysSignals + nlpSexSignals + nlpMovSignals;
+
+    // analystStaged = reports with analyst-created stage records in the stages table
+    const analystStaged  = dq.with_stage_coding;
+    // stageFramework = all reports (derived sequence framework is generated for every report)
+    const stageFramework = agg.sequences.total_cases;
+    const researchReady = dq.with_encounter_coded;
+    const bulletinCount = agg.vawg.flag_counts.public_safety_bulletin_suitability_positive;
+    const repeatFlags   = stats.repeated_vehicles.length + agg.vawg.flag_counts.repeat_targeting_concern;
+    const locationNeedsGeocode = Math.max(0, total - geocoded);
+    const missingStages = Math.max(0, coded - analystStaged);
+    const movUncoded    = Math.max(0, stats.movement.count - dq.with_movement_coded);
+
+    return {
+      total, coded, geocoded, analystStaged, stageFramework, researchReady, bulletinCount, repeatFlags,
+      locationNeedsGeocode, missingStages, movUncoded,
+      nlpCoercionSignals, nlpPhysSignals, nlpSexSignals, nlpMovSignals, nlpTotal,
+      codingPct:    total ? Math.round(coded          / total * 100) : 0,
+      geocodedPct:  total ? Math.round(geocoded        / total * 100) : 0,
+      stagedPct:    coded ? Math.min(100, Math.round(analystStaged / coded * 100)) : 0,
+      researchPct:  coded ? Math.round(researchReady  / coded * 100) : 0,
+    };
+  }, [stats, agg]);
+
+  const mapCenter = useMemo(() => {
+    if (!stats) return null;
+    const pts = stats.map_points.filter(p => p.lat_initial && p.lon_initial);
+    if (!pts.length) return null;
+    return {
+      lat: pts.reduce((s, p) => s + p.lat_initial!, 0) / pts.length,
+      lng: pts.reduce((s, p) => s + p.lon_initial!, 0) / pts.length,
+    };
+  }, [stats]);
+
+  // ── Guards ─────────────────────────────────────────────────────────────────
+  if (loading) return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-3)', fontSize: 13, gap: 8 }}>
+      <RefreshCw size={13} style={{ animation: 'spin 1s linear infinite' }} /> Loading analytic overview…
+    </div>
+  );
+  if (loadError) return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-3)', fontSize: 14, gap: 8 }}>
+      <span>{loadError}</span>
+      <button className="btn-ghost" onClick={load} style={{ fontSize: 12 }}>Retry</button>
+    </div>
+  );
+  if (!stats || !agg || !d) return null;
+
+  const mob       = agg.mobility.counts;
+  const mobMax    = Math.max(mob.movement_present, mob.entered_vehicle, mob.public_to_private, mob.public_to_secluded, mob.cross_neighbourhood, mob.cross_municipality, 1);
+  const maxHarm   = Math.max(stats.coercion.count, stats.physical_force.count, stats.sexual_assault.count, stats.threats_present.count, agg.encounter.indicator_counts.robbery_theft, agg.encounter.indicator_counts.weapon_present_used, 1);
+  const stageFreq = agg.sequences.stage_frequency.slice(0, 8);
+  const maxStageFreq = stageFreq.length ? Math.max(...stageFreq.map(s => s.count), 1) : 1;
+  const bigrams   = agg.sequences.most_common_bigrams.slice(0, 5);
+  const topSeqs   = agg.sequences.most_common_sequences.slice(0, 4);
+  const movementPathways = stats.map_points.filter(p => p.lat_initial && p.lat_incident).length;
+  const topCities = stats.cities?.slice(0, 5) ?? [];
+
+  // Dynamic insight observations
+  const insights: { text: string; color: string; icon: React.ReactNode }[] = [];
+  const topCity = stats.cities?.[0];
+  if (topCity && d.total > 0 && topCity.count / d.total >= 0.4)
+    insights.push({ text: `${topCity.count} of ${d.total} reports concentrated in ${topCity.name} (${Math.round(topCity.count / d.total * 100)}%)`, color: C.amber, icon: <Globe size={11} /> });
+  if (d.nlpTotal > 0)
+    insights.push({ text: `${d.nlpTotal} NLP signals pending analyst confirmation — provisional, not coded findings`, color: C.amber, icon: <Zap size={11} /> });
+  if (d.total > 0 && d.codingPct < 50)
+    insights.push({ text: `${d.codingPct}% of reports analyst-coded — patterns reflect a partial dataset`, color: C.coral, icon: <AlertTriangle size={11} /> });
+  if (d.movUncoded > 0)
+    insights.push({ text: `${d.movUncoded} report${d.movUncoded !== 1 ? 's' : ''} with movement present but Mobility tab incomplete`, color: C.purple, icon: <Navigation size={11} /> });
+
+  return (
+    <div style={{ height: '100%', overflow: 'auto', background: 'var(--bg)' }}>
+      <div style={{ maxWidth: 1240, margin: '0 auto', padding: '20px 24px 52px' }}>
+
+        {/* ═══ HEADER ═══════════════════════════════════════════════════════════ */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: insights.length ? 16 : 22 }}>
           <div>
-            <h2 style={{ fontFamily: 'Lora, serif', fontSize: 22, fontWeight: 500, margin: '0 0 4px', color: 'var(--text-1)' }}>
-              Analysis
-            </h2>
-            <p style={{ fontSize: 13, color: 'var(--text-3)', margin: 0 }}>
-              Pattern summary across all reports · Click any card or bar to view filtered cases · NLP counts are pre-coding signals
+            <h1 style={{ fontFamily: 'Lora, serif', fontSize: 26, fontWeight: 500, margin: '0 0 4px', color: 'var(--text-1)', letterSpacing: '-0.01em' }}>
+              Analytic Overview
+            </h1>
+            <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: '0 0 10px', maxWidth: 680, lineHeight: 1.5 }}>
+              Narrative coding, sequence reconstruction, spatial analysis, and public safety review of community-generated harm reports.
             </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 0, fontSize: 11.5, flexWrap: 'wrap' }}>
+              {[
+                { label: `${d.total.toLocaleString()} reports`, color: 'var(--text-1)' },
+                { label: `${d.geocoded} geocoded reports`, color: C.blue },
+                { label: `${d.coded} analyst-coded`, color: C.green },
+                { label: `Updated ${lastRefresh.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`, color: 'var(--text-3)' },
+              ].map((item, i) => (
+                <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
+                  {i > 0 && <span style={{ color: 'var(--border-mid)', margin: '0 10px' }}>·</span>}
+                  <span style={{ color: item.color }}>{item.label}</span>
+                </span>
+              ))}
+            </div>
           </div>
-          <button className="btn-ghost" onClick={load} disabled={loading} style={{ fontSize: 12.5, marginTop: 4 }} title="Refresh stats">
-            <RefreshCw size={13} style={loading ? { animation: 'spin 1s linear infinite' } : undefined} />
-            {loading ? 'Refreshing…' : 'Refresh'}
+          <button className="btn-ghost" onClick={load} disabled={loading} style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0, marginTop: 4 }}>
+            <RefreshCw size={11} /> Refresh
           </button>
         </div>
 
-        {/* Summary cards */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 16, marginBottom: 24 }}>
-          <StatCard label="Total Reports" value={total} icon={<BarChart2 size={16} />} />
-          <StatCard label="Coded" value={`${stats.coded} / ${total}`} sub={`${codingPct}% complete`} icon={<TrendingUp size={16} />} color="var(--green)" onClick={() => go({ coding_status: 'coded' })} />
-          {stats.coercion.count > 0 && <StatCard label="Coercion" value={stats.coercion.count} sub={`${stats.coercion.pct}% of coded`} icon={<Shield size={16} />} color="var(--accent)" onClick={() => go({ coercion_present: 'yes' })} />}
-          {stats.physical_force.count > 0 && <StatCard label="Physical force" value={stats.physical_force.count} sub={`${stats.physical_force.pct}% of coded`} icon={<AlertTriangle size={16} />} color="#C2410C" onClick={() => go({ physical_force: 'yes' })} />}
-          {stats.sexual_assault.count > 0 && <StatCard label="Sexual assault" value={stats.sexual_assault.count} sub={`${stats.sexual_assault.pct}% of coded`} icon={<AlertTriangle size={16} />} color="#9F1239" onClick={() => go({ sexual_assault: 'yes' })} />}
-          {stats.movement.count > 0 && <StatCard label="Movement" value={stats.movement.count} sub={`${stats.movement.pct}% of coded`} icon={<MapPin size={16} />} color="var(--amber)" onClick={() => go({ movement_present: 'yes' })} />}
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
-
-          {/* Coded violence indicators */}
-          <div className="card" style={{ padding: '20px 24px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-              <Shield size={15} style={{ color: 'var(--accent)' }} />
-              <span style={{ fontFamily: 'Lora, serif', fontSize: 15, fontWeight: 500 }}>Coded Violence Indicators</span>
-            </div>
-            {(stats.coercion.count > 0 || stats.physical_force.count > 0 || stats.sexual_assault.count > 0 || stats.movement.count > 0 || stats.threats_present?.count > 0) ? (
-              <>
-                {stats.coercion.count > 0 && <CountBar label="Coercion" count={stats.coercion.count} max={total} color="var(--accent)" onClick={() => go({ coercion_present: 'yes' })} />}
-                {stats.physical_force.count > 0 && <CountBar label="Physical force" count={stats.physical_force.count} max={total} color="#C2410C" onClick={() => go({ physical_force: 'yes' })} />}
-                {stats.sexual_assault.count > 0 && <CountBar label="Sexual assault" count={stats.sexual_assault.count} max={total} color="#9F1239" onClick={() => go({ sexual_assault: 'yes' })} />}
-                {stats.movement.count > 0 && <CountBar label="Movement" count={stats.movement.count} max={total} color="var(--amber)" onClick={() => go({ movement_present: 'yes' })} />}
-                {stats.threats_present?.count > 0 && <CountBar label="Threats / weapon" count={stats.threats_present.count} max={total} color="#B45309" onClick={() => go({ threats_present: 'yes' })} />}
-              </>
-            ) : (
-              <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: 0, fontStyle: 'italic' }}>No coded violence data yet.</p>
-            )}
+        {/* ═══ INSIGHT ALERTS ═══════════════════════════════════════════════════ */}
+        {insights.length > 0 && (
+          <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
+            {insights.map((ins, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '9px 13px', borderRadius: 6, borderLeft: `3px solid ${ins.color}`, background: 'var(--surface-2)', flex: '1 1 200px', minWidth: 0 }}>
+                <span style={{ color: ins.color, flexShrink: 0, marginTop: 1 }}>{ins.icon}</span>
+                <span style={{ fontSize: 11.5, color: 'var(--text-2)', lineHeight: 1.45 }}>{ins.text}</span>
+              </div>
+            ))}
           </div>
+        )}
 
-          {/* Reports by year */}
-          <div className="card" style={{ padding: '20px 24px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-              <BarChart2 size={15} style={{ color: 'var(--blue)' }} />
-              <span style={{ fontFamily: 'Lora, serif', fontSize: 15, fontWeight: 500 }}>Reports by Year</span>
-            </div>
-            {(!stats.year_breakdown || stats.year_breakdown.length === 0) ? (
-              <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: '12px 0 0', fontStyle: 'italic' }}>No date data yet.</p>
-            ) : (
-              <YearChart data={stats.year_breakdown} />
-            )}
+        {/* ═══ ANALYTIC PIPELINE ════════════════════════════════════════════════ */}
+        <div style={{ marginBottom: 20 }}>
+          <SectionLabel text="Analytic Pipeline" icon={<Activity size={11} />} />
+          <p style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 10, marginTop: -4 }}>
+            Tracks data readiness from imported source report to research-ready coded case.
+          </p>
+          <div style={{ display: 'flex', alignItems: 'stretch', gap: 0 }}>
+            <PipelineStep label="Imported"            count={d.total}          color={C.blue}   onClick={() => go({})} />
+            <PipelineStep label="NLP Screened"        count={d.total}          pct={100}        color={C.indigo} sub="provisional only" />
+            <PipelineStep label="Analyst Coded"       count={d.coded}          pct={d.codingPct}  color={C.green}  onClick={() => go({ coding_status: 'coded' })} />
+            <PipelineStep label="Analyst Staged"      count={d.analystStaged}  pct={d.stagedPct}  color={C.purple} sub="stage records created" onClick={() => navigate('/research')} />
+            <PipelineStep label="Geocoded Reports"    count={d.geocoded}       pct={d.geocodedPct} color={C.amber} onClick={() => go({ geocode_status: 'yes' })} />
+            <PipelineStep label="Research Ready"      count={d.researchReady}  pct={d.researchPct} color={C.teal} onClick={() => navigate('/research')} />
+            <PipelineStep label="Bulletin Review"     count={d.bulletinCount}  color={C.coral}  onClick={() => navigate('/bulletin')} isLast />
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
+        {/* ═══ HERO ROW: Spatial Snapshot + Attention Queue ════════════════════ */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1.55fr 1fr', gap: 16, marginBottom: 20 }}>
 
-          {/* Approach type */}
-          <div className="card" style={{ padding: '20px 24px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 18 }}>
-              <User size={15} style={{ color: 'var(--amber)' }} />
-              <span style={{ fontFamily: 'Lora, serif', fontSize: 15, fontWeight: 500 }}>Approach Type</span>
-            </div>
-            <div style={{ display: 'flex', gap: 16, marginBottom: 18 }}>
-              <div
-                onClick={() => stats.approach_vehicle > 0 && go({ vehicle_present: 'yes' })}
-                title={stats.approach_vehicle > 0 ? 'Click to view vehicle cases' : undefined}
-                style={{
-                  flex: 1, textAlign: 'center', padding: '14px 0', borderRadius: 8,
-                  background: 'var(--surface-2)', cursor: stats.approach_vehicle > 0 ? 'pointer' : 'default',
-                  transition: 'box-shadow 0.15s',
-                }}
-                onMouseEnter={(e) => { if (stats.approach_vehicle > 0) (e.currentTarget as HTMLDivElement).style.boxShadow = '0 0 0 2px var(--blue)'; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.boxShadow = ''; }}
-              >
-                <div style={{ fontFamily: 'Lora, serif', fontSize: 26, fontWeight: 500, color: 'var(--blue)' }}>{stats.approach_vehicle ?? 0}</div>
-                <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}>By Vehicle · {vehPct}%</div>
-                {stats.approach_vehicle > 0 && <div style={{ fontSize: 9.5, color: 'var(--blue)', opacity: 0.6, marginTop: 4 }}>view →</div>}
+          {/* ── Spatial Intelligence Snapshot ────────────────────────────────── */}
+          <div className="card" style={{ padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            {/* Card header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '13px 16px 10px', borderBottom: '1px solid var(--border)' }}>
+              <div>
+                <h3 style={{ fontFamily: 'Lora, serif', fontSize: 15, fontWeight: 500, margin: '0 0 2px' }}>
+                  Spatial Intelligence Snapshot
+                </h3>
+                <p style={{ fontSize: 10.5, color: 'var(--text-3)', margin: 0 }}>
+                  Live geocoded distribution of harm report locations
+                </p>
               </div>
-              <div
-                onClick={() => stats.approach_foot > 0 && go({ vehicle_present: 'no' })}
-                title={stats.approach_foot > 0 ? 'Click to view on-foot cases' : undefined}
-                style={{
-                  flex: 1, textAlign: 'center', padding: '14px 0', borderRadius: 8,
-                  background: 'var(--surface-2)', cursor: stats.approach_foot > 0 ? 'pointer' : 'default',
-                  transition: 'box-shadow 0.15s',
-                }}
-                onMouseEnter={(e) => { if (stats.approach_foot > 0) (e.currentTarget as HTMLDivElement).style.boxShadow = '0 0 0 2px var(--amber)'; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.boxShadow = ''; }}
-              >
-                <div style={{ fontFamily: 'Lora, serif', fontSize: 26, fontWeight: 500, color: 'var(--amber)' }}>{stats.approach_foot ?? 0}</div>
-                <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}>On Foot · {footPct}%</div>
-                {stats.approach_foot > 0 && <div style={{ fontSize: 9.5, color: 'var(--amber)', opacity: 0.6, marginTop: 4 }}>view →</div>}
-              </div>
+              <button className="btn-ghost" onClick={() => navigate('/map')} style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                <ExternalLink size={10} /> Open GIS Workspace
+              </button>
             </div>
-            <div style={{ height: 8, borderRadius: 10, background: 'var(--surface-3)', overflow: 'hidden', display: 'flex' }}>
-              <div style={{ height: '100%', background: 'var(--blue)', width: `${vehPct}%`, transition: 'width 0.6s ease' }} />
-              <div style={{ height: '100%', background: 'var(--amber)', flex: 1 }} />
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 11, color: 'var(--text-3)' }}>
-              <span>Vehicle</span><span>Foot</span>
-            </div>
-          </div>
-        </div>
 
-        {/* Vehicle detail + neighbourhoods + cities */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 20 }}>
-
-          {/* Vehicle colours */}
-          <div className="card" style={{ padding: '18px 20px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-              <Car size={14} style={{ color: 'var(--blue)' }} />
-              <span style={{ fontFamily: 'Lora, serif', fontSize: 14, fontWeight: 500 }}>Vehicle Colours</span>
-            </div>
-            <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '0 0 10px' }}>
-              {stats.vehicle_colours?.reduce((s, c) => s + c.count, 0) ?? 0} of {vehCount} cases
-            </p>
-            {(!stats.vehicle_colours || stats.vehicle_colours.length === 0) ? (
-              <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: 0, fontStyle: 'italic' }}>No colour data.</p>
-            ) : stats.vehicle_colours.map((c) => (
-              <CountBar key={c.colour} label={c.colour} count={c.count} max={maxColour} color="var(--blue)"
-                onClick={() => go({ search: c.colour })} />
-            ))}
-          </div>
-
-          {/* Vehicle types */}
-          <div className="card" style={{ padding: '18px 20px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-              <Car size={14} style={{ color: 'var(--text-3)' }} />
-              <span style={{ fontFamily: 'Lora, serif', fontSize: 14, fontWeight: 500 }}>Vehicle Types</span>
-            </div>
-            <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '0 0 10px' }}>
-              {stats.vehicle_types?.reduce((s, t) => s + t.count, 0) ?? 0} of {vehCount} cases
-            </p>
-            {(!stats.vehicle_types || stats.vehicle_types.length === 0) ? (
-              <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: 0, fontStyle: 'italic' }}>No type data.</p>
-            ) : stats.vehicle_types.map((t) => (
-              <CountBar key={t.type} label={t.type} count={t.count} max={maxType} color="var(--amber)"
-                onClick={() => go({ search: t.type })} />
-            ))}
-          </div>
-
-          {/* Vehicle makes */}
-          <div className="card" style={{ padding: '18px 20px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-              <Car size={14} style={{ color: 'var(--text-3)' }} />
-              <span style={{ fontFamily: 'Lora, serif', fontSize: 14, fontWeight: 500 }}>Vehicle Makes</span>
-            </div>
-            <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '0 0 10px' }}>
-              {stats.vehicle_makes?.reduce((s, m) => s + m.count, 0) ?? 0} of {vehCount} cases identified
-            </p>
-            {stats.vehicle_makes.length === 0 ? (
-              <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: 0, fontStyle: 'italic' }}>No make data.</p>
-            ) : stats.vehicle_makes.slice(0, 8).map((v) => (
-              <CountBar key={v.make} label={v.make} count={v.count} max={maxMake} color="var(--blue)"
-                onClick={() => go({ search: v.make })} />
-            ))}
-          </div>
-
-          {/* Repeat vehicles */}
-          <div className="card" style={{ padding: '18px 20px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-              <Car size={14} style={{ color: 'var(--accent)' }} />
-              <span style={{ fontFamily: 'Lora, serif', fontSize: 14, fontWeight: 500 }}>Repeat Plates</span>
-            </div>
-            {stats.repeated_vehicles.length === 0 ? (
-              <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: 0, fontStyle: 'italic' }}>No repeated plates.</p>
-            ) : stats.repeated_vehicles.map((v) => (
-              <div
-                key={v.plate}
-                onClick={() => go({ search: v.plate })}
-                title={`View cases with plate ${v.plate}`}
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, cursor: 'pointer' }}
-              >
-                <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 500, color: 'var(--accent)', letterSpacing: '0.05em' }}>{v.plate}</span>
-                <span style={{ fontSize: 11.5, padding: '1px 8px', borderRadius: 20, background: 'var(--accent-pale)', color: 'var(--accent)', border: '1px solid var(--accent-border)', fontWeight: 500 }}>{v.count}×</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Neighbourhoods + cities + coding progress */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 20 }}>
-
-          <div className="card" style={{ padding: '18px 20px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-              <MapPin size={14} style={{ color: 'var(--amber)' }} />
-              <span style={{ fontFamily: 'Lora, serif', fontSize: 14, fontWeight: 500 }}>Neighbourhoods</span>
-            </div>
-            {stats.neighbourhoods.length === 0 ? (
-              <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: 0, fontStyle: 'italic' }}>No data yet.</p>
-            ) : stats.neighbourhoods.slice(0, 10).map((n) => (
-              <div
-                key={n.name}
-                onClick={() => go({ search: n.name })}
-                title={`View ${n.count} cases in ${n.name}`}
-                style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6, cursor: 'pointer' }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.color = 'var(--accent)'; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.color = ''; }}
-              >
-                <span style={{ color: 'var(--text-1)' }}>{n.name}</span>
-                <span style={{ color: 'var(--text-3)' }}>{n.count}</span>
-              </div>
-            ))}
-          </div>
-
-          <div className="card" style={{ padding: '18px 20px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-              <MapPin size={14} style={{ color: 'var(--blue)' }} />
-              <span style={{ fontFamily: 'Lora, serif', fontSize: 14, fontWeight: 500 }}>By City</span>
-            </div>
-            {(!stats.cities || stats.cities.length === 0) ? (
-              <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: 0, fontStyle: 'italic' }}>No city data.</p>
-            ) : stats.cities.slice(0, 12).map((c) => (
-              <div
-                key={c.name}
-                onClick={() => go({ city: c.name })}
-                title={`View ${c.count} cases in ${c.name}`}
-                style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 6, cursor: 'pointer' }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.color = 'var(--accent)'; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.color = ''; }}
-              >
-                <span style={{ color: 'var(--text-1)' }}>{c.name}</span>
-                <span style={{ color: 'var(--text-3)' }}>{c.count}</span>
-              </div>
-            ))}
-          </div>
-
-          <div className="card" style={{ padding: '20px 24px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 18 }}>
-              <TrendingUp size={15} style={{ color: 'var(--green)' }} />
-              <span style={{ fontFamily: 'Lora, serif', fontSize: 15, fontWeight: 500 }}>Coding Progress</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
-              <div style={{ position: 'relative', width: 80, height: 80, flexShrink: 0 }}>
-                <svg width="80" height="80" viewBox="0 0 80 80">
-                  <circle cx="40" cy="40" r="32" fill="none" stroke="var(--surface-3)" strokeWidth="9" />
-                  <circle cx="40" cy="40" r="32" fill="none" stroke="var(--green)" strokeWidth="9"
-                    strokeDasharray={`${2 * Math.PI * 32}`}
-                    strokeDashoffset={`${2 * Math.PI * 32 * (1 - codingPct / 100)}`}
-                    strokeLinecap="round" transform="rotate(-90 40 40)"
-                    style={{ transition: 'stroke-dashoffset 0.8s ease' }}
-                  />
-                </svg>
-                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Lora, serif', fontSize: 16, fontWeight: 500, color: 'var(--text-1)' }}>
-                  {codingPct}%
+            {/* Map */}
+            <div style={{ height: 280, background: '#0d1b2a', position: 'relative' }}>
+              {mapsLoaded && mapCenter && d.geocoded > 0 ? (
+                <GoogleMap
+                  mapContainerStyle={{ width: '100%', height: '100%' }}
+                  center={mapCenter}
+                  zoom={11}
+                  options={{ disableDefaultUI: true, gestureHandling: 'none', clickableIcons: false, styles: DARK_MAP_STYLES }}
+                >
+                  {stats.map_points.slice(0, 80).map((p, i) => (
+                    <span key={i}>
+                      {p.lat_initial != null && p.lon_initial != null && (
+                        <Marker
+                          position={{ lat: p.lat_initial, lng: p.lon_initial }}
+                          icon={{ path: google.maps.SymbolPath.CIRCLE, scale: 4.5, fillColor: C.blue, fillOpacity: 0.9, strokeColor: '#fff', strokeWeight: 0.5 }}
+                        />
+                      )}
+                      {p.lat_incident != null && p.lon_incident != null && (
+                        <Marker
+                          position={{ lat: p.lat_incident, lng: p.lon_incident }}
+                          icon={{ path: google.maps.SymbolPath.CIRCLE, scale: 4.5, fillColor: C.red, fillOpacity: 0.9, strokeColor: '#fff', strokeWeight: 0.5 }}
+                        />
+                      )}
+                    </span>
+                  ))}
+                </GoogleMap>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#6b7fa3', fontSize: 12, fontStyle: 'italic', flexDirection: 'column', gap: 8 }}>
+                  <MapPin size={22} style={{ opacity: 0.3 }} />
+                  {!mapsLoaded ? 'Map initialising…' : 'No geocoded locations yet — geocode cases to populate this map.'}
                 </div>
+              )}
+              {/* Map legend overlay */}
+              <div style={{ position: 'absolute', bottom: 8, left: 10, display: 'flex', gap: 10, pointerEvents: 'none' }}>
+                {[{ color: C.blue, label: 'Initial contact' }, { color: C.red, label: 'Incident' }].map(l => (
+                  <div key={l.label} style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(0,0,0,0.55)', padding: '2px 7px', borderRadius: 10, backdropFilter: 'blur(4px)' }}>
+                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: l.color, display: 'inline-block', flexShrink: 0 }} />
+                    <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.75)' }}>{l.label}</span>
+                  </div>
+                ))}
               </div>
-              <div style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 2 }}>
-                <div style={{ cursor: 'pointer' }} onClick={() => go({ coding_status: 'coded' })}><strong style={{ color: 'var(--green)' }}>{stats.coded}</strong> coded</div>
-                <div style={{ cursor: 'pointer' }} onClick={() => go({ coding_status: 'uncoded' })}><strong style={{ color: 'var(--text-1)' }}>{total - stats.coded}</strong> remaining</div>
-                <div><strong style={{ color: 'var(--text-1)' }}>{total}</strong> total</div>
+            </div>
+
+            {/* Stats strip */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', background: 'var(--surface-3)', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)' }}>
+              {[
+                { label: 'Geocoded reports', value: d.geocoded, color: C.amber, click: () => go({ geocode_status: 'yes' }) },
+                { label: 'Movement pathways', value: movementPathways, color: C.purple, click: () => go({ movement_present: 'yes' }) },
+                { label: 'Cities / areas', value: stats.cities?.length ?? 0, color: C.blue, click: undefined },
+              ].map((item, i) => (
+                <div
+                  key={item.label}
+                  onClick={item.click}
+                  style={{ padding: '10px 14px', textAlign: 'center', borderRight: i < 2 ? '1px solid var(--border)' : 'none', cursor: item.click ? 'pointer' : 'default', transition: 'background 0.12s' }}
+                  onMouseEnter={e => { if (item.click) (e.currentTarget as HTMLDivElement).style.background = `${item.color}10`; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
+                >
+                  <div style={{ fontFamily: 'Lora, serif', fontSize: 22, color: item.color, lineHeight: 1 }}>{item.value}</div>
+                  <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 3 }}>{item.label}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Top locations */}
+            {topCities.length > 0 && (
+              <div style={{ padding: '12px 16px' }}>
+                <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.07em', marginBottom: 8 }}>TOP LOCATIONS</div>
+                {topCities.map(c => {
+                  const maxC = topCities[0].count || 1;
+                  const pct = Math.round(c.count / d.total * 100);
+                  return (
+                    <div key={c.name} onClick={() => go({ city: c.name })} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, cursor: 'pointer' }}>
+                      <span style={{ fontSize: 11.5, color: 'var(--text-1)', minWidth: 100, fontWeight: 500 }}>{c.name}</span>
+                      <div style={{ flex: 1, height: 4, borderRadius: 4, background: 'var(--surface-3)', overflow: 'hidden' }}>
+                        <div style={{ height: '100%', background: C.blue, width: `${(c.count / maxC) * 100}%`, borderRadius: 4, transition: 'width 0.6s ease' }} />
+                      </div>
+                      <span style={{ fontSize: 11, color: 'var(--text-3)', minWidth: 40, textAlign: 'right' }}>{c.count} <span style={{ color: 'var(--border-mid)' }}>({pct}%)</span></span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* ── Analyst Attention Queue ───────────────────────────────────────── */}
+          <div className="card" style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ marginBottom: 13 }}>
+              <h3 style={{ fontFamily: 'Lora, serif', fontSize: 15, fontWeight: 500, margin: '0 0 2px' }}>
+                Analyst Attention Queue
+              </h3>
+              <p style={{ fontSize: 10.5, color: 'var(--text-3)', margin: 0 }}>Active review items — click to open filtered cases</p>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5, flex: 1 }}>
+              <QueueRow label="NLP signals — pending confirmation" count={d.nlpTotal} desc="Provisional signals, not analyst-confirmed" color={C.amber} onClick={() => go({})} />
+              <QueueRow label="Location phrase — no geocode" count={d.locationNeedsGeocode} desc="Has location text but missing coordinates" color={C.blue} onClick={() => go({ geocode_status: 'no' })} />
+              <QueueRow label="Movement present — mobility not coded" count={d.movUncoded} desc="Movement flag present but Mobility tab incomplete" color={C.purple} onClick={() => go({ movement_present: 'yes' })} />
+              <QueueRow label="Repeat suspect / vehicle flag" count={d.repeatFlags} desc="Cross-case repeat indicator requiring review" color={C.red} onClick={() => go({})} />
+              <QueueRow label="Bulletin review candidates" count={d.bulletinCount} desc="Coded for public safety bulletin suitability" color={C.coral} onClick={() => navigate('/bulletin')} />
+              <QueueRow label="Analyst staging not yet completed" count={d.missingStages} desc="Coded reports without analyst stage records" color={C.purple} onClick={() => go({ coding_status: 'coded' })} />
+              <QueueRow label="VAWG / exploitation flags" count={agg.vawg.flag_counts.trafficking_exploitation_concern} desc="Trafficking or exploitation concern coded" color={C.red} onClick={() => go({})} />
+            </div>
+          </div>
+        </div>
+
+        {/* ═══ EMERGING PATTERNS ════════════════════════════════════════════════ */}
+        <div style={{ marginBottom: 20 }}>
+          <SectionLabel text="Emerging Patterns" icon={<Shield size={11} />} />
+          <p style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 10, marginTop: -4 }}>
+            Displays analyst-confirmed patterns separately from provisional NLP signals. Treat as preliminary until coding coverage is sufficient.
+          </p>
+          <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginBottom: 14, fontStyle: 'italic' }}>
+            Based on {d.coded} analyst-coded report{d.coded !== 1 ? 's' : ''}.{d.coded < 5 ? ' Treat as highly preliminary.' : ''}
+            {' '}Coded and NLP provisional signals are displayed separately.
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
+
+            {/* Harm Indicators */}
+            <div className="card" style={{ padding: '15px 16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 13 }}>
+                <Shield size={13} style={{ color: C.coral }} />
+                <span style={{ fontFamily: 'Lora, serif', fontSize: 13.5, fontWeight: 500 }}>Harm Indicators</span>
+              </div>
+
+              {/* Analyst-coded section */}
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 9 }}>
+                  <Badge label="CODED" variant="coded" />
+                  <span style={{ fontSize: 10, color: 'var(--text-3)' }}>analyst-confirmed findings</span>
+                </div>
+                {maxHarm <= 1 ? (
+                  <EmptyState message="Awaiting analyst-coded harm data." />
+                ) : (
+                  <>
+                    {stats.coercion.count > 0        && <CountBar label="Coercion"               count={stats.coercion.count}       max={d.coded} color={C.amber}  onClick={() => go({ coercion_present: 'yes' })} />}
+                    {stats.physical_force.count > 0   && <CountBar label="Physical force"          count={stats.physical_force.count} max={d.coded} color={C.coral}  onClick={() => go({ physical_force: 'yes' })} />}
+                    {stats.sexual_assault.count > 0   && <CountBar label="Sexual assault"           count={stats.sexual_assault.count} max={d.coded} color={C.red}    onClick={() => go({ sexual_assault: 'yes' })} />}
+                    {stats.threats_present.count > 0  && <CountBar label="Threats / weapon"         count={stats.threats_present.count} max={d.coded} color="#B45309" onClick={() => go({ threats_present: 'yes' })} />}
+                    {agg.encounter.indicator_counts.robbery_theft > 0       && <CountBar label="Robbery / theft"          count={agg.encounter.indicator_counts.robbery_theft}       max={d.coded} color={C.slate} onClick={() => go({ robbery_theft: 'yes' })} />}
+                    {agg.encounter.indicator_counts.restraint_confinement > 0 && <CountBar label="Restraint / confinement"  count={agg.encounter.indicator_counts.restraint_confinement} max={d.coded} color={C.red} />}
+                    {agg.encounter.indicator_counts.weapon_present_used > 0  && <CountBar label="Weapon present / used"    count={agg.encounter.indicator_counts.weapon_present_used}   max={d.coded} color={C.red} />}
+                  </>
+                )}
+              </div>
+
+              {/* NLP provisional section */}
+              {d.nlpTotal > 0 && (
+                <div style={{ paddingTop: 11, borderTop: '1px dashed var(--border)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 9 }}>
+                    <Badge label="NLP PROVISIONAL" variant="nlp" />
+                    <span style={{ fontSize: 10, color: 'var(--text-3)' }}>requires analyst review</span>
+                  </div>
+                  {d.nlpCoercionSignals > 0 && <CountBar label="Coercion signal"         count={d.nlpCoercionSignals} max={d.total} color={C.amber} tag="NLP" barHeight={3} />}
+                  {d.nlpPhysSignals > 0     && <CountBar label="Physical signal"          count={d.nlpPhysSignals}     max={d.total} color={C.amber} tag="NLP" barHeight={3} />}
+                  {d.nlpSexSignals > 0      && <CountBar label="Sexual violence signal"   count={d.nlpSexSignals}      max={d.total} color={C.amber} tag="NLP" barHeight={3} />}
+                  {d.nlpMovSignals > 0      && <CountBar label="Movement signal"          count={d.nlpMovSignals}      max={d.total} color={C.amber} tag="NLP" barHeight={3} />}
+                </div>
+              )}
+            </div>
+
+            {/* Mobility Patterns */}
+            <div className="card" style={{ padding: '15px 16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 13 }}>
+                <Navigation size={13} style={{ color: C.purple }} />
+                <span style={{ fontFamily: 'Lora, serif', fontSize: 13.5, fontWeight: 500 }}>Mobility Patterns</span>
+                <Badge label="CODED" variant="coded" />
+              </div>
+              {agg.data_quality.with_movement_coded === 0 ? (
+                <EmptyState message="Awaiting mobility coding. Complete the Mobility tab on coded cases." />
+              ) : (
+                <>
+                  {mob.movement_present    > 0 && <CountBar label="Movement present"         count={mob.movement_present}    max={mobMax} color={C.purple} onClick={() => go({ movement_present: 'yes' })} />}
+                  {mob.entered_vehicle     > 0 && <CountBar label="Entered vehicle"           count={mob.entered_vehicle}     max={mobMax} color={C.blue}   onClick={() => go({ entered_vehicle: 'yes' })} />}
+                  {mob.public_to_private   > 0 && <CountBar label="Public → private shift"   count={mob.public_to_private}   max={mobMax} color={C.coral}  onClick={() => go({ public_to_private_shift: 'yes' })} />}
+                  {mob.public_to_secluded  > 0 && <CountBar label="Public → secluded"        count={mob.public_to_secluded}  max={mobMax} color={C.coral} />}
+                  {mob.cross_neighbourhood > 0 && <CountBar label="Cross-neighbourhood"      count={mob.cross_neighbourhood} max={mobMax} color={C.amber} />}
+                  {mob.cross_municipality  > 0 && <CountBar label="Cross-municipality"       count={mob.cross_municipality}  max={mobMax} color={C.amber} />}
+                  {mob.offender_controlled_high > 0 && <CountBar label="Offender-controlled (high)" count={mob.offender_controlled_high} max={mobMax} color={C.red} />}
+                </>
+              )}
+              {agg.mobility.mode_breakdown.length > 0 && (
+                <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', marginBottom: 8, letterSpacing: '0.07em' }}>MODE OF MOVEMENT</div>
+                  {agg.mobility.mode_breakdown.slice(0, 4).map(m => (
+                    <CountBar key={m.mode} label={m.mode} count={m.count} max={Math.max(...agg.mobility.mode_breakdown.map(x => x.count), 1)} color={C.purple} />
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Suspect & Vehicle */}
+            <div className="card" style={{ padding: '15px 16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 13 }}>
+                <Activity size={13} style={{ color: C.blue }} />
+                <span style={{ fontFamily: 'Lora, serif', fontSize: 13.5, fontWeight: 500 }}>Suspect & Vehicle</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 13 }}>
+                {[
+                  { label: 'Vehicle present', value: stats.vehicle_present.count, color: C.blue, click: () => go({ vehicle_present: 'yes' }) },
+                  { label: 'Repeat plates', value: stats.repeated_vehicles.length, color: C.red, click: undefined },
+                ].map(item => (
+                  <div key={item.label} onClick={item.click} style={{ background: 'var(--surface-2)', borderRadius: 5, padding: '9px 10px', textAlign: 'center', cursor: item.click ? 'pointer' : 'default', border: `1px solid ${item.color}22` }}>
+                    <div style={{ fontFamily: 'Lora, serif', fontSize: 22, color: item.color, lineHeight: 1 }}>{item.value}</div>
+                    <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 3 }}>{item.label}</div>
+                  </div>
+                ))}
+              </div>
+              {stats.vehicle_colours && stats.vehicle_colours.length > 0 && (
+                <>
+                  <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', marginBottom: 8, letterSpacing: '0.07em' }}>VEHICLE COLOURS</div>
+                  {stats.vehicle_colours.slice(0, 4).map(c => (
+                    <CountBar key={c.colour} label={c.colour} count={c.count} max={Math.max(...stats.vehicle_colours!.map(x => x.count), 1)} color={C.blue} onClick={() => go({ search: c.colour })} />
+                  ))}
+                </>
+              )}
+              {stats.repeated_vehicles.length > 0 && (
+                <div style={{ marginTop: 11, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: 9, fontWeight: 700, color: C.red, marginBottom: 8, letterSpacing: '0.07em' }}>REPEAT PLATES</div>
+                  {stats.repeated_vehicles.slice(0, 4).map(v => (
+                    <div key={v.plate} onClick={() => go({ search: v.plate })} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12, marginBottom: 5, cursor: 'pointer', padding: '3px 6px', borderRadius: 4 }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = 'var(--surface-2)'; }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
+                    >
+                      <span style={{ fontFamily: 'monospace', color: C.red, fontWeight: 700, letterSpacing: '0.05em' }}>{v.plate}</span>
+                      <span style={{ color: 'var(--text-3)', fontSize: 11 }}>{v.count}×</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {stats.vehicle_colours?.length === 0 && stats.repeated_vehicles.length === 0 && stats.vehicle_present.count === 0 && (
+                <EmptyState message="No vehicle data coded yet." />
+              )}
+            </div>
+          </div>
+
+          {/* Second row: Location · Incident type · VAWG — only with sufficient data */}
+          {d.coded >= 3 && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14, marginTop: 14 }}>
+
+              <div className="card" style={{ padding: '15px 16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 12 }}>
+                  <Globe size={13} style={{ color: C.amber }} />
+                  <span style={{ fontFamily: 'Lora, serif', fontSize: 13.5, fontWeight: 500 }}>Location Context</span>
+                  <Badge label="CODED" variant="coded" />
+                </div>
+                {stats.cities?.length ? stats.cities.slice(0, 6).map(c => (
+                  <div key={c.name} onClick={() => go({ city: c.name })} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12.5, marginBottom: 6, cursor: 'pointer', padding: '2px 5px', borderRadius: 4 }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = 'var(--surface-2)'; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
+                  >
+                    <span style={{ color: 'var(--text-1)' }}>{c.name}</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-3)', background: 'var(--surface-2)', padding: '1px 6px', borderRadius: 8 }}>{c.count}</span>
+                  </div>
+                )) : <EmptyState message="No city data yet." />}
+                {agg.environment.location_types.length > 0 && (
+                  <div style={{ marginTop: 10, paddingTop: 9, borderTop: '1px solid var(--border)' }}>
+                    <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', marginBottom: 8, letterSpacing: '0.07em' }}>LOCATION TYPES</div>
+                    {agg.environment.location_types.slice(0, 4).map(t => (
+                      <CountBar key={t.type} label={t.type} count={t.count} max={Math.max(...agg.environment.location_types.map(x => x.count), 1)} color={C.amber} />
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="card" style={{ padding: '15px 16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 12 }}>
+                  <Target size={13} style={{ color: C.coral }} />
+                  <span style={{ fontFamily: 'Lora, serif', fontSize: 13.5, fontWeight: 500 }}>Incident Type & Severity</span>
+                </div>
+                {agg.encounter.incident_type_distribution.length === 0 ? (
+                  <EmptyState message="Awaiting encounter coding." />
+                ) : (
+                  <>
+                    {agg.encounter.incident_type_distribution.slice(0, 5).map(it => (
+                      <CountBar key={it.value} label={it.value} count={it.count} max={Math.max(...agg.encounter.incident_type_distribution.map(x => x.count), 1)} color={C.coral} />
+                    ))}
+                    {agg.encounter.severity_distribution.length > 0 && (
+                      <div style={{ marginTop: 10, paddingTop: 9, borderTop: '1px solid var(--border)' }}>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', marginBottom: 8, letterSpacing: '0.07em' }}>SEVERITY</div>
+                        {agg.encounter.severity_distribution.slice(0, 4).map(s => (
+                          <CountBar key={s.value} label={s.value} count={s.count} max={Math.max(...agg.encounter.severity_distribution.map(x => x.count), 1)} color={s.value.toLowerCase().includes('severe') ? C.red : C.coral} />
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              <div className="card" style={{ padding: '15px 16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 12 }}>
+                  <AlertTriangle size={13} style={{ color: C.red }} />
+                  <span style={{ fontFamily: 'Lora, serif', fontSize: 13.5, fontWeight: 500 }}>VAWG & Public Safety</span>
+                </div>
+                {agg.vawg.total === 0 ? (
+                  <EmptyState message="Awaiting VAWG coding." />
+                ) : (
+                  <>
+                    {agg.vawg.flag_counts.trafficking_exploitation_concern > 0  && <CountBar label="Trafficking / exploitation concern" count={agg.vawg.flag_counts.trafficking_exploitation_concern}  max={d.coded} color={C.red} />}
+                    {agg.vawg.flag_counts.repeat_targeting_concern > 0          && <CountBar label="Repeat targeting concern"           count={agg.vawg.flag_counts.repeat_targeting_concern}           max={d.coded} color={C.red} onClick={() => go({})} />}
+                    {agg.vawg.flag_counts.third_party_control_indicated > 0     && <CountBar label="Third-party control indicated"      count={agg.vawg.flag_counts.third_party_control_indicated}      max={d.coded} color={C.coral} />}
+                    {agg.vawg.flag_counts.grooming_recruitment_concern > 0      && <CountBar label="Grooming / recruitment concern"     count={agg.vawg.flag_counts.grooming_recruitment_concern}       max={d.coded} color={C.coral} />}
+                    {agg.vawg.flag_counts.public_safety_urgency_urgent_high > 0 && <CountBar label="Urgent / high public safety"        count={agg.vawg.flag_counts.public_safety_urgency_urgent_high}  max={d.coded} color={C.red}  onClick={() => navigate('/bulletin')} />}
+                    {agg.vawg.flag_counts.public_safety_bulletin_suitability_positive > 0 && <CountBar label="Bulletin-suitable" count={agg.vawg.flag_counts.public_safety_bulletin_suitability_positive} max={d.coded} color={C.coral} onClick={() => navigate('/bulletin')} />}
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ═══ ENCOUNTER SEQUENCE PATTERNS ══════════════════════════════════════ */}
+        <div className="card" style={{ padding: '18px 20px', marginBottom: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 }}>
+            <div>
+              <h3 style={{ fontFamily: 'Lora, serif', fontSize: 16, fontWeight: 500, margin: '0 0 3px' }}>
+                Encounter Sequence Patterns
+              </h3>
+              <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: 0 }}>
+                Summarizes staged pathways reconstructed from narrative reports. Analyst-confirmed sequences only.
+              </p>
+            </div>
+            <button className="btn-ghost" onClick={() => navigate('/research')} style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+              <ExternalLink size={10} /> Full Sequence Analysis
+            </button>
+          </div>
+
+          {d.analystStaged === 0 ? (
+            <div style={{ padding: '28px', textAlign: 'center', color: 'var(--text-3)', fontSize: 12, fontStyle: 'italic', background: 'var(--surface-2)', borderRadius: 7, border: '1px dashed var(--border)' }}>
+              Stage sequence visualization will populate once analyst-staged coding is completed.
+              <br /><span style={{ fontSize: 11, marginTop: 6, display: 'block' }}>Complete the Stages tab on coded reports to build observed encounter pathways.</span>
+            </div>
+          ) : (
+            <>
+            {d.analystStaged < 5 && (
+              <div style={{ fontSize: 11, color: C.amber, padding: '6px 10px', background: `${C.amber}10`, border: `1px solid ${C.amber}30`, borderRadius: 5, marginBottom: 14 }}>
+                Patterns reflect {d.analystStaged} analyst-coded case{d.analystStaged !== 1 ? 's' : ''} only — preliminary until coding coverage is sufficient.
+                Not causal inference. Observed coded pathways only.
+              </div>
+            )}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 22 }}>
+
+              {/* Left: Top pathway chains (main visual) */}
+              <div>
+                <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.08em', marginBottom: 12 }}>OBSERVED CODED PATHWAYS</div>
+                {topSeqs.length === 0 ? (
+                  <EmptyState message="Awaiting full sequence data." />
+                ) : (
+                  topSeqs.map((s, i) => <PathwayChain key={i} sequence={s.sequence} count={s.count} rank={i + 1} />)
+                )}
+                {bigrams.length > 0 && (
+                  <div style={{ marginTop: 14 }}>
+                    <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.08em', marginBottom: 10 }}>COMMON STAGE TRANSITIONS</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                      {bigrams.map((b, i) => {
+                        const parts = b.pattern.split(' → ');
+                        return (
+                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 10px', background: 'var(--surface-2)', borderRadius: 6 }}>
+                            <span style={{ fontSize: 10.5, color: 'var(--text-3)', fontFamily: 'Lora, serif', minWidth: 16 }}>{i + 1}.</span>
+                            {parts.map((p, j) => (
+                              <span key={j} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                {j > 0 && <ArrowRight size={9} style={{ color: 'var(--text-3)', flexShrink: 0 }} />}
+                                <span style={{ fontSize: 10.5, fontWeight: 600, padding: '2px 7px', borderRadius: 4, background: (STAGE_COLORS[p] || C.slate) + '18', color: STAGE_COLORS[p] || C.slate, border: `1px solid ${(STAGE_COLORS[p] || C.slate)}30`, whiteSpace: 'nowrap' }}>
+                                  {STAGE_LABELS[p] || p}
+                                </span>
+                              </span>
+                            ))}
+                            <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text-3)', fontWeight: 600 }}>{b.count}×</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Right: Stage frequency bars */}
+              <div>
+                <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.08em', marginBottom: 12 }}>STAGE FREQUENCY — ACROSS ALL CODED REPORTS</div>
+                {stageFreq.map(s => {
+                  const lbl   = STAGE_LABELS[s.stage] || s.stage;
+                  const col   = STAGE_COLORS[s.stage]  || C.slate;
+                  const widPct = (s.count / maxStageFreq) * 100;
+                  return (
+                    <div key={s.stage} style={{ marginBottom: 9 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3, alignItems: 'center' }}>
+                        <span style={{ fontSize: 11.5, color: 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 7 }}>
+                          <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: col, flexShrink: 0 }} />
+                          {lbl}
+                        </span>
+                        <span style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 600 }}>{s.count}</span>
+                      </div>
+                      <div style={{ height: 5, borderRadius: 10, background: 'var(--surface-3)', overflow: 'hidden' }}>
+                        <div style={{ height: '100%', borderRadius: 10, background: col, width: `${widPct}%`, transition: 'width 0.7s ease' }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            </>
+          )}
+        </div>
+
+        {/* ═══ DATASET PROCESSING STATUS ════════════════════════════════════════ */}
+        <div style={{ marginBottom: 20 }}>
+          <SectionLabel text="Dataset Processing Status" icon={<Database size={11} />} />
+          <p style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 10, marginTop: -4 }}>
+            Shows which parts of the dataset are ready for analysis and which require further coding or geocoding.
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
+
+            <div className="card" style={{ padding: '15px 16px' }}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.07em', color: C.blue, textTransform: 'uppercase', marginBottom: 12, borderBottom: `2px solid ${C.blue}22`, paddingBottom: 8 }}>
+                Data Readiness
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <MetricCard label="Total Reports"  value={d.total}          color={C.blue}   icon={<Database size={11} />}    onClick={() => go({})} />
+                <MetricCard label="Geocoded Reports" value={d.geocoded}       sub={`${d.geocodedPct}% of dataset`} color={C.amber} tag="spatial" icon={<MapPin size={11} />} onClick={() => go({ geocode_status: 'yes' })} />
+                <MetricCard label="Analyst Coded"   value={d.coded}          sub={`${d.codingPct}% complete`}     color={C.green} tag="confirmed" icon={<CheckCircle size={11} />} onClick={() => go({ coding_status: 'coded' })} />
+                <MetricCard label="Uncoded"         value={d.total - d.coded} sub="not yet reviewed"              color={C.slate} icon={<Clock size={11} />} onClick={() => go({ coding_status: 'uncoded' })} />
+              </div>
+            </div>
+
+            <div className="card" style={{ padding: '15px 16px' }}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.07em', color: C.purple, textTransform: 'uppercase', marginBottom: 12, borderBottom: `2px solid ${C.purple}22`, paddingBottom: 8 }}>
+                Analytic Extraction
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <MetricCard label="Analyst Staged" value={d.analystStaged} sub={`of ${d.coded} analyst coded`} color={C.purple} icon={<GitBranch size={11} />}  onClick={() => navigate('/research')} />
+                <MetricCard label="Movement-Coded" value={agg.data_quality.with_movement_coded} sub={`of ${d.coded} reviewed`} color={C.amber} icon={<Navigation size={11} />} onClick={() => go({ movement_present: 'yes' })} />
+                <MetricCard label="Harm-Coded"     value={agg.data_quality.with_harm_coded}     sub={`of ${d.coded} reviewed`} color={C.coral} icon={<Shield size={11} />}    onClick={() => go({ coding_status: 'coded' })} />
+                <MetricCard label="Vehicle Present" value={stats.vehicle_present.count} sub="cases with vehicle"       color={C.blue}  icon={<Activity size={11} />}  onClick={() => go({ vehicle_present: 'yes' })} />
+              </div>
+            </div>
+
+            <div className="card" style={{ padding: '15px 16px' }}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.07em', color: C.coral, textTransform: 'uppercase', marginBottom: 12, borderBottom: `2px solid ${C.coral}22`, paddingBottom: 8 }}>
+                Analyst Attention
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <MetricCard label="NLP Signals"     value={d.nlpTotal}             sub="pending confirmation" color={C.amber} tag="provisional" icon={<Zap size={11} />}           onClick={() => go({})} />
+                <MetricCard label="Needs Geocode"   value={d.locationNeedsGeocode} sub="no coordinates"      color={C.slate} icon={<MapPin size={11} />}           onClick={() => go({ geocode_status: 'no' })} />
+                <MetricCard label="Repeat Flags"    value={d.repeatFlags}          sub="suspect / vehicle"   color={C.red}   icon={<AlertTriangle size={11} />}    onClick={() => go({})} />
+                <MetricCard label="Bulletin Review" value={d.bulletinCount}        sub="public safety"       color={C.coral} icon={<FileText size={11} />}         onClick={() => navigate('/bulletin')} />
               </div>
             </div>
           </div>
         </div>
 
-        <div style={{ textAlign: 'center', fontSize: 11.5, color: 'var(--border-mid)', padding: '24px 0 0', letterSpacing: '0.05em' }}>
-          Human-led · Auditable · Privacy-conscious analysis of community-generated harm reports
+        {/* ═══ RESEARCH OUTPUTS ═════════════════════════════════════════════════ */}
+        <div style={{ marginBottom: 22 }}>
+          <SectionLabel text="Research Outputs" icon={<FileOutput size={11} />} />
+          <p style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 10, marginTop: -4 }}>
+            Exportable tables and summaries for dissertation analysis, sequence mapping, spatial analysis, and methodology documentation.
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10 }}>
+            <OutputTile label="Stage Sequence Analysis"  desc="Encounter pathways and transitions"  icon={<GitBranch size={14} />}   color={C.purple} onClick={() => navigate('/research')} />
+            <OutputTile label="Mobility Pathways"        desc="Movement types and control"          icon={<Navigation size={14} />}  color={C.amber}  onClick={() => navigate('/research')} />
+            <OutputTile label="Environmental Context"    desc="Location types and harm context"     icon={<Globe size={14} />}       color={C.blue}   onClick={() => navigate('/research')} />
+            <OutputTile label="Case Linkage"             desc="Repeat suspect / vehicle analysis"   icon={<Link2 size={14} />}       color={C.red}    onClick={() => navigate('/research')} />
+            <OutputTile label="Open GIS Workspace"       desc="Spatial intelligence and mapping"    icon={<MapPin size={14} />}      color={C.amber}  onClick={() => navigate('/map')} />
+            <OutputTile label="Encounter Overview"       desc="Harm and indicator cross-tabs"       icon={<Layers size={14} />}      color={C.coral}  onClick={() => navigate('/research')} />
+            <OutputTile label="Export Coded Dataset"     desc="All coded cases as CSV"              icon={<FileOutput size={14} />}  color={C.green}  onClick={() => api.exportCsv()} />
+            <OutputTile label="Export Research Tables"   desc="Stage, mobility, environment ZIPs"   icon={<FileOutput size={14} />}  color={C.teal}   onClick={() => api.exportResearchTables()} />
+            <OutputTile label="Export Case Summaries"    desc="Per-case analytic summaries"         icon={<TrendingUp size={14} />}  color={C.blue}   onClick={() => api.exportCaseSummaries()} />
+            <OutputTile label="Generate Bulletin"        desc="Public safety bulletin review"       icon={<FileText size={14} />}    color={C.coral}  onClick={() => navigate('/bulletin')} />
+          </div>
         </div>
+
+        {/* ═══ INTERPRETATION NOTE ══════════════════════════════════════════════ */}
+        <div style={{ padding: '13px 16px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface-2)', borderLeft: `3px solid ${C.slate}` }}>
+          <div style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.07em', marginBottom: 6 }}>INTERPRETATION NOTE</div>
+          <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: 0, lineHeight: 1.75 }}>
+            Visualizations reflect analyst-coded and geocoded fields only. Sparse coding should be treated as preliminary.
+            NLP signals are provisional pending analyst confirmation — they are not treated as findings until reviewed and accepted by an analyst.
+            Absence of a coded flag does not mean absence in the original source report.
+            Analyst coding determines what is surfaced in patterns, maps, and exported outputs.
+            This system supports human-led, auditable research — all coded observations are observations only, not confirmed legal or investigative findings.
+          </p>
+        </div>
+
       </div>
     </div>
   );

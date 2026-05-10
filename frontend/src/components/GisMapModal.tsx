@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { GoogleMap, useJsApiLoader, Marker, InfoWindow, Autocomplete } from '@react-google-maps/api';
+import { GoogleMap, Marker, InfoWindow, Autocomplete } from '@react-google-maps/api';
 import type { Report } from '../types';
-import { GOOGLE_MAPS_API_KEY, LIBRARIES } from '../mapsConfig';
+import { useMaps } from '../context/MapsContext';
 
 type PlaceMode = 'initial' | 'incident' | 'destination' | null;
 
@@ -71,11 +71,7 @@ function makeCircleIcon(color: string): google.maps.Symbol {
 }
 
 export default function GisMapModal({ fields, onClose, onGeocode }: GisMapModalProps) {
-  const { isLoaded } = useJsApiLoader({
-    id: 'google-map-script',
-    googleMapsApiKey: GOOGLE_MAPS_API_KEY,
-    libraries: LIBRARIES,
-  });
+  const { isLoaded } = useMaps();
 
   const [map, setMap] = useState<google.maps.Map | null>(null);
   const [openHeading, setOpenHeading] = useState<string | null>(null);

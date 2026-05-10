@@ -95,6 +95,14 @@ export const api = {
     window.open(BASE + '/export/research-tables', '_blank');
   },
 
+  exportMethodologySummary: () => {
+    window.open(BASE + '/export/methodology-summary', '_blank');
+  },
+
+  exportCodebook: () => {
+    window.open(BASE + '/export/codebook', '_blank');
+  },
+
   visualizeParse: (text: string) =>
     req<{ dep_html: string; ent_html: string }>('/nlp/visualize', {
       method: 'POST',

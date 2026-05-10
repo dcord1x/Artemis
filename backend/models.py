@@ -73,6 +73,32 @@ class Report(Base):
     prevented_exit = Column(String, default="")
     exit_type = Column(String, default="")  # completed, escaped, abandoned, interrupted, unknown
 
+    # Incident Overview (Encounter tab)
+    primary_incident_type = Column(String, default="")
+    overall_severity = Column(String, default="")
+    overall_incident_summary = Column(Text, default="")
+    stage_coding_suitability = Column(String, default="")
+    sequence_clarity = Column(String, default="")
+    boundary_issue_present = Column(String, default="")
+    movement_relocation_present = Column(String, default="")
+    key_supporting_excerpts = Column(Text, default="")
+
+    # VAWG / Exploitation and Public Safety Flags (Encounter tab)
+    trafficking_exploitation_concern    = Column(String, default="")
+    third_party_control_indicated       = Column(String, default="")
+    worker_appears_controlled           = Column(String, default="")
+    client_connected_to_controller      = Column(String, default="")
+    movement_to_unknown_unsafe_location = Column(String, default="")
+    worker_unaware_how_arrived          = Column(String, default="")
+    grooming_recruitment_concern        = Column(String, default="")
+    repeat_targeting_concern            = Column(String, default="")
+    multiple_women_referenced           = Column(String, default="")
+    organized_group_offending_concern   = Column(String, default="")
+    public_safety_bulletin_suitability  = Column(String, default="")
+    public_safety_urgency_level         = Column(String, default="")
+    vawg_exploitation_notes             = Column(Text, default="")
+    vawg_key_excerpts                   = Column(Text, default="")
+
     # Mobility
     movement_present = Column(String, default="")
     movement_attempted = Column(String, default="")
@@ -176,6 +202,44 @@ class Report(Base):
     source_bulletin_text = Column(Text, default="")          # full pdfplumber extraction (all pages)
     source_bulletin_session_id = Column(String, default="")  # links to stored PDF file
 
+    # Mobility — new fields
+    movement_purpose = Column(String, default="")          # relocation to more private setting | movement during escape | etc.
+    basis_for_movement_coding = Column(String, default="") # explicit narrative | inferred from sequence | inferred from GIS | etc.
+
+    # Suspect — expanded
+    suspect_distinctive_features = Column(Text, default="")
+    suspect_clothing = Column(Text, default="")
+    suspect_speech_notes = Column(String, default="")
+    suspect_behavioural_descriptors = Column(Text, default="")
+    known_repeat_suspect = Column(String, default="")
+
+    # Vehicle — expanded
+    vehicle_role_in_encounter = Column(String, default="")    # transportation only | offence location | movement/control mechanism | etc.
+    vehicle_ownership_association = Column(String, default="") # suspect vehicle | victim/survivor vehicle | rideshare/taxi | etc.
+    vehicle_confidence = Column(String, default="")            # high | medium | low | unclear
+
+    # Concern flags (Suspect/Vehicle tab — replaces single human_trafficking_flag toggle)
+    concern_trafficking           = Column(String, default="")
+    concern_third_party_control   = Column(String, default="")
+    concern_grooming              = Column(String, default="")
+    concern_organized_offending   = Column(String, default="")
+    concern_repeat_suspect        = Column(String, default="")
+    concern_repeat_vehicle        = Column(String, default="")
+    concern_urgent_public_safety  = Column(String, default="")
+    concern_bulletin_suitable     = Column(String, default="")
+    concern_flag_rationale        = Column(Text, default="")
+
+    # GIS — per-block location type and geocoding status
+    initial_contact_location_type    = Column(String, default="")
+    incident_location_type           = Column(String, default="")
+    initial_contact_geocoding_status = Column(String, default="")
+    incident_geocoding_status        = Column(String, default="")
+    destination_geocoding_status     = Column(String, default="")
+
+    # Harm classification — multi-harm support
+    primary_harm  = Column(String, default="")  # most analytically significant harm
+    multi_harm_flag = Column(String, default="")  # yes / no / unclear — more than one harm category coded
+
     # Audit / meta
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -206,8 +270,24 @@ class ReportStage(Base):
 
     # Location
     location_label        = Column(String, default="")  # free text e.g. "street corner", "parked car"
-    location_type         = Column(String, default="")  # public|semi_public|private|unknown
-    movement_type_to_here = Column(String, default="")  # none|walk|vehicle|unknown
+    location_type         = Column(String, default="")  # street_outdoor|vehicle|hotel_motel|residence|...
+    movement_type_to_here = Column(String, default="")  # no_movement|worker_independent|client_picked_up|...
+
+    # Core — escalation + excerpt (UPDATE.md)
+    escalation_level   = Column(String, default="")   # no_escalation|tension_concern|coercion_control|threats|physical_violence|sexual_violence|post_incident|unknown
+    supporting_excerpt = Column(Text,   default="")   # verbatim quote from the report
+
+    # More Details — location precision
+    spatial_precision  = Column(String, default="")   # exact_address|intersection|landmark|neighbourhood|approximate|unknown
+
+    # More Details — movement impact
+    movement_impact    = Column(String, default="")   # no_change|reduced_visibility|increased_isolation|reduced_ability_leave|increased_control|changed_location|unknown|other
+    able_to_leave      = Column(String, default="")   # yes|limited_unclear|no|unknown
+
+    # More Details — coding notes
+    coder_notes_stage       = Column(String, default="")  # stage-level coder notes (distinct from report-level coder_notes)
+    coding_confidence       = Column(String, default="")  # high|moderate|low|not_enough_info
+    temporal_sequence_note  = Column(Text,   default="")  # ordering/temporal context note
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -381,11 +461,86 @@ def init_db():
         ("resolution_endpoint", "VARCHAR DEFAULT ''"),
         ("highest_stage_reached", "VARCHAR DEFAULT ''"),
         ("turning_point", "VARCHAR DEFAULT ''"),
+        # Incident Overview (Encounter tab)
+        ("primary_incident_type", "VARCHAR DEFAULT ''"),
+        ("overall_severity", "VARCHAR DEFAULT ''"),
+        ("overall_incident_summary", "TEXT DEFAULT ''"),
+        ("stage_coding_suitability", "VARCHAR DEFAULT ''"),
+        ("sequence_clarity", "VARCHAR DEFAULT ''"),
+        ("boundary_issue_present", "VARCHAR DEFAULT ''"),
+        ("movement_relocation_present", "VARCHAR DEFAULT ''"),
+        ("key_supporting_excerpts", "TEXT DEFAULT ''"),
+        # VAWG / Exploitation and Public Safety Flags
+        ("trafficking_exploitation_concern",    "VARCHAR DEFAULT ''"),
+        ("third_party_control_indicated",       "VARCHAR DEFAULT ''"),
+        ("worker_appears_controlled",           "VARCHAR DEFAULT ''"),
+        ("client_connected_to_controller",      "VARCHAR DEFAULT ''"),
+        ("movement_to_unknown_unsafe_location", "VARCHAR DEFAULT ''"),
+        ("worker_unaware_how_arrived",          "VARCHAR DEFAULT ''"),
+        ("grooming_recruitment_concern",        "VARCHAR DEFAULT ''"),
+        ("repeat_targeting_concern",            "VARCHAR DEFAULT ''"),
+        ("multiple_women_referenced",           "VARCHAR DEFAULT ''"),
+        ("organized_group_offending_concern",   "VARCHAR DEFAULT ''"),
+        ("public_safety_bulletin_suitability",  "VARCHAR DEFAULT ''"),
+        ("public_safety_urgency_level",         "VARCHAR DEFAULT ''"),
+        ("vawg_exploitation_notes",             "TEXT DEFAULT ''"),
+        ("vawg_key_excerpts",                   "TEXT DEFAULT ''"),
+        # Mobility new
+        ("movement_purpose",                    "VARCHAR DEFAULT ''"),
+        ("basis_for_movement_coding",           "VARCHAR DEFAULT ''"),
+        # Suspect expanded
+        ("suspect_distinctive_features",        "TEXT DEFAULT ''"),
+        ("suspect_clothing",                    "TEXT DEFAULT ''"),
+        ("suspect_speech_notes",                "VARCHAR DEFAULT ''"),
+        ("suspect_behavioural_descriptors",     "TEXT DEFAULT ''"),
+        ("known_repeat_suspect",                "VARCHAR DEFAULT ''"),
+        # Vehicle expanded
+        ("vehicle_role_in_encounter",           "VARCHAR DEFAULT ''"),
+        ("vehicle_ownership_association",       "VARCHAR DEFAULT ''"),
+        ("vehicle_confidence",                  "VARCHAR DEFAULT ''"),
+        # Concern flags
+        ("concern_trafficking",                 "VARCHAR DEFAULT ''"),
+        ("concern_third_party_control",         "VARCHAR DEFAULT ''"),
+        ("concern_grooming",                    "VARCHAR DEFAULT ''"),
+        ("concern_organized_offending",         "VARCHAR DEFAULT ''"),
+        ("concern_repeat_suspect",              "VARCHAR DEFAULT ''"),
+        ("concern_repeat_vehicle",              "VARCHAR DEFAULT ''"),
+        ("concern_urgent_public_safety",        "VARCHAR DEFAULT ''"),
+        ("concern_bulletin_suitable",           "VARCHAR DEFAULT ''"),
+        ("concern_flag_rationale",              "TEXT DEFAULT ''"),
+        # GIS per-block
+        ("initial_contact_location_type",       "VARCHAR DEFAULT ''"),
+        ("incident_location_type",              "VARCHAR DEFAULT ''"),
+        ("initial_contact_geocoding_status",    "VARCHAR DEFAULT ''"),
+        ("incident_geocoding_status",           "VARCHAR DEFAULT ''"),
+        ("destination_geocoding_status",        "VARCHAR DEFAULT ''"),
+        # Harm classification
+        ("primary_harm",                        "VARCHAR DEFAULT ''"),
+        ("multi_harm_flag",                     "VARCHAR DEFAULT ''"),
     ]
     with engine.connect() as conn:
         for col_name, col_def in _new_columns:
             try:
                 conn.execute(text(f"ALTER TABLE reports ADD COLUMN {col_name} {col_def}"))
+                conn.commit()
+            except Exception:
+                pass  # column already exists
+
+    # Safe migrations for report_stages
+    _stage_new_columns = [
+        ("escalation_level",       "VARCHAR DEFAULT ''"),
+        ("supporting_excerpt",     "TEXT DEFAULT ''"),
+        ("spatial_precision",      "VARCHAR DEFAULT ''"),
+        ("movement_impact",        "VARCHAR DEFAULT ''"),
+        ("able_to_leave",          "VARCHAR DEFAULT ''"),
+        ("coder_notes_stage",      "VARCHAR DEFAULT ''"),
+        ("coding_confidence",      "VARCHAR DEFAULT ''"),
+        ("temporal_sequence_note", "TEXT DEFAULT ''"),
+    ]
+    with engine.connect() as conn:
+        for col_name, col_def in _stage_new_columns:
+            try:
+                conn.execute(text(f"ALTER TABLE report_stages ADD COLUMN {col_name} {col_def}"))
                 conn.commit()
             except Exception:
                 pass  # column already exists

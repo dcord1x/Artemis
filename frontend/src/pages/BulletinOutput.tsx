@@ -19,10 +19,11 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Printer, RefreshCw, ArrowLeft } from 'lucide-react';
-import { GoogleMap, useJsApiLoader, Marker } from '@react-google-maps/api';
+import { GoogleMap, Marker } from '@react-google-maps/api';
 import { api } from '../api';
 import type { BulletinData, MapPoint } from '../types';
-import { GOOGLE_MAPS_API_KEY, LIBRARIES as MAP_LIBRARIES } from '../mapsConfig';
+import { GOOGLE_MAPS_API_KEY } from '../mapsConfig';
+import { useMaps } from '../context/MapsContext';
 
 // ── Small shared helpers ──────────────────────────────────────────────────────
 
@@ -96,11 +97,7 @@ export default function BulletinOutput() {
   const [analystNotes, setAnalystNotes] = useState('');
   const [generated, setGenerated] = useState(false);
 
-  const { isLoaded: mapsLoaded } = useJsApiLoader({
-    id: 'google-map-script',
-    googleMapsApiKey: GOOGLE_MAPS_API_KEY,
-    libraries: MAP_LIBRARIES,
-  });
+  const { isLoaded: mapsLoaded } = useMaps();
 
   const generate = async () => {
     setLoading(true);
@@ -171,10 +168,29 @@ export default function BulletinOutput() {
         @media print {
           .no-print { display: none !important; }
           .print-only { display: block !important; }
-          html, body { height: auto !important; overflow: visible !important; background: white !important; }
-          main { height: auto !important; overflow: visible !important; }
-          #bulletin-scroll-root { height: auto !important; overflow: visible !important; padding: 12px !important; }
-          .bulletin-section { break-inside: avoid; page-break-inside: avoid; }
+          html, body {
+            height: auto !important;
+            overflow: visible !important;
+            background: white !important;
+            font-size: 11pt;
+          }
+          nav, aside, header[role="banner"], .app-sidebar { display: none !important; }
+          main, #root > div, #root { height: auto !important; overflow: visible !important; }
+          #bulletin-scroll-root {
+            height: auto !important;
+            overflow: visible !important;
+            padding: 0 !important;
+            background: white !important;
+          }
+          .bulletin-section {
+            break-inside: avoid;
+            page-break-inside: avoid;
+            border: 1px solid #ccc !important;
+            background: white !important;
+          }
+          @page {
+            margin: 18mm 16mm;
+          }
         }
         .print-only { display: none; }
       `}</style>
@@ -192,10 +208,10 @@ export default function BulletinOutput() {
             </button>
           </div>
           <h2 style={{ fontFamily: 'Lora, serif', fontSize: 22, fontWeight: 500, margin: '0 0 4px', color: 'var(--text-1)' }}>
-            Analytic Summary Report
+            Analytic Case Pattern Report
           </h2>
           <p style={{ fontSize: 13, color: 'var(--text-3)', margin: 0 }}>
-            Generate a structured analytic bulletin from coded case data. Filter by date, status, or city. Print or save as PDF.
+            Research-use summary generated from coded harm report data. Filter by date, status, or city, then click Generate Report to build the structured output.
           </p>
         </div>
 
@@ -283,26 +299,68 @@ export default function BulletinOutput() {
         {/* ── Bulletin content ── */}
         {!loading && generated && bulletinData && bulletinData.meta.case_count > 0 && (() => {
           const { overview, behavioral, conditions, movement, linkage } = bulletinData;
+          const geocodedCount = overview.geocoded_count ?? geoPoints.length;
+          const harmCounts = overview.harm_counts ?? {};
 
           return (
             <div>
               {/* Print header */}
-              <div style={{ marginBottom: 24 }}>
+              <div style={{ marginBottom: 16 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', borderBottom: '2px solid var(--text-1)', paddingBottom: 8, marginBottom: 4 }}>
-                  <h1 style={{ fontFamily: 'Lora, serif', fontSize: 20, fontWeight: 600, margin: 0, color: 'var(--text-1)' }}>
-                    Analytic Case Pattern Report
-                  </h1>
-                  <span style={{ fontSize: 11, color: 'var(--text-3)' }}>
+                  <div>
+                    <h1 style={{ fontFamily: 'Lora, serif', fontSize: 20, fontWeight: 600, margin: '0 0 2px', color: 'var(--text-1)' }}>
+                      Analytic Case Pattern Report
+                    </h1>
+                    <div style={{ fontSize: 12, color: 'var(--text-3)', fontStyle: 'italic' }}>
+                      Research-use summary generated from coded harm report data.
+                    </div>
+                  </div>
+                  <span style={{ fontSize: 11, color: 'var(--text-3)', flexShrink: 0, marginLeft: 12 }}>
                     Generated {new Date().toLocaleDateString()}
                   </span>
                 </div>
-                <div style={{ fontSize: 11.5, color: 'var(--text-3)' }}>
-                  VIRGO Harm Report Coding System · Confidential · Research Use Only
+                <div style={{ fontSize: 11, color: 'var(--text-3)' }}>
+                  Harm Report Coding System · Confidential · Research Use Only
                 </div>
               </div>
 
-              {/* A. Overview Summary */}
-              <BulletinSection letter="A" title="Overview Summary">
+              {/* Metadata strip */}
+              <div style={{
+                display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+                gap: 10, marginBottom: 16,
+                padding: '12px 14px', border: '1px solid var(--border)', borderRadius: 7,
+                background: 'var(--surface)',
+              }}>
+                {[
+                  { label: 'Cases included',       value: overview.case_count },
+                  { label: 'Analyst-coded',         value: overview.coded_count ?? '—' },
+                  { label: 'Geocoded',              value: geocodedCount },
+                  { label: 'Date range',            value: (overview.date_earliest || overview.date_latest) ? `${fmt(overview.date_earliest)} – ${fmt(overview.date_latest)}` : 'All dates' },
+                  { label: 'Filters applied',       value: [bulletinData.meta.status && `Status: ${bulletinData.meta.status}`, bulletinData.meta.city && `City: ${bulletinData.meta.city}`].filter(Boolean).join(', ') || 'None' },
+                  { label: 'Analyst review',        value: 'Required for NLP signals' },
+                ].map(({ label, value }) => (
+                  <div key={label} style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 3 }}>{label}</div>
+                    <div style={{ fontSize: 13, color: 'var(--text-1)', fontWeight: 600 }}>{value}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Caution banner */}
+              <div style={{
+                padding: '10px 14px', marginBottom: 20,
+                border: '1px solid #b45309', borderRadius: 6,
+                background: '#fffbeb', color: '#92400e',
+                fontSize: 11.5, lineHeight: 1.6,
+              }}>
+                <strong>Research use only.</strong> This report summarizes coded observations only.
+                Provisional NLP signals are not findings until confirmed by an analyst.
+                Absence of a coded flag does not mean absence in the original source report.
+                Coded fields reflect the current analyst-coded subset — sparse coding should be treated as preliminary.
+              </div>
+
+              {/* A. Dataset Overview */}
+              <BulletinSection letter="A" title="Dataset Overview">
                 <Row label="Cases included" value={<strong>{overview.case_count}</strong>} />
                 <Row label="Coded / reviewed" value={overview.coded_count ?? 'Not available'} />
                 <Row label="Date range"
@@ -328,8 +386,8 @@ export default function BulletinOutput() {
                 )}
               </BulletinSection>
 
-              {/* B. Geospatial Output */}
-              <BulletinSection letter="B" title="Geospatial Output">
+              {/* B. Geospatial Distribution */}
+              <BulletinSection letter="B" title="Geospatial Distribution">
                 {geoPoints.length === 0 ? (
                   <div style={{ fontSize: 12.5, color: 'var(--text-3)', fontStyle: 'italic' }}>
                     No geocoded cases in this selection. Add GIS coordinates to cases to include a map.
@@ -345,8 +403,9 @@ export default function BulletinOutput() {
                 ) : (
                   <>
                     <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: '0 0 10px' }}>
-                      {geoPoints.length} geocoded location{geoPoints.length !== 1 ? 's' : ''}.
-                      Blue = initial contact · Red = incident · Green = destination.
+                      {geoPoints.length} geocoded location{geoPoints.length !== 1 ? 's' : ''} of {overview.case_count} total cases.
+                      Map reflects geocoded reports only.
+                      <span style={{ marginLeft: 10 }}>Blue = initial contact · Red = incident · Green = destination</span>
                     </p>
                     <GoogleMap
                       mapContainerStyle={{ width: '100%', height: 320, borderRadius: 6, border: '1px solid var(--border)' }}
@@ -384,30 +443,41 @@ export default function BulletinOutput() {
                 )}
               </BulletinSection>
 
-              {/* C. Behavioural Patterns */}
-              <BulletinSection letter="C" title="Behavioural Patterns">
+              {/* C. Encounter Sequence Patterns */}
+              <BulletinSection letter="C" title="Encounter Sequence Patterns">
+                <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: '0 0 12px', fontStyle: 'italic' }}>
+                  Observed coded pathways reconstructed from analyst-coded stage records. Not causal inference — analyst-coded cases only.
+                  Sequences from a single coded case are labelled as sparse.
+                </p>
+
                 {behavioral.top_sequences?.length > 0 ? (
                   <>
                     <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>
                       Most common stage sequences
                     </div>
-                    <BulletList items={behavioral.top_sequences.map(s => `${s.sequence} (${s.count} cases)`)} />
+                    <BulletList items={behavioral.top_sequences.map(s =>
+                      `${s.sequence}${s.count === 1 ? ' — single coded sequence (sparse)' : ` (${s.count} cases)`}`
+                    )} />
                   </>
-                ) : <NotAvailable />}
+                ) : (
+                  <div style={{ fontSize: 12, color: 'var(--text-3)', fontStyle: 'italic', padding: '10px 0' }}>
+                    No stage sequences coded yet. Complete the Stages tab on coded reports to generate sequence patterns.
+                  </div>
+                )}
 
                 {behavioral.escalation_points?.length > 0 && (
                   <div style={{ marginTop: 14 }}>
                     <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>
-                      Escalation points
+                      Escalation points observed
                     </div>
-                    <BulletList items={behavioral.escalation_points.map(([ep, count]) => `${ep}: ${count} cases`)} />
+                    <BulletList items={behavioral.escalation_points.map(([ep, count]) => `${ep}: ${count} case${count !== 1 ? 's' : ''}`)} />
                   </div>
                 )}
 
                 {behavioral.top_transitions?.length > 0 && (
                   <div style={{ marginTop: 14 }}>
                     <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>
-                      Most common stage transitions
+                      Stage-to-stage transitions
                     </div>
                     <BulletList items={behavioral.top_transitions.map(t => `${t.pattern} (${t.count})`)} />
                   </div>
@@ -473,8 +543,8 @@ export default function BulletinOutput() {
                 )}
               </BulletinSection>
 
-              {/* E. Movement / Spatial Dynamics */}
-              <BulletinSection letter="E" title="Movement / Spatial Dynamics">
+              {/* E. Movement and Spatial Dynamics */}
+              <BulletinSection letter="E" title="Movement and Spatial Dynamics">
                 <Row label="Cases with movement" value={`${pct(movement.pct_movement)} of cases`} />
                 <Row label="Entered vehicle" value={`${pct(movement.pct_entered_vehicle)} of cases`} />
                 <Row label="Public → private shift" value={`${pct(movement.pct_public_to_private)} of cases`} />
@@ -498,20 +568,63 @@ export default function BulletinOutput() {
                 )}
               </BulletinSection>
 
-              {/* F. Case Linkage Indicators */}
-              <BulletinSection letter="F" title="Case Linkage Indicators">
+              {/* F. Harm and Coercion Indicators */}
+              <BulletinSection letter="F" title="Harm and Coercion Indicators">
+                <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: '0 0 12px', fontStyle: 'italic' }}>
+                  Analyst-coded harm indicators across cases in this selection.
+                  Counts reflect cases where the field was coded as yes, probable, or inferred.
+                  Absence of a coded flag does not mean absence in the source report.
+                </p>
+                {Object.values(harmCounts).every(v => v === 0) ? (
+                  <NotAvailable />
+                ) : (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+                    {([
+                      { key: 'coercion',       label: 'Coercion' },
+                      { key: 'physical_force', label: 'Physical force' },
+                      { key: 'sexual_assault', label: 'Sexual assault' },
+                      { key: 'robbery_theft',  label: 'Robbery / theft' },
+                      { key: 'threats',        label: 'Threats / verbal abuse' },
+                      { key: 'weapon',         label: 'Weapon present / used' },
+                      { key: 'restraint',      label: 'Restraint / confinement' },
+                      { key: 'choking',        label: 'Choking / strangulation' },
+                    ] as { key: keyof typeof harmCounts; label: string }[])
+                      .filter(({ key }) => (harmCounts[key] ?? 0) > 0)
+                      .map(({ key, label }) => {
+                        const count = harmCounts[key] ?? 0;
+                        const pctVal = overview.case_count > 0 ? Math.round(count / overview.case_count * 100) : 0;
+                        return (
+                          <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', maxWidth: 340 }}>
+                            <span style={{ fontSize: 12.5, color: 'var(--text-2)', minWidth: 160 }}>{label}</span>
+                            <div style={{ flex: 1, height: 5, borderRadius: 3, background: 'var(--surface-3)', overflow: 'hidden' }}>
+                              <div style={{ height: '100%', borderRadius: 3, background: '#ef4444', width: `${pctVal}%` }} />
+                            </div>
+                            <span style={{ fontSize: 11.5, color: 'var(--text-1)', fontWeight: 600, minWidth: 28, textAlign: 'right' }}>{count}</span>
+                            <span style={{ fontSize: 11, color: 'var(--text-3)', minWidth: 30 }}>({pctVal}%)</span>
+                          </div>
+                        );
+                      })
+                    }
+                  </div>
+                )}
+              </BulletinSection>
+
+              {/* G. Case Linkage Indicators */}
+              <BulletinSection letter="G" title="Case Linkage Indicators">
                 <div style={{
-                  fontSize: 11.5, color: 'var(--amber)', padding: '6px 10px',
-                  background: 'var(--surface-2)', borderRadius: 5, border: '1px solid var(--border)',
-                  marginBottom: 14,
+                  fontSize: 11.5, color: '#92400e', padding: '8px 12px',
+                  background: '#fffbeb', borderRadius: 5, border: '1px solid #b45309',
+                  marginBottom: 14, lineHeight: 1.55,
                 }}>
-                  {linkage.note}
+                  These are candidate linkage indicators only and require analyst review.
+                  Repeated descriptors do not confirm the same offender or vehicle across cases.
+                  Treat as an investigative lead, not a confirmed finding.
                 </div>
 
                 {linkage.repeated_plates?.length > 0 && (
                   <div style={{ marginBottom: 12 }}>
                     <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 5 }}>
-                      Repeated plate descriptors
+                      Potential repeated plate descriptors
                     </div>
                     <BulletList items={linkage.repeated_plates.map(v => `${v.descriptor} — ${v.count} cases`)} />
                   </div>
@@ -520,7 +633,7 @@ export default function BulletinOutput() {
                 {linkage.repeated_vehicles?.length > 0 && (
                   <div style={{ marginBottom: 12 }}>
                     <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 5 }}>
-                      Repeated vehicle descriptions (make/colour)
+                      Potential repeated vehicle descriptions (make/colour)
                     </div>
                     <BulletList items={linkage.repeated_vehicles.map(v => `${v.descriptor} — ${v.count} cases`)} />
                   </div>
@@ -529,7 +642,7 @@ export default function BulletinOutput() {
                 {linkage.repeated_locations?.length > 0 && (
                   <div>
                     <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 5 }}>
-                      Repeated locations
+                      Repeated location phrases
                     </div>
                     <BulletList items={linkage.repeated_locations.map(l => `${l.descriptor} — ${l.count} cases`)} />
                   </div>
@@ -540,17 +653,18 @@ export default function BulletinOutput() {
                 )}
               </BulletinSection>
 
-              {/* G. Analyst Notes */}
-              <BulletinSection letter="G" title="Analyst Notes">
+              {/* H. Analyst Interpretation Notes */}
+              <BulletinSection letter="H" title="Analyst Interpretation Notes">
                 <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '0 0 8px', fontStyle: 'italic' }} className="no-print">
-                  Add interpretation, caveats, or context before printing.
+                  Add interpretation, caveats, or context before printing. This section is for analyst commentary only —
+                  it does not generate automatically from coded fields.
                 </p>
                 <textarea
                   className="no-print"
                   value={analystNotes}
                   onChange={e => setAnalystNotes(e.target.value)}
-                  placeholder="Enter analyst interpretation here…"
-                  rows={5}
+                  placeholder="Enter analyst interpretation here — e.g. patterns observed, limitations of the dataset, recommended next steps, caveats about coding coverage…"
+                  rows={7}
                   style={{
                     width: '100%', fontSize: 13, padding: '10px 12px',
                     border: '1px solid var(--border)', borderRadius: 5,

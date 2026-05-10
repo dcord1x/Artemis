@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route, Outlet } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { MapsProvider } from './context/MapsContext';
 import Layout from './components/Layout';
 import { ToastProvider } from './components/Toast';
 import LandingPage from './pages/LandingPage';
@@ -22,27 +23,32 @@ function AppLayout() {
 
 export default function App() {
   return (
+    <MapsProvider>
     <BrowserRouter>
       <ToastProvider>
         <Routes>
-          {/* Landing page — full screen, no nav */}
-          <Route path="/" element={<LandingPage />} />
+          {/* Splash — full screen, no nav */}
+          <Route path="/welcome" element={<LandingPage />} />
+
+          {/* Default: redirect / to analytic overview */}
+          <Route path="/" element={<Navigate to="/analysis" replace />} />
 
           {/* App pages — wrapped in nav Layout */}
           <Route element={<AppLayout />}>
+            <Route path="/analysis" element={<Analysis />} />
+            <Route path="/cases" element={<CaseList />} />
             <Route path="/code" element={<CodingScreen />} />
             <Route path="/code/:reportId" element={<CodingScreen />} />
-            <Route path="/cases" element={<CaseList />} />
-            <Route path="/import" element={<ImportBulletin />} />
-            <Route path="/analysis" element={<Analysis />} />
             <Route path="/map" element={<MapView />} />
-            <Route path="/similar/:reportId" element={<SimilarCasesPage />} />
-            <Route path="/linkage/:reportIdA/:reportIdB" element={<LinkageScreen />} />
             <Route path="/research" element={<ResearchOutputs />} />
             <Route path="/bulletin" element={<BulletinOutput />} />
+            <Route path="/import" element={<ImportBulletin />} />
+            <Route path="/similar/:reportId" element={<SimilarCasesPage />} />
+            <Route path="/linkage/:reportIdA/:reportIdB" element={<LinkageScreen />} />
           </Route>
         </Routes>
       </ToastProvider>
     </BrowserRouter>
+    </MapsProvider>
   );
 }

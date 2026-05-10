@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 from typing import Optional, Any
 from datetime import datetime
 
@@ -139,6 +139,32 @@ class ReportUpdate(BaseModel):
     escalation_trigger: Optional[str] = None
     verbal_abuse_before_violence: Optional[str] = None
 
+    # Incident Overview (Encounter tab)
+    primary_incident_type: Optional[str] = None
+    overall_severity: Optional[str] = None
+    overall_incident_summary: Optional[str] = None
+    stage_coding_suitability: Optional[str] = None
+    sequence_clarity: Optional[str] = None
+    boundary_issue_present: Optional[str] = None
+    movement_relocation_present: Optional[str] = None
+    key_supporting_excerpts: Optional[str] = None
+
+    # VAWG / Exploitation and Public Safety Flags
+    trafficking_exploitation_concern:    Optional[str] = None
+    third_party_control_indicated:       Optional[str] = None
+    worker_appears_controlled:           Optional[str] = None
+    client_connected_to_controller:      Optional[str] = None
+    movement_to_unknown_unsafe_location: Optional[str] = None
+    worker_unaware_how_arrived:          Optional[str] = None
+    grooming_recruitment_concern:        Optional[str] = None
+    repeat_targeting_concern:            Optional[str] = None
+    multiple_women_referenced:           Optional[str] = None
+    organized_group_offending_concern:   Optional[str] = None
+    public_safety_bulletin_suitability:  Optional[str] = None
+    public_safety_urgency_level:         Optional[str] = None
+    vawg_exploitation_notes:             Optional[str] = None
+    vawg_key_excerpts:                   Optional[str] = None
+
     # GIS confidence — initial contact
     initial_contact_address_normalized: Optional[str] = None
     initial_contact_precision: Optional[str] = None
@@ -168,6 +194,44 @@ class ReportUpdate(BaseModel):
     destination_city: Optional[str] = None
     destination_city_confidence: Optional[str] = None
     cross_city_movement: Optional[str] = None
+
+    # Mobility new
+    movement_purpose: Optional[str] = None
+    basis_for_movement_coding: Optional[str] = None
+
+    # Suspect expanded
+    suspect_distinctive_features: Optional[str] = None
+    suspect_clothing: Optional[str] = None
+    suspect_speech_notes: Optional[str] = None
+    suspect_behavioural_descriptors: Optional[str] = None
+    known_repeat_suspect: Optional[str] = None
+
+    # Vehicle expanded
+    vehicle_role_in_encounter: Optional[str] = None
+    vehicle_ownership_association: Optional[str] = None
+    vehicle_confidence: Optional[str] = None
+
+    # Concern flags
+    concern_trafficking: Optional[str] = None
+    concern_third_party_control: Optional[str] = None
+    concern_grooming: Optional[str] = None
+    concern_organized_offending: Optional[str] = None
+    concern_repeat_suspect: Optional[str] = None
+    concern_repeat_vehicle: Optional[str] = None
+    concern_urgent_public_safety: Optional[str] = None
+    concern_bulletin_suitable: Optional[str] = None
+    concern_flag_rationale: Optional[str] = None
+
+    # GIS per-block
+    initial_contact_location_type: Optional[str] = None
+    incident_location_type: Optional[str] = None
+    initial_contact_geocoding_status: Optional[str] = None
+    incident_geocoding_status: Optional[str] = None
+    destination_geocoding_status: Optional[str] = None
+
+    # Harm classification
+    primary_harm: Optional[str] = None
+    multi_harm_flag: Optional[str] = None
 
 
 class ReportOut(BaseModel):
@@ -298,6 +362,16 @@ class ReportOut(BaseModel):
     escalation_trigger: str
     verbal_abuse_before_violence: str
 
+    # Incident Overview (Encounter tab)
+    primary_incident_type: str
+    overall_severity: str
+    overall_incident_summary: str
+    stage_coding_suitability: str
+    sequence_clarity: str
+    boundary_issue_present: str
+    movement_relocation_present: str
+    key_supporting_excerpts: str
+
     # GIS confidence — initial contact
     initial_contact_address_normalized: str
     initial_contact_precision: str
@@ -332,6 +406,60 @@ class ReportOut(BaseModel):
     source_bulletin_text: str
     source_bulletin_session_id: str
 
+    # VAWG / Exploitation and Public Safety Flags
+    trafficking_exploitation_concern: str
+    third_party_control_indicated: str
+    worker_appears_controlled: str
+    client_connected_to_controller: str
+    movement_to_unknown_unsafe_location: str
+    worker_unaware_how_arrived: str
+    grooming_recruitment_concern: str
+    repeat_targeting_concern: str
+    multiple_women_referenced: str
+    organized_group_offending_concern: str
+    public_safety_bulletin_suitability: str
+    public_safety_urgency_level: str
+    vawg_exploitation_notes: str
+    vawg_key_excerpts: str
+
+    # Mobility new
+    movement_purpose: str
+    basis_for_movement_coding: str
+
+    # Suspect expanded
+    suspect_distinctive_features: str
+    suspect_clothing: str
+    suspect_speech_notes: str
+    suspect_behavioural_descriptors: str
+    known_repeat_suspect: str
+
+    # Vehicle expanded
+    vehicle_role_in_encounter: str
+    vehicle_ownership_association: str
+    vehicle_confidence: str
+
+    # Concern flags
+    concern_trafficking: str
+    concern_third_party_control: str
+    concern_grooming: str
+    concern_organized_offending: str
+    concern_repeat_suspect: str
+    concern_repeat_vehicle: str
+    concern_urgent_public_safety: str
+    concern_bulletin_suitable: str
+    concern_flag_rationale: str
+
+    # GIS per-block
+    initial_contact_location_type: str
+    incident_location_type: str
+    initial_contact_geocoding_status: str
+    incident_geocoding_status: str
+    destination_geocoding_status: str
+
+    # Harm classification
+    primary_harm: str
+    multi_harm_flag: str
+
     class Config:
         from_attributes = True
 
@@ -355,6 +483,14 @@ class StageCreate(BaseModel):
     location_label: Optional[str] = ""
     location_type: Optional[str] = ""
     movement_type_to_here: Optional[str] = ""
+    escalation_level: Optional[str] = ""
+    supporting_excerpt: Optional[str] = ""
+    spatial_precision: Optional[str] = ""
+    movement_impact: Optional[str] = ""
+    able_to_leave: Optional[str] = ""
+    coder_notes_stage: Optional[str] = ""
+    coding_confidence: Optional[str] = ""
+    temporal_sequence_note: Optional[str] = ""
 
 
 class StageUpdate(BaseModel):
@@ -370,6 +506,14 @@ class StageUpdate(BaseModel):
     location_label: Optional[str] = None
     location_type: Optional[str] = None
     movement_type_to_here: Optional[str] = None
+    escalation_level: Optional[str] = None
+    supporting_excerpt: Optional[str] = None
+    spatial_precision: Optional[str] = None
+    movement_impact: Optional[str] = None
+    able_to_leave: Optional[str] = None
+    coder_notes_stage: Optional[str] = None
+    coding_confidence: Optional[str] = None
+    temporal_sequence_note: Optional[str] = None
 
 
 class StageOut(BaseModel):
@@ -387,6 +531,30 @@ class StageOut(BaseModel):
     location_label: str
     location_type: str
     movement_type_to_here: str
+    escalation_level: str = ""
+    supporting_excerpt: str = ""
+    spatial_precision: str = ""
+    movement_impact: str = ""
+    able_to_leave: str = ""
+    coder_notes_stage: str = ""
+    coding_confidence: str = ""
+    temporal_sequence_note: str = ""
+
+    @model_validator(mode='before')
+    @classmethod
+    def coerce_none_str(cls, data):
+        _new_fields = [
+            'escalation_level', 'supporting_excerpt', 'spatial_precision',
+            'movement_impact', 'able_to_leave', 'coder_notes_stage',
+            'coding_confidence', 'temporal_sequence_note',
+        ]
+        for f in _new_fields:
+            if getattr(data, f, None) is None:
+                try:
+                    setattr(data, f, "")
+                except Exception:
+                    pass
+        return data
 
     class Config:
         from_attributes = True

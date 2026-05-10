@@ -1262,7 +1262,10 @@ def get_stats(db: Session = Depends(get_db)):
                 "movement": r.movement_present,
                 "movement_completed": r.movement_completed,
                 "entered_vehicle": r.entered_vehicle,
+                "mode_of_movement": r.mode_of_movement or '',
+                "offender_control_over_movement": r.offender_control_over_movement or '',
                 "public_to_private_shift": r.public_to_private_shift,
+                "public_to_secluded_shift": r.public_to_secluded_shift or '',
                 "cross_municipality": r.cross_municipality,
                 # sequence
                 "highest_stage_reached": r.highest_stage_reached,
@@ -1275,6 +1278,22 @@ def get_stats(db: Session = Depends(get_db)):
                 "initial_contact_city_confidence": r.initial_contact_city_confidence,
                 "incident_city_confidence": r.incident_city_confidence,
                 "destination_city_confidence": r.destination_city_confidence,
+                # enriched fields
+                "neighbourhood":                    r.neighbourhood or '',
+                "repeat_suspect_flag":              r.repeat_suspect_flag or '',
+                "known_repeat_suspect":             r.known_repeat_suspect or '',
+                "repeat_vehicle_flag":              r.repeat_vehicle_flag or '',
+                "vehicle_present":                  r.vehicle_present or '',
+                "plate_partial":                    r.plate_partial or '',
+                "suspect_distinctive_features":     r.suspect_distinctive_features or '',
+                "vehicle_description":              r.vehicle_description or '',
+                "initial_contact_address_raw":      r.initial_contact_address_raw or '',
+                "initial_contact_precision":        r.initial_contact_precision or '',
+                "initial_contact_geocoding_status": r.initial_contact_geocoding_status or '',
+                "incident_address_raw":             r.incident_address_raw or '',
+                "incident_precision":               r.incident_precision or '',
+                "incident_geocoding_status":        r.incident_geocoding_status or '',
+                "primary_harm":                     r.primary_harm or '',
             }
             for r in reports
             if r.lat_initial or r.lat_incident
@@ -1362,12 +1381,13 @@ def delete_stage(report_id: str, stage_id: int, db: Session = Depends(get_db)):
 
 @app.get("/research/stage-patterns")
 def get_stage_patterns(
-    stage_type:   Optional[str] = None,
-    visibility:   Optional[str] = None,
-    guardianship: Optional[str] = None,
-    isolation:    Optional[str] = None,
-    date_from:    Optional[str] = None,
-    date_to:      Optional[str] = None,
+    stage_type:       Optional[str] = None,
+    visibility:       Optional[str] = None,
+    guardianship:     Optional[str] = None,
+    isolation:        Optional[str] = None,
+    escalation_level: Optional[str] = None,
+    date_from:        Optional[str] = None,
+    date_to:          Optional[str] = None,
     db: Session = Depends(get_db),
 ):
     """
@@ -1394,6 +1414,8 @@ def get_stage_patterns(
         query = query.filter(ReportStage.guardianship == guardianship)
     if isolation:
         query = query.filter(ReportStage.isolation_level == isolation)
+    if escalation_level:
+        query = query.filter(ReportStage.escalation_level == escalation_level)
     if date_from or date_to:
         # Join to Report to filter by incident_date
         query = query.join(Report, ReportStage.report_id == Report.report_id)
@@ -1413,6 +1435,8 @@ def get_stage_patterns(
     move_by_stage: dict = defaultdict(Counter)
     behavior_freq: Counter = Counter()
     response_freq: Counter = Counter()
+    escalation_freq: Counter = Counter()
+    movement_impact_freq: Counter = Counter()
     matching_cases: set = set()
 
     for s in stages:
@@ -1427,6 +1451,10 @@ def get_stage_patterns(
             behavior_freq[b] += 1
         for r in (s.victim_responses or []):
             response_freq[r] += 1
+        if getattr(s, 'escalation_level', None):
+            escalation_freq[s.escalation_level] += 1
+        if getattr(s, 'movement_impact', None):
+            movement_impact_freq[s.movement_impact] += 1
         matching_cases.add(s.report_id)
 
     def _counter_to_list(c: Counter):
@@ -1443,18 +1471,20 @@ def get_stage_patterns(
     seq_strings: Counter = Counter(" → ".join(v) for v in seq_map.values() if v)
 
     return {
-        "stage_type_frequency":  _counter_to_list(type_freq),
-        "visibility_by_stage":   _nested_to_dict(vis_by_stage),
-        "guardianship_by_stage": _nested_to_dict(guard_by_stage),
-        "isolation_by_stage":    _nested_to_dict(iso_by_stage),
-        "control_by_stage":      _nested_to_dict(ctrl_by_stage),
-        "movement_by_stage":     _nested_to_dict(move_by_stage),
-        "behavior_frequency":    _counter_to_list(behavior_freq),
-        "response_frequency":    _counter_to_list(response_freq),
-        "matching_cases":        sorted(matching_cases),
-        "sequence_frequency":    _counter_to_list(seq_strings),
-        "total_stages":          len(stages),
-        "total_cases_with_stages": len(seq_map),
+        "stage_type_frequency":      _counter_to_list(type_freq),
+        "visibility_by_stage":       _nested_to_dict(vis_by_stage),
+        "guardianship_by_stage":     _nested_to_dict(guard_by_stage),
+        "isolation_by_stage":        _nested_to_dict(iso_by_stage),
+        "control_by_stage":          _nested_to_dict(ctrl_by_stage),
+        "movement_by_stage":         _nested_to_dict(move_by_stage),
+        "behavior_frequency":        _counter_to_list(behavior_freq),
+        "response_frequency":        _counter_to_list(response_freq),
+        "escalation_frequency":      _counter_to_list(escalation_freq),
+        "movement_impact_frequency": _counter_to_list(movement_impact_freq),
+        "matching_cases":            sorted(matching_cases),
+        "sequence_frequency":        _counter_to_list(seq_strings),
+        "total_stages":              len(stages),
+        "total_cases_with_stages":   len(seq_map),
     }
 
 
@@ -1462,14 +1492,67 @@ def get_stage_patterns(
 
 @app.get("/research/aggregate")
 def get_research_aggregate(db: Session = Depends(get_db)):
-    """Full cross-case research analysis: sequences, mobility, environment."""
-    from research import aggregate_sequences, aggregate_mobility, aggregate_environment
+    """Full cross-case research analysis: sequences, mobility, environment, encounter overview."""
+    from research import aggregate_sequences, aggregate_mobility, aggregate_environment, aggregate_encounter, aggregate_vawg
+    from sqlalchemy import func as sqlfunc
     reports = db.query(Report).all()
+
+    def _coded(r, field: str) -> bool:
+        """True if field has a non-empty analyst-coded value."""
+        fp = (getattr(r, 'field_provenance', None) or {})
+        if isinstance(fp, dict):
+            prov = fp.get(field, 'unset')
+        else:
+            prov = 'unset'
+        val = (getattr(r, field, None) or '').strip()
+        return bool(val) and prov in ('analyst_filled', 'reviewed')
+
+    from models import ReportStage
+    stage_report_ids = {s.report_id for s in db.query(ReportStage.report_id).distinct().all()}
+
+    _POSITIVE_VALS = {'yes', 'probable', 'inferred', 'probable / inferred'}
+    _HARM_FIELDS = [
+        'coercion_present', 'threats_present', 'physical_force', 'sexual_assault',
+        'stealthing', 'robbery_theft', 'forced_movement_dragging', 'restraint_confinement',
+        'weapon_present_used', 'choking_strangulation', 'prevented_exit',
+        'non_consensual_substance', 'loss_of_consciousness',
+    ]
+    _VAWG_FIELDS = [
+        'trafficking_exploitation_concern', 'third_party_control_indicated',
+        'grooming_recruitment_concern', 'organized_group_offending_concern',
+        'worker_appears_controlled', 'client_connected_to_controller',
+        'movement_to_unknown_unsafe_location', 'worker_unaware_how_arrived',
+        'repeat_targeting_concern', 'multiple_women_referenced',
+    ]
+
+    # Data quality summary
+    dq = {
+        'total_imported':            len(reports),
+        'with_encounter_coded':      sum(1 for r in reports if _coded(r, 'primary_incident_type') or _coded(r, 'overall_severity')),
+        'with_stage_coding':         len(stage_report_ids),
+        'with_location_coded':       sum(1 for r in reports if (r.initial_contact_location or r.incident_location_primary or '').strip()),
+        'with_movement_coded':       sum(1 for r in reports if (r.movement_present or '').strip()),
+        'with_vawg_coded':           sum(1 for r in reports if any(
+            (getattr(r, f, '') or '').strip().lower() in _POSITIVE_VALS
+            for f in _VAWG_FIELDS
+        )),
+        'with_severity_coded':       sum(1 for r in reports if (r.overall_severity or '').strip()),
+        'with_suitability_coded':    sum(1 for r in reports if (r.stage_coding_suitability or '').strip()),
+        'with_clarity_coded':        sum(1 for r in reports if (r.sequence_clarity or '').strip()),
+        'with_harm_coded':           sum(1 for r in reports if any(
+            (getattr(r, f, '') or '').strip().lower() in _POSITIVE_VALS
+            for f in _HARM_FIELDS
+        )),
+    }
+
     return {
-        'sequences':   aggregate_sequences(reports),
-        'mobility':    aggregate_mobility(reports),
-        'environment': aggregate_environment(reports),
-        'total':       len(reports),
+        'sequences':    aggregate_sequences(reports),
+        'mobility':     aggregate_mobility(reports),
+        'environment':  aggregate_environment(reports),
+        'encounter':    aggregate_encounter(reports),
+        'vawg':         aggregate_vawg(reports),
+        'data_quality': dq,
+        'total':        len(reports),
     }
 
 
@@ -1513,18 +1596,60 @@ def get_linkage_patterns(db: Session = Depends(get_db)):
     repeated_vehicles.sort(key=lambda x: -x["count"])
 
     # ── Repeated locations ────────────────────────────────────────────────────
+    # Normalisation helpers
+    _NARRATIVE_STARTS = (
+        'the ', 'it ', 'she ', 'he ', 'they ', 'worker ', 'suspect ',
+        'client ', 'victim ', 'this ', 'an unknown', 'not known',
+        'communicated', 'contact was', 'foot ',
+    )
+    _NON_GEO = ('text', 'phone', 'email', 'online', 'app', 'communicated',
+                'unknown where', 'unknown pickup', 'unknown location', 'unclear',
+                'not specified', 'not known')
+
+    def _is_usable_location(raw: str) -> bool:
+        """Return True only if raw looks like a geographic descriptor."""
+        s = raw.strip()
+        if len(s) < 4 or len(s) > 80:
+            return False
+        lc = s.lower()
+        if any(lc.startswith(p) for p in _NARRATIVE_STARTS):
+            return False
+        if any(p in lc for p in _NON_GEO):
+            return False
+        if '.' in s and len(s) > 20:   # sentence with a full-stop
+            return False
+        return True
+
+    def _normalize_location(raw: str) -> str:
+        """
+        Canonical form for a location string so near-duplicates merge.
+        - title-case
+        - sort the two halves of an intersection so order doesn't matter
+          e.g. "Windsor and Kingsway" == "Kingsway and Windsor"
+        """
+        s = raw.strip().title()
+        # Normalise connector variations
+        for sep in (' And ', ' & ', '/', '\\'):
+            if sep in s:
+                parts = [p.strip() for p in s.split(sep, 1)]
+                parts.sort()
+                return f"{parts[0]} and {parts[1]}"
+        return s
+
     loc_map: dict = defaultdict(list)
     for r in reports:
         for loc_field in ["initial_contact_location", "incident_location_primary"]:
             loc = (getattr(r, loc_field, None) or "").strip()
-            if loc and len(loc) > 3:
-                loc_map[loc].append(r.report_id)
+            if not loc or not _is_usable_location(loc):
+                continue
+            key = _normalize_location(loc)
+            if r.report_id not in loc_map[key]:
+                loc_map[key].append(r.report_id)
 
     repeated_locations = []
     for loc, rids in loc_map.items():
-        unique_rids = list(dict.fromkeys(rids))  # preserve order, deduplicate
-        if len(unique_rids) >= 2:
-            repeated_locations.append({"descriptor": loc, "count": len(unique_rids), "report_ids": unique_rids})
+        if len(rids) >= 2:
+            repeated_locations.append({"descriptor": loc, "count": len(rids), "report_ids": rids})
     repeated_locations.sort(key=lambda x: -x["count"])
 
     # ── Behavior clusters ─────────────────────────────────────────────────────
@@ -1665,6 +1790,14 @@ def get_bulletin_data(
         if lt:
             location_types[lt] += 1
 
+    geocoded_count = sum(
+        1 for r in reports
+        if r.lat_initial or r.lat_incident or r.lat_destination
+    )
+
+    def _yes(val: str | None) -> bool:
+        return (val or "").strip().lower() in ("yes", "probable / inferred", "probable", "inferred")
+
     overview = {
         "case_count": total,
         "date_earliest": min(dates) if dates else None,
@@ -1672,6 +1805,17 @@ def get_bulletin_data(
         "top_cities": [{"city": c, "count": n} for c, n in cities_ctr.most_common(5)],
         "location_type_dist": [{"type": k, "count": v} for k, v in location_types.most_common()],
         "coded_count": sum(1 for r in reports if r.coding_status in ("coded", "reviewed")),
+        "geocoded_count": geocoded_count,
+        "harm_counts": {
+            "coercion":       sum(1 for r in reports if _yes(r.coercion_present)),
+            "physical_force": sum(1 for r in reports if _yes(r.physical_force)),
+            "sexual_assault": sum(1 for r in reports if _yes(r.sexual_assault)),
+            "robbery_theft":  sum(1 for r in reports if _yes(r.robbery_theft)),
+            "threats":        sum(1 for r in reports if _yes(r.threats_present)),
+            "weapon":         sum(1 for r in reports if _yes(r.weapon_present_used)),
+            "restraint":      sum(1 for r in reports if _yes(r.restraint_confinement)),
+            "choking":        sum(1 for r in reports if _yes(r.choking_strangulation)),
+        },
     }
 
     map_points = [
@@ -1955,11 +2099,200 @@ def export_research_tables(db: Session = Depends(get_db)):
         zf.writestr('aggregate_environment_patterns.csv',
             _csv_str(['pattern', 'count'], env_data['combined_patterns']))
 
+        # ── Stage-level exports ───────────────────────────────────────────────
+        all_stages = db.query(ReportStage).order_by(ReportStage.report_id, ReportStage.stage_order).all()
+        stage_rows = []
+        for s in all_stages:
+            r = next((x for x in reports if x.report_id == s.report_id), None)
+            stage_rows.append({
+                'report_id':            s.report_id,
+                'stage_order':          s.stage_order,
+                'stage_type':           s.stage_type or '',
+                'client_behaviors':     ', '.join(s.client_behaviors or []),
+                'worker_responses':     ', '.join(s.victim_responses or []),
+                'escalation_level':     getattr(s, 'escalation_level', '') or '',
+                'location_type':        s.location_type or '',
+                'location_label':       s.location_label or '',
+                'movement_type_to_here':s.movement_type_to_here or '',
+                'movement_impact':      getattr(s, 'movement_impact', '') or '',
+                'visibility':           s.visibility or '',
+                'guardianship':         s.guardianship or '',
+                'isolation_level':      s.isolation_level or '',
+                'control_type':         s.control_type or '',
+                'able_to_leave':        getattr(s, 'able_to_leave', '') or '',
+                'spatial_precision':    getattr(s, 'spatial_precision', '') or '',
+                'turning_point_notes':  s.turning_point_notes or '',
+                'supporting_excerpt':   getattr(s, 'supporting_excerpt', '') or '',
+                'coder_notes_stage':    getattr(s, 'coder_notes_stage', '') or '',
+                'coding_confidence':    getattr(s, 'coding_confidence', '') or '',
+                'analyst_name':         (r.analyst_name if r else '') or '',
+                'coding_status':        (r.coding_status if r else '') or '',
+                'incident_date':        (r.incident_date if r else '') or '',
+                'provenance':           'analyst_confirmed',
+            })
+
+        _STAGE_FIELDS = ['report_id','stage_order','stage_type','client_behaviors','worker_responses',
+            'escalation_level','location_type','location_label','movement_type_to_here','movement_impact',
+            'visibility','guardianship','isolation_level','control_type','able_to_leave','spatial_precision',
+            'turning_point_notes','supporting_excerpt','coder_notes_stage','coding_confidence',
+            'analyst_name','coding_status','incident_date','provenance']
+        zf.writestr('stage_sequences.csv', _csv_str(_STAGE_FIELDS, stage_rows))
+
+        # Stage transitions (consecutive stage pairs per report)
+        transition_rows = []
+        from itertools import groupby as _groupby
+        from operator import attrgetter as _attrgetter
+        for report_id, grp in _groupby(all_stages, key=_attrgetter('report_id')):
+            grp_list = sorted(grp, key=lambda s: s.stage_order)
+            r = next((x for x in reports if x.report_id == report_id), None)
+            for i in range(len(grp_list) - 1):
+                a, b = grp_list[i], grp_list[i + 1]
+                has_mov = (a.movement_type_to_here or b.movement_type_to_here or '') not in ('', 'no_movement', 'none')
+                transition_rows.append({
+                    'report_id':             report_id,
+                    'from_stage_order':      a.stage_order,
+                    'to_stage_order':        b.stage_order,
+                    'from_stage_type':       a.stage_type or '',
+                    'to_stage_type':         b.stage_type or '',
+                    'from_escalation_level': getattr(a, 'escalation_level', '') or '',
+                    'to_escalation_level':   getattr(b, 'escalation_level', '') or '',
+                    'movement_involved':     'yes' if has_mov else 'no',
+                    'public_to_private_shift': 'yes' if (a.visibility in ('public','semi_public') and b.visibility in ('semi_private','private')) else 'no',
+                    'isolation_increased':   'yes' if (a.isolation_level in ('not_isolated','partially_isolated') and b.isolation_level == 'isolated') else 'no',
+                    'movement_impact':       getattr(b, 'movement_impact', '') or '',
+                    'incident_date':         (r.incident_date if r else '') or '',
+                })
+        _TRANS_FIELDS = ['report_id','from_stage_order','to_stage_order','from_stage_type','to_stage_type',
+            'from_escalation_level','to_escalation_level','movement_involved','public_to_private_shift',
+            'isolation_increased','movement_impact','incident_date']
+        zf.writestr('stage_transitions.csv', _csv_str(_TRANS_FIELDS, transition_rows))
+
     zip_buf.seek(0)
     return StreamingResponse(
         iter([zip_buf.getvalue()]),
         media_type='application/zip',
         headers={'Content-Disposition': 'attachment; filename=redlight_research_tables.zip'},
+    )
+
+
+@app.get("/export/methodology-summary")
+def export_methodology_summary(db: Session = Depends(get_db)):
+    """
+    Export a coding coverage report for dissertation methodology documentation.
+    Produces a CSV suitable for pasting into a methods chapter or appendix.
+    """
+    from datetime import datetime, timezone
+    reports = db.query(Report).all()
+    total = len(reports)
+
+    _POS = {'yes', 'probable', 'inferred', 'probable / inferred'}
+
+    def _has_analyst_field(r, *fields):
+        fp = getattr(r, 'field_provenance', None) or {}
+        for f in fields:
+            val = (getattr(r, f, None) or '').strip()
+            prov = fp.get(f, 'unset') if isinstance(fp, dict) else 'unset'
+            if val and prov in ('analyst_filled', 'reviewed'):
+                return True
+        return False
+
+    _HARM_FIELDS = ['coercion_present','threats_present','physical_force','sexual_assault',
+                    'stealthing','robbery_theft','forced_movement_dragging','restraint_confinement',
+                    'weapon_present_used','choking_strangulation','prevented_exit',
+                    'non_consensual_substance','loss_of_consciousness']
+    _MOV_FIELDS  = ['movement_present','mode_of_movement','entered_vehicle',
+                    'public_to_private_shift','cross_municipality']
+    _SAF_FIELDS  = ['concern_trafficking','concern_third_party_control','concern_grooming',
+                    'concern_organized_offending','concern_urgent_public_safety']
+
+    stage_report_ids = {s.report_id for s in db.query(ReportStage.report_id).distinct().all()}
+
+    nlp_fields = ['nlp_coercion_rank','nlp_physical_rank','nlp_sexual_rank','nlp_movement_rank']
+
+    rows = [
+        ('Metric', 'Count', 'Pct of imported', 'Notes'),
+        ('Reports imported', total, '100%', 'Total source reports in database'),
+        ('Reports NLP screened', total, '100%', 'All reports pass NLP extraction on import — signals are provisional'),
+        ('Reports analyst coded', sum(1 for r in reports if r.coding_status in ('coded','reviewed')), f'{round(sum(1 for r in reports if r.coding_status in ("coded","reviewed"))/total*100,1) if total else 0}%', 'coding_status = coded or reviewed'),
+        ('Reports analyst staged', len(stage_report_ids), f'{round(len(stage_report_ids)/total*100,1) if total else 0}%', 'Reports with analyst-created stage records in stages table'),
+        ('Reports geocoded', sum(1 for r in reports if (r.lat_initial or r.lat_incident)), f'{round(sum(1 for r in reports if (r.lat_initial or r.lat_incident))/total*100,1) if total else 0}%', 'At least one geocoded point (initial or incident)'),
+        ('Reports with location field coded', sum(1 for r in reports if (r.initial_contact_location or r.incident_location_primary or '').strip()), '', 'Has text in initial_contact_location or incident_location_primary'),
+        ('Reports with harm fields coded', sum(1 for r in reports if any((getattr(r,f,'') or '') in _POS for f in _HARM_FIELDS)), '', 'At least one harm indicator in positive set'),
+        ('Reports with movement coded', sum(1 for r in reports if (r.movement_present or '').strip()), '', 'movement_present field has any value'),
+        ('Reports with public safety flags coded', sum(1 for r in reports if any((getattr(r,f,'') or '') in _POS for f in _SAF_FIELDS)), '', 'At least one concern flag in positive set'),
+        ('Reports with NLP provisional signals', sum(1 for r in reports if any(getattr(r, f, 0) or 0 for f in nlp_fields)), '', 'NLP rank score > 0 for any signal — provisional, pending analyst confirmation'),
+        ('Reports needing geocode (location phrase present, no coordinates)', sum(1 for r in reports if (r.initial_contact_location or r.incident_location_primary or '').strip() and not (r.lat_initial or r.lat_incident)), '', ''),
+        ('', '', '', ''),
+        ('Export timestamp', datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC'), '', ''),
+        ('NLP note', 'NLP signals are provisional — not treated as findings until analyst confirmed', '', ''),
+        ('Auditability note', 'All coded observations are analyst observations only, not confirmed legal or investigative findings', '', ''),
+    ]
+
+    output = io.StringIO()
+    w = csv.writer(output)
+    for row in rows:
+        w.writerow(row)
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type='text/csv',
+        headers={'Content-Disposition': 'attachment; filename=coding_coverage_report.csv'},
+    )
+
+
+@app.get("/export/codebook")
+def export_codebook(db: Session = Depends(get_db)):
+    """
+    Export a codebook listing all coding fields, allowed values, and provenance notes.
+    Useful for dissertation methodology appendix.
+    """
+    CODEBOOK: list[tuple] = [
+        # (field_name, tab/section, definition, allowed_values, source, usable_in_findings)
+        ('report_id', 'Admin', 'Unique case identifier', 'UUID string', 'system_generated', 'no'),
+        ('coding_status', 'Admin', 'Current coding stage of this report', 'uncoded | in_progress | coded | reviewed', 'analyst', 'yes'),
+        ('analyst_name', 'Admin', 'Name of analyst who coded the report', 'free text', 'analyst', 'yes'),
+        ('date_received', 'Admin', 'Date the source report was imported', 'YYYY-MM-DD', 'import', 'no'),
+        ('incident_date', 'Incident', 'Date the incident occurred', 'YYYY-MM-DD or free text', 'analyst', 'yes'),
+        ('city', 'Incident', 'Primary city associated with the incident', 'free text', 'analyst', 'yes'),
+        ('neighbourhood', 'Incident', 'Neighbourhood or area within the city', 'free text', 'analyst', 'yes'),
+        ('indoor_outdoor', 'Incident', 'Whether incident took place indoors or outdoors', 'indoor | outdoor | both | unknown', 'analyst', 'yes'),
+        ('public_private', 'Incident', 'Public or private setting', 'public | semi-public | private | mixed | unknown', 'analyst', 'yes'),
+        ('primary_incident_type', 'Encounter / Incident Overview', 'Most analytically significant harm type for the whole incident', 'suspicious / concerning behaviour | non-payment / payment dispute | coercion / intimidation | physical violence | sexual violence | robbery / theft | substance-facilitated harm | movement / relocation concern | multiple harms | other | unknown / unclear', 'analyst', 'yes'),
+        ('overall_severity', 'Encounter / Incident Overview', 'Analyst assessment of overall incident severity', 'low concern | moderate concern | high concern | severe violence / high risk | unknown / unclear', 'analyst', 'yes'),
+        ('stage_coding_suitability', 'Encounter / Incident Overview', 'Whether narrative supports full stage-by-stage coding', 'Yes, sufficient narrative detail for staged coding | Partial, some stages can be coded | No, incident-level coding only | Unknown / not reviewed', 'analyst', 'yes'),
+        ('coercion_present', 'Encounter / Harm Indicators', 'Whether coercive behaviour was present anywhere in the incident', 'yes | no | unclear / not stated | probable / inferred | not coded', 'analyst', 'yes'),
+        ('physical_force', 'Encounter / Harm Indicators', 'Whether physical force was used', 'yes | no | unclear / not stated | probable / inferred | not coded', 'analyst', 'yes'),
+        ('sexual_assault', 'Encounter / Harm Indicators', 'Whether sexual assault occurred', 'yes | no | unclear / not stated | probable / inferred | not coded', 'analyst', 'yes'),
+        ('movement_present', 'Mobility', 'Whether physical movement or relocation occurred', 'yes | no | unclear | unknown', 'analyst', 'yes'),
+        ('mode_of_movement', 'Mobility', 'Primary mode of transport if movement occurred', 'on foot | vehicle | taxi/rideshare | other | unknown', 'analyst', 'yes'),
+        ('entered_vehicle', 'Mobility', 'Whether the worker entered a vehicle', 'yes | no | unclear | unknown', 'analyst', 'yes'),
+        ('public_to_private_shift', 'Mobility', 'Whether movement involved a shift from public to private space', 'yes | no | unclear | unknown', 'analyst', 'yes'),
+        ('cross_municipality', 'Mobility', 'Whether movement crossed municipal boundaries', 'yes | no | unclear | unknown', 'analyst', 'yes'),
+        ('vehicle_present', 'Suspect/Vehicle', 'Whether a vehicle was involved', 'yes | no | unknown', 'analyst', 'yes'),
+        ('vehicle_make', 'Suspect/Vehicle', 'Make of suspect vehicle', 'free text', 'analyst', 'no — descriptor only'),
+        ('plate_partial', 'Suspect/Vehicle', 'Partial or full licence plate recorded', 'free text', 'analyst', 'no — for investigative use only'),
+        ('suspect_gender', 'Suspect/Vehicle', 'Gender of suspect as reported', 'free text', 'analyst/nlp', 'yes'),
+        ('concern_trafficking', 'Concern Flags', 'Analyst-coded concern about trafficking or exploitation indicators', 'yes | no | unclear | probable | inferred | unknown', 'analyst', 'yes — observation only, not confirmed finding'),
+        ('concern_third_party_control', 'Concern Flags', 'Analyst-coded concern about third-party control', 'yes | no | unclear | probable | inferred | unknown', 'analyst', 'yes — observation only, not confirmed finding'),
+        ('lat_initial', 'GIS', 'Latitude of initial contact point (geocoded)', 'decimal degrees', 'geocoded', 'yes'),
+        ('lon_initial', 'GIS', 'Longitude of initial contact point (geocoded)', 'decimal degrees', 'geocoded', 'yes'),
+        ('lat_incident', 'GIS', 'Latitude of primary incident point (geocoded)', 'decimal degrees', 'geocoded', 'yes'),
+        ('lon_incident', 'GIS', 'Longitude of primary incident point (geocoded)', 'decimal degrees', 'geocoded', 'yes'),
+        ('nlp_coercion_rank', 'NLP (provisional)', 'NLP signal rank for coercion (0=none, 1=high, 2=moderate)', '0–3 integer', 'nlp_provisional', 'NO — provisional, requires analyst confirmation'),
+        ('nlp_physical_rank', 'NLP (provisional)', 'NLP signal rank for physical violence', '0–3 integer', 'nlp_provisional', 'NO — provisional, requires analyst confirmation'),
+        ('nlp_sexual_rank', 'NLP (provisional)', 'NLP signal rank for sexual violence', '0–3 integer', 'nlp_provisional', 'NO — provisional, requires analyst confirmation'),
+        ('nlp_movement_rank', 'NLP (provisional)', 'NLP signal rank for movement/relocation', '0–3 integer', 'nlp_provisional', 'NO — provisional, requires analyst confirmation'),
+    ]
+
+    output = io.StringIO()
+    w = csv.writer(output)
+    w.writerow(['field_name', 'tab_section', 'definition', 'allowed_values', 'source', 'usable_in_confirmed_findings'])
+    w.writerows(CODEBOOK)
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type='text/csv',
+        headers={'Content-Disposition': 'attachment; filename=codebook.csv'},
     )
 
 
