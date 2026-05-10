@@ -1184,6 +1184,8 @@ export default function CodingScreen() {
   const [suggestions, setSuggestions] = useState<Record<string, string>>({});
   const [flags, setFlags] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [loadingAI, setLoadingAI] = useState(false);
   const [analyzingNlp, setAnalyzingNlp] = useState(false);
   const [nlpError, setNlpError] = useState<string | null>(null);
@@ -1257,8 +1259,8 @@ export default function CodingScreen() {
           'destination_location_type','public_to_private_shift','public_to_secluded_shift',
           'cross_neighbourhood','cross_municipality','offender_control_over_movement',
           'suspect_count','suspect_gender','suspect_description_text','suspect_race_ethnicity',
-          'suspect_age_estimate','vehicle_present','vehicle_make','vehicle_model','vehicle_colour',
-          'plate_partial','repeat_suspect_flag','repeat_vehicle_flag',
+          'suspect_age_estimate','vehicle_present','vehicle_make','vehicle_year','vehicle_model','vehicle_colour',
+          'vehicle_description','plate_partial','repeat_suspect_flag','repeat_vehicle_flag','human_trafficking_flag',
           'escalation_point','resolution_endpoint','highest_stage_reached','turning_point','summary_analytic','key_quotes','coder_notes','uncertainty_notes',
           'cleaned_narrative',
           'initial_contact_address_raw','incident_address_raw','destination_address_raw',
@@ -1280,6 +1282,34 @@ export default function CodingScreen() {
           'loss_of_consciousness','non_consensual_substance','substance_administration_notes',
           'forced_movement_dragging','restraint_confinement','weapon_present_used',
           'choking_strangulation','prevented_exit','unexplained_relocation','geocode_status',
+          // Incident overview (Encounter tab)
+          'primary_incident_type','overall_severity','overall_incident_summary',
+          'stage_coding_suitability','sequence_clarity',
+          'boundary_issue_present','movement_relocation_present','key_supporting_excerpts',
+          // VAWG / Exploitation flags (Encounter tab)
+          'trafficking_exploitation_concern','third_party_control_indicated',
+          'worker_appears_controlled','client_connected_to_controller',
+          'movement_to_unknown_unsafe_location','worker_unaware_how_arrived',
+          'grooming_recruitment_concern','repeat_targeting_concern',
+          'multiple_women_referenced','organized_group_offending_concern',
+          'public_safety_bulletin_suitability','public_safety_urgency_level',
+          'vawg_exploitation_notes','vawg_key_excerpts',
+          // Mobility new
+          'movement_purpose','basis_for_movement_coding',
+          // Suspect expanded
+          'suspect_distinctive_features','suspect_clothing','suspect_speech_notes',
+          'suspect_behavioural_descriptors','known_repeat_suspect',
+          // Vehicle expanded
+          'vehicle_role_in_encounter','vehicle_ownership_association','vehicle_confidence',
+          // Concern flags (Suspect tab)
+          'concern_trafficking','concern_third_party_control','concern_grooming',
+          'concern_organized_offending','concern_repeat_suspect','concern_repeat_vehicle',
+          'concern_urgent_public_safety','concern_bulletin_suitable','concern_flag_rationale',
+          // GIS per-block
+          'initial_contact_location_type','incident_location_type',
+          'initial_contact_geocoding_status','incident_geocoding_status','destination_geocoding_status',
+          // Harm classification
+          'primary_harm','multi_harm_flag',
         ];
         const f: Partial<Report> = {};
         for (const k of fieldKeys) f[k] = r[k] as any;
@@ -1322,19 +1352,26 @@ export default function CodingScreen() {
       autosaveTimerRef.current = null;
     }
     setSaving(true);
+    setSaveError(null);
     try {
       localStorage.setItem('analyst_name', analystName);
       if (isNew) {
         const created = await api.createReport({ raw_narrative: narrative, source_organization: sourceOrg, analyst_name: analystName, date_received: dateReceived });
         const updated = await api.updateReport(created.report_id, { ...fields, cleaned_narrative: cleanedNarrative, analyst_summary: analystSummary, field_provenance: provenance, tags, ai_suggestions: { ...suggestions, flags, ...(Object.keys(nlp).length ? { nlp } : {}), ...(Object.keys(weather).length ? { weather } : {}) }, analyst_name: analystName } as any);
+        setIsDirty(false);
         navigate(`/code/${updated.report_id}`);
       } else if (report) {
         await api.updateReport(report.report_id, { ...fields, cleaned_narrative: cleanedNarrative, analyst_summary: analystSummary, field_provenance: provenance, tags, ai_suggestions: { ...suggestions, flags, ...(Object.keys(nlp).length ? { nlp } : {}), ...(Object.keys(weather).length ? { weather } : {}) }, source_organization: sourceOrg, analyst_name: analystName, date_received: dateReceived } as any);
         const now = new Date();
         setLastSavedAt(now);
         setSavedAgoText('just now');
+        setIsDirty(false);
         if (!silent) toast('Case saved');
       }
+    } catch (e: any) {
+      const msg = e?.message || 'Save failed — check backend';
+      setSaveError(msg);
+      if (!silent) toast('Save failed: ' + msg);
     } finally { setSaving(false); }
   }, [narrative, isNew, analystName, sourceOrg, dateReceived, fields, cleanedNarrative, analystSummary, provenance, tags, suggestions, flags, weather, report, navigate, toast]);
 
@@ -1355,6 +1392,7 @@ export default function CodingScreen() {
   const set = useCallback((key: keyof Report, val: string | number | null) => {
     setFields((f) => ({ ...f, [key]: val }));
     setProvenance((p) => ({ ...p, [key]: 'analyst_filled' }));
+    setIsDirty(true);
     scheduleAutosave();
   }, [scheduleAutosave]);
 
@@ -1573,12 +1611,20 @@ export default function CodingScreen() {
           {statusCfg.label}
         </div>
 
-        {/* Autosave indicator */}
-        {lastSavedAt && (
+        {/* Save state indicator */}
+        {saveError ? (
+          <span style={{ fontSize: 11, color: '#DC2626', background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 4, padding: '2px 7px', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={saveError}>
+            Save failed: {saveError}
+          </span>
+        ) : saving ? (
+          <span style={{ fontSize: 11, color: 'var(--text-3)', fontStyle: 'italic' }}>Saving…</span>
+        ) : isDirty ? (
+          <span style={{ fontSize: 11, color: 'var(--amber)', fontStyle: 'italic' }}>Unsaved changes</span>
+        ) : lastSavedAt ? (
           <span style={{ fontSize: 11, color: 'var(--text-3)', fontStyle: 'italic' }}>
             Saved {savedAgoText}
           </span>
-        )}
+        ) : null}
 
 
         {(() => {
@@ -1844,6 +1890,9 @@ export default function CodingScreen() {
                 background: '#0F1020',
                 border: '1.5px solid #2D3148',
                 userSelect: 'text',
+                WebkitUserSelect: 'text',
+                MozUserSelect: 'text',
+                cursor: 'text',
                 fontFamily: 'Georgia, serif',
               }}>
                 {buildHighlightedNarrative(narrative)}
@@ -1907,6 +1956,8 @@ export default function CodingScreen() {
                     border: '1px solid #374151',
                     maxHeight: 260, overflow: 'auto',
                     fontFamily: 'monospace',
+                    userSelect: 'text',
+                    WebkitUserSelect: 'text',
                   }}>
                     {report.source_bulletin_text}
                   </div>
@@ -1953,7 +2004,7 @@ export default function CodingScreen() {
                     }}
                     placeholder="Paste or type a cleaned / transcribed version here. This is analyst-added content — it does not replace the source."
                     value={cleanedNarrative}
-                    onChange={(e) => { setCleanedNarrative(e.target.value); scheduleAutosave(); }}
+                    onChange={(e) => { setCleanedNarrative(e.target.value); setIsDirty(true); scheduleAutosave(); }}
                     onFocus={(e) => (e.target.style.borderColor = 'var(--accent)')}
                     onBlur={(e) => (e.target.style.borderColor = 'var(--accent-border)')}
                   />
@@ -2000,7 +2051,7 @@ export default function CodingScreen() {
                     }}
                     placeholder="Analyst's interpretive summary — your analytic reading of this case. Distinct from cleaned transcription. Not source material."
                     value={analystSummary}
-                    onChange={(e) => { setAnalystSummary(e.target.value); scheduleAutosave(); }}
+                    onChange={(e) => { setAnalystSummary(e.target.value); setIsDirty(true); scheduleAutosave(); }}
                     onFocus={(e) => (e.target.style.borderColor = '#0D9488')}
                     onBlur={(e) => (e.target.style.borderColor = '#99F6E4')}
                   />

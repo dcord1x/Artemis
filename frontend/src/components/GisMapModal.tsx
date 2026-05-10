@@ -23,7 +23,8 @@ const POINT_CONFIG = [
     srcKey: 'initial_contact_source' as keyof Report,
     confKey: 'initial_contact_confidence' as keyof Report,
     notesKey: 'initial_contact_analyst_notes' as keyof Report,
-    color: '#9B1D1D',
+    color: '#1D4ED8',   // Filled blue
+    label: 'Initial Contact',
   },
   {
     heading: 'INCIDENT POINT',
@@ -36,7 +37,8 @@ const POINT_CONFIG = [
     srcKey: 'incident_source' as keyof Report,
     confKey: 'incident_confidence' as keyof Report,
     notesKey: 'incident_analyst_notes' as keyof Report,
-    color: '#B45309',
+    color: '#DC2626',   // Filled red
+    label: 'Incident',
   },
   {
     heading: 'DESTINATION POINT',
@@ -49,7 +51,8 @@ const POINT_CONFIG = [
     srcKey: 'destination_source' as keyof Report,
     confKey: 'destination_confidence' as keyof Report,
     notesKey: 'destination_analyst_notes' as keyof Report,
-    color: '#3730A3',
+    color: '#7C3AED',   // Filled purple
+    label: 'Destination',
   },
 ];
 
@@ -59,14 +62,16 @@ const PLACE_LABEL: Record<NonNullable<PlaceMode>, string> = {
   destination: 'Destination',
 };
 
-function makeCircleIcon(color: string): google.maps.Symbol {
+function makePinIcon(color: string): google.maps.Icon {
+  // Teardrop pin SVG with white inner circle for readability
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="40" viewBox="0 0 28 40">
+    <path d="M14 0C6.27 0 0 6.27 0 14c0 10.5 14 26 14 26S28 24.5 28 14C28 6.27 21.73 0 14 0z" fill="${color}" stroke="white" stroke-width="1.5"/>
+    <circle cx="14" cy="14" r="6" fill="white" opacity="0.92"/>
+  </svg>`;
   return {
-    path: google.maps.SymbolPath.CIRCLE,
-    fillColor: color,
-    fillOpacity: 0.85,
-    strokeColor: color,
-    strokeWeight: 2,
-    scale: 9,
+    url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg),
+    scaledSize: new google.maps.Size(28, 40),
+    anchor: new google.maps.Point(14, 40),
   };
 }
 
@@ -126,11 +131,25 @@ export default function GisMapModal({ fields, onClose, onGeocode }: GisMapModalP
   const onPlaceChanged = () => {
     if (!autocompleteRef.current || !map) return;
     const place = autocompleteRef.current.getPlace();
+    const loc = place.geometry?.location;
+
+    // Always pan/zoom the map to the result
     if (place.geometry?.viewport) {
       map.fitBounds(place.geometry.viewport);
-    } else if (place.geometry?.location) {
-      map.setCenter(place.geometry.location);
+    } else if (loc) {
+      map.setCenter(loc);
       map.setZoom(15);
+    }
+
+    // If a point type is selected, assign coordinates to that point
+    if (placeMode && onGeocode && loc) {
+      const cfg = POINT_CONFIG.find((p) => p.mode === placeMode)!;
+      onGeocode({
+        [cfg.latKey]: loc.lat(),
+        [cfg.lonKey]: loc.lng(),
+        ...(place.formatted_address ? { [cfg.normKey]: place.formatted_address } : {}),
+      } as Partial<Report>);
+      setPlaceMode(null);
     }
   };
 
@@ -218,10 +237,12 @@ export default function GisMapModal({ fields, onClose, onGeocode }: GisMapModalP
             <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
               {POINT_CONFIG.map((p) => (
                 <div key={p.heading} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                  <div style={{ width: 10, height: 10, borderRadius: '50%', background: p.color, flexShrink: 0 }} />
-                  <span style={{ fontSize: 11, color: 'var(--text-2)' }}>
-                    {p.heading.split(' ').slice(0, 2).join(' ')}
-                  </span>
+                  {/* Mini pin shape in legend */}
+                  <svg width="10" height="14" viewBox="0 0 28 40" style={{ flexShrink: 0 }}>
+                    <path d="M14 0C6.27 0 0 6.27 0 14c0 10.5 14 26 14 26S28 24.5 28 14C28 6.27 21.73 0 14 0z" fill={p.color} />
+                    <circle cx="14" cy="14" r="6" fill="white" opacity="0.9" />
+                  </svg>
+                  <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{p.label}</span>
                 </div>
               ))}
             </div>
@@ -250,7 +271,7 @@ export default function GisMapModal({ fields, onClose, onGeocode }: GisMapModalP
             flexWrap: 'wrap',
           }}>
             <span style={{ fontSize: 11, color: 'var(--text-3)', marginRight: 4 }}>
-              Click map to set:
+              Set point:
             </span>
             {POINT_CONFIG.map((cfg) => (
               <button
@@ -271,9 +292,13 @@ export default function GisMapModal({ fields, onClose, onGeocode }: GisMapModalP
             {geocoding && (
               <span style={{ fontSize: 11, color: 'var(--text-3)', marginLeft: 4 }}>Geocoding…</span>
             )}
-            {placeMode && (
-              <span style={{ fontSize: 11, color: 'var(--text-3)', marginLeft: 4 }}>
-                Click anywhere on the map to place the <b>{PLACE_LABEL[placeMode]}</b> point
+            {placeMode ? (
+              <span style={{ fontSize: 11, color: placeMode ? '#1D4ED8' : 'var(--text-3)', marginLeft: 4, fontWeight: 500 }}>
+                → Search an address above <em>or</em> click the map to place the <b>{PLACE_LABEL[placeMode]}</b> point
+              </span>
+            ) : (
+              <span style={{ fontSize: 11, color: 'var(--text-3)', marginLeft: 4, fontStyle: 'italic' }}>
+                Select a point type, then search an address or click the map
               </span>
             )}
           </div>
@@ -292,10 +317,11 @@ export default function GisMapModal({ fields, onClose, onGeocode }: GisMapModalP
                 onPlaceChanged={onPlaceChanged}
               >
                 <input
-                  placeholder="Search address or street…"
+                  placeholder={placeMode ? `Search to set ${PLACE_LABEL[placeMode]} location…` : 'Search address, street, or city…'}
                   style={{
-                    width: 260, padding: '6px 12px', borderRadius: 8,
-                    border: '1px solid var(--border)', background: 'var(--surface)',
+                    width: 300, padding: '6px 12px', borderRadius: 8,
+                    border: `1px solid ${placeMode ? '#1D4ED8' : 'var(--border)'}`,
+                    background: 'var(--surface)',
                     fontSize: 13, fontFamily: 'DM Sans, sans-serif',
                     color: 'var(--text-1)', outline: 'none',
                     boxShadow: '0 2px 8px rgba(0,0,0,0.14)',
@@ -353,7 +379,7 @@ export default function GisMapModal({ fields, onClose, onGeocode }: GisMapModalP
                   <React.Fragment key={p.heading}>
                     <Marker
                       position={{ lat, lng: lon }}
-                      icon={makeCircleIcon(p.color)}
+                      icon={makePinIcon(p.color)}
                       onClick={() => setOpenHeading(openHeading === p.heading ? null : p.heading)}
                     />
                     {openHeading === p.heading && (

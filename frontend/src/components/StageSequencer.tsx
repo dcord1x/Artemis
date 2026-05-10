@@ -141,6 +141,8 @@ const WORKER_RESPONSES = [
     def: 'Physically protecting oneself without full escape — blocking, pushing away, shielding.' },
   { value: 'physical_resistance',        label: 'Physical resistance',
     def: 'Actively fighting back, struggling, or using force to resist harm.' },
+  { value: 'fought_back',                label: 'Fought back / defensive physical force',
+    def: 'Physically fought back using defensive force — kicking, striking, pushing, or otherwise actively using physical force to resist, escape, or stop the assault. Distinct from general physical resistance; describes deliberate, directed defensive action.' },
   { value: 'freezing',                   label: 'Freezing / dissociation',
     def: 'Unable to act due to fear, shock, or trauma response — not incapacitation.' },
   { value: 'partial_compliance',         label: 'Partial compliance',
