@@ -86,9 +86,14 @@
 ::-webkit-scrollbar-thumb { background: var(--border-mid); border-radius: 10px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
 
-/* ── Narrative selection highlight ──────────────────── */
+/* ── Narrative text: selectable + visible selection ─── */
 .narrative-text ::selection {
-  background: rgba(11, 31, 51, 0.18);
+  background: rgba(100, 160, 255, 0.38);
+  color: #fff;
+}
+.narrative-text textarea::selection {
+  background: rgba(100, 160, 255, 0.38);
+  color: #fff;
 }
 
 

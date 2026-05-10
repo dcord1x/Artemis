@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Save, Sparkles, Download, Tag, X, GitCompare, Lock, ChevronLeft, ChevronRight, ExternalLink, FileText, ChevronDown, ScanSearch } from 'lucide-react';
+import { Save, Sparkles, Download, Tag, X, GitCompare, Lock, ChevronLeft, ChevronRight, ExternalLink, FileText, ChevronDown, ScanSearch, Copy, Check } from 'lucide-react';
 import { api } from '../api';
 import type { Report } from '../types';
 import FieldRow from '../components/FieldRow';
@@ -1211,8 +1211,20 @@ export default function CodingScreen() {
   const [leftWidth, setLeftWidth] = useState(45); // percent of split container
   const [showNlpHighlights, setShowNlpHighlights] = useState(false);
   const [hlCategories, setHlCategories] = useState<Set<string>>(new Set(['coercion','threat','movement','harm','location','payment']));
+  const [copiedNarrative, setCopiedNarrative] = useState(false);
   const splitContainerRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
+  const narrativeTextareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const copyNarrativeToClipboard = useCallback(() => {
+    navigator.clipboard.writeText(narrative).then(() => {
+      setCopiedNarrative(true);
+      setTimeout(() => setCopiedNarrative(false), 2000);
+    }).catch(() => {
+      setCopiedNarrative(true);
+      setTimeout(() => setCopiedNarrative(false), 2000);
+    });
+  }, [narrative]);
 
   const handleDividerMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -1226,15 +1238,17 @@ export default function CodingScreen() {
       const pct = ((ev.clientX - rect.left) / rect.width) * 100;
       setLeftWidth(Math.min(Math.max(pct, 20), 75));
     };
-    const onUp = () => {
+    const cleanup = () => {
       draggingRef.current = false;
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
       document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
+      document.removeEventListener('mouseup', cleanup);
+      document.removeEventListener('mouseleave', cleanup);
     };
     document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
+    document.addEventListener('mouseup', cleanup);
+    document.addEventListener('mouseleave', cleanup);
   }, []);
 
   useEffect(() => {
@@ -1802,6 +1816,24 @@ export default function CodingScreen() {
                   border: '1px solid #4B5563', fontWeight: 600, letterSpacing: '0.04em',
                 }}>READ ONLY</span>
               )}
+              {!isNew && narrative && (
+                <button
+                  onClick={copyNarrativeToClipboard}
+                  title="Copy full source text to clipboard"
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 4,
+                    fontSize: 10, padding: '2px 7px', borderRadius: 3, cursor: 'pointer',
+                    border: `1px solid ${copiedNarrative ? '#22C55E' : '#4B5563'}`,
+                    background: copiedNarrative ? '#14532D' : '#374151',
+                    color: copiedNarrative ? '#86EFAC' : '#9CA3AF',
+                    fontWeight: 600, letterSpacing: '0.04em',
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  {copiedNarrative ? <Check size={9} /> : <Copy size={9} />}
+                  {copiedNarrative ? 'COPIED' : 'COPY'}
+                </button>
+              )}
             </div>
             {narrative && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1880,23 +1912,48 @@ export default function CodingScreen() {
                 onFocus={(e) => (e.target.style.borderColor = 'var(--accent)')}
                 onBlur={(e) => (e.target.style.borderColor = 'var(--border)')}
               />
-            ) : (
-              <div style={{
-                fontSize: 13, lineHeight: 1.8,
-                color: '#C9CDD4',
-                whiteSpace: 'pre-wrap',
-                padding: '14px',
-                borderRadius: 8,
-                background: '#0F1020',
-                border: '1.5px solid #2D3148',
-                userSelect: 'text',
-                WebkitUserSelect: 'text',
-                MozUserSelect: 'text',
-                cursor: 'text',
-                fontFamily: 'Georgia, serif',
-              }}>
+            ) : showNlpHighlights ? (
+              /* NLP highlight mode — div needed for <mark> elements */
+              <div
+                className="narrative-selectable"
+                style={{
+                  fontSize: 13, lineHeight: 1.8,
+                  color: '#C9CDD4',
+                  whiteSpace: 'pre-wrap',
+                  padding: '14px',
+                  borderRadius: 8,
+                  background: '#0F1020',
+                  border: '1.5px solid #2D3148',
+                  fontFamily: 'Georgia, serif',
+                }}
+              >
                 {buildHighlightedNarrative(narrative)}
               </div>
+            ) : (
+              /* Normal read mode — textarea is always selectable by browsers */
+              <textarea
+                ref={narrativeTextareaRef}
+                readOnly
+                value={narrative}
+                rows={Math.max(10, (narrative.match(/\n/g) || []).length + 3)}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  resize: 'none',
+                  border: '1.5px solid #2D3148',
+                  borderRadius: 8,
+                  background: '#0F1020',
+                  color: '#C9CDD4',
+                  padding: '14px',
+                  fontSize: 13,
+                  lineHeight: 1.8,
+                  fontFamily: 'Georgia, serif',
+                  overflow: 'auto',
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                  minHeight: 0,
+                }}
+              />
             )}
 
             {/* Source provenance — PDF attachment + full bulletin text */}
@@ -1948,17 +2005,18 @@ export default function CodingScreen() {
                   </div>
                 </div>
                 {showBulletinText && report?.source_bulletin_text && (
-                  <div style={{
-                    fontSize: 11.5, lineHeight: 1.7, color: '#9CA3AF',
-                    whiteSpace: 'pre-wrap',
-                    padding: '10px 12px', borderRadius: 6,
-                    background: '#0D1117',
-                    border: '1px solid #374151',
-                    maxHeight: 260, overflow: 'auto',
-                    fontFamily: 'monospace',
-                    userSelect: 'text',
-                    WebkitUserSelect: 'text',
-                  }}>
+                  <div
+                    className="narrative-selectable"
+                    style={{
+                      fontSize: 11.5, lineHeight: 1.7, color: '#9CA3AF',
+                      whiteSpace: 'pre-wrap',
+                      padding: '10px 12px', borderRadius: 6,
+                      background: '#0D1117',
+                      border: '1px solid #374151',
+                      maxHeight: 260, overflow: 'auto',
+                      fontFamily: 'monospace',
+                    }}
+                  >
                     {report.source_bulletin_text}
                   </div>
                 )}
