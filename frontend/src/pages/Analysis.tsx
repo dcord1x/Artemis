@@ -223,6 +223,45 @@ function OutputTile({ label, desc, icon, onClick, color = 'var(--accent)' }: {
   );
 }
 
+function ValDistPanel({ label, vc, color = 'var(--accent)', total }: {
+  label: string;
+  vc: { counts: Record<string, number>; total_coded: number } | undefined;
+  color?: string;
+  total: number;
+}) {
+  if (!vc || vc.total_coded === 0) {
+    return (
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 5 }}>{label}</div>
+        <div style={{ fontSize: 11.5, color: 'var(--text-3)', fontStyle: 'italic' }}>Not yet coded — {total} cases imported</div>
+      </div>
+    );
+  }
+  const sorted = Object.entries(vc.counts).sort((a, b) => b[1] - a[1]);
+  const max = sorted[0]?.[1] ?? 1;
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+        <div style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.07em', textTransform: 'uppercase' }}>{label}</div>
+        <div style={{ fontSize: 10, color: 'var(--text-3)' }}>{vc.total_coded} coded</div>
+      </div>
+      {sorted.map(([val, cnt]) => (
+        <div key={val} style={{ marginBottom: 5 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+            <span style={{ fontSize: 11.5, color: 'var(--text-2)' }}>{val}</span>
+            <span style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 600 }}>
+              {cnt} <span style={{ fontWeight: 400, fontSize: 10 }}>({total > 0 ? Math.round(cnt / total * 100) : 0}%)</span>
+            </span>
+          </div>
+          <div style={{ height: 4, borderRadius: 10, background: 'var(--surface-3)', overflow: 'hidden' }}>
+            <div style={{ height: '100%', borderRadius: 10, background: color, width: `${max > 0 ? cnt / max * 100 : 0}%`, transition: 'width 0.7s ease' }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function EmptyState({ message }: { message: string }) {
   return (
     <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-3)', fontSize: 11.5, fontStyle: 'italic', background: 'var(--surface-2)', borderRadius: 5, border: '1px dashed var(--border)' }}>
@@ -371,10 +410,10 @@ export default function Analysis() {
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: insights.length ? 16 : 22 }}>
           <div>
             <h1 style={{ fontFamily: 'Lora, serif', fontSize: 26, fontWeight: 500, margin: '0 0 4px', color: 'var(--text-1)', letterSpacing: '-0.01em' }}>
-              Analytic Overview
+              Analysis Dashboard
             </h1>
             <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: '0 0 10px', maxWidth: 680, lineHeight: 1.5 }}>
-              Narrative coding, sequence reconstruction, spatial analysis, and public safety review of community-generated harm reports.
+              Systematic cross-case analysis of coded bad date report narratives — stage sequences (RQ1), situational conditions (RQ2), and mobility patterns (RQ3).
             </p>
             <div style={{ display: 'flex', alignItems: 'center', gap: 0, fontSize: 11.5, flexWrap: 'wrap' }}>
               {[
@@ -407,36 +446,35 @@ export default function Analysis() {
           </div>
         )}
 
-        {/* ═══ ANALYTIC PIPELINE ════════════════════════════════════════════════ */}
+        {/* ═══ CODING PROGRESS ══════════════════════════════════════════════════ */}
         <div style={{ marginBottom: 20 }}>
-          <SectionLabel text="Analytic Pipeline" icon={<Activity size={11} />} />
+          <SectionLabel text="Coding Progress" icon={<Activity size={11} />} />
           <p style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 10, marginTop: -4 }}>
-            Tracks data readiness from imported source report to research-ready coded case.
+            Tracks each case from imported source report through to research-ready coded status.
           </p>
           <div style={{ display: 'flex', alignItems: 'stretch', gap: 0 }}>
-            <PipelineStep label="Imported"            count={d.total}          color={C.blue}   onClick={() => go({})} />
+            <PipelineStep label="Source Reports"      count={d.total}          color={C.blue}   onClick={() => go({})} />
             <PipelineStep label="NLP Screened"        count={d.total}          pct={100}        color={C.indigo} sub="provisional only" />
             <PipelineStep label="Analyst Coded"       count={d.coded}          pct={d.codingPct}  color={C.green}  onClick={() => go({ coding_status: 'coded' })} />
-            <PipelineStep label="Analyst Staged"      count={d.analystStaged}  pct={d.stagedPct}  color={C.purple} sub="stage records created" onClick={() => navigate('/research')} />
-            <PipelineStep label="Geocoded Reports"    count={d.geocoded}       pct={d.geocodedPct} color={C.amber} onClick={() => go({ geocode_status: 'yes' })} />
-            <PipelineStep label="Research Ready"      count={d.researchReady}  pct={d.researchPct} color={C.teal} onClick={() => navigate('/research')} />
-            <PipelineStep label="Bulletin Review"     count={d.bulletinCount}  color={C.coral}  onClick={() => navigate('/bulletin')} isLast />
+            <PipelineStep label="Stage Coded"         count={d.analystStaged}  pct={d.stagedPct}  color={C.purple} sub="stage records created" onClick={() => navigate('/research')} />
+            <PipelineStep label="Geocoded"            count={d.geocoded}       pct={d.geocodedPct} color={C.amber} onClick={() => go({ geocode_status: 'yes' })} />
+            <PipelineStep label="Research Ready"      count={d.researchReady}  pct={d.researchPct} color={C.teal} onClick={() => navigate('/research')} isLast />
           </div>
         </div>
 
         {/* ═══ HERO ROW: Spatial Snapshot + Attention Queue ════════════════════ */}
         <div style={{ display: 'grid', gridTemplateColumns: '1.55fr 1fr', gap: 16, marginBottom: 20 }}>
 
-          {/* ── Spatial Intelligence Snapshot ────────────────────────────────── */}
+          {/* ── Spatial Overview ─────────────────────────────────────────────── */}
           <div className="card" style={{ padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
             {/* Card header */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '13px 16px 10px', borderBottom: '1px solid var(--border)' }}>
               <div>
                 <h3 style={{ fontFamily: 'Lora, serif', fontSize: 15, fontWeight: 500, margin: '0 0 2px' }}>
-                  Spatial Intelligence Snapshot
+                  Spatial Overview
                 </h3>
                 <p style={{ fontSize: 10.5, color: 'var(--text-3)', margin: 0 }}>
-                  Live geocoded distribution of harm report locations
+                  Geocoded encounter locations — initial contact sites and incident sites
                 </p>
               </div>
               <button className="btn-ghost" onClick={() => navigate('/map')} style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
@@ -528,47 +566,42 @@ export default function Analysis() {
             )}
           </div>
 
-          {/* ── Analyst Attention Queue ───────────────────────────────────────── */}
+          {/* ── Coding Attention Items ────────────────────────────────────────── */}
           <div className="card" style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column' }}>
             <div style={{ marginBottom: 13 }}>
               <h3 style={{ fontFamily: 'Lora, serif', fontSize: 15, fontWeight: 500, margin: '0 0 2px' }}>
-                Analyst Attention Queue
+                Coding Attention Items
               </h3>
-              <p style={{ fontSize: 10.5, color: 'var(--text-3)', margin: 0 }}>Active review items — click to open filtered cases</p>
+              <p style={{ fontSize: 10.5, color: 'var(--text-3)', margin: 0 }}>Items requiring analyst action — click to open filtered cases</p>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 5, flex: 1 }}>
-              <QueueRow label="NLP signals — pending confirmation" count={d.nlpTotal} desc="Provisional signals, not analyst-confirmed" color={C.amber} onClick={() => go({})} />
-              <QueueRow label="Location phrase — no geocode" count={d.locationNeedsGeocode} desc="Has location text but missing coordinates" color={C.blue} onClick={() => go({ geocode_status: 'no' })} />
-              <QueueRow label="Movement present — mobility not coded" count={d.movUncoded} desc="Movement flag present but Mobility tab incomplete" color={C.purple} onClick={() => go({ movement_present: 'yes' })} />
-              <QueueRow label="Repeat suspect / vehicle flag" count={d.repeatFlags} desc="Cross-case repeat indicator requiring review" color={C.red} onClick={() => go({})} />
-              <QueueRow label="Bulletin review candidates" count={d.bulletinCount} desc="Coded for public safety bulletin suitability" color={C.coral} onClick={() => navigate('/bulletin')} />
-              <QueueRow label="Analyst staging not yet completed" count={d.missingStages} desc="Coded reports without analyst stage records" color={C.purple} onClick={() => go({ coding_status: 'coded' })} />
-              <QueueRow label="VAWG / exploitation flags" count={agg.vawg.flag_counts.trafficking_exploitation_concern} desc="Trafficking or exploitation concern coded" color={C.red} onClick={() => go({})} />
+              <QueueRow label="Stage coding not yet completed" count={d.missingStages} desc="Analyst-coded cases without stage records" color={C.purple} onClick={() => go({ coding_status: 'coded' })} />
+              <QueueRow label="Movement present — mobility tab incomplete" count={d.movUncoded} desc="Movement flag coded but Mobility tab not filled" color={C.purple} onClick={() => go({ movement_present: 'yes' })} />
+              <QueueRow label="Location phrase — no geocode" count={d.locationNeedsGeocode} desc="Has location text but coordinates missing" color={C.blue} onClick={() => go({ geocode_status: 'no' })} />
+              <QueueRow label="NLP signals — pending analyst confirmation" count={d.nlpTotal} desc="Provisional text-scan signals, not yet confirmed" color={C.amber} onClick={() => go({})} />
+              <QueueRow label="Repeat suspect / vehicle indicator" count={d.repeatFlags} desc="Cross-case repeat flag requiring review" color={C.red} onClick={() => go({})} />
+              <QueueRow label="Trafficking / exploitation concern" count={agg.vawg.flag_counts.trafficking_exploitation_concern} desc="Supplementary exploitation flag coded" color={C.coral} onClick={() => go({})} />
             </div>
           </div>
         </div>
 
-        {/* ═══ EMERGING PATTERNS ════════════════════════════════════════════════ */}
+        {/* ═══ RQ2 — BEHAVIOURAL AND SITUATIONAL CONDITIONS ════════════════════ */}
         <div style={{ marginBottom: 20 }}>
-          <SectionLabel text="Emerging Patterns" icon={<Shield size={11} />} />
+          <SectionLabel text="RQ2 — Behavioural and Situational Conditions" icon={<Shield size={11} />} />
           <p style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 10, marginTop: -4 }}>
-            Displays analyst-confirmed patterns separately from provisional NLP signals. Treat as preliminary until coding coverage is sufficient.
-          </p>
-          <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginBottom: 14, fontStyle: 'italic' }}>
+            Situational and environmental conditions present across coded cases. Analyst-confirmed findings only; NLP signals shown separately as provisional.
             Based on {d.coded} analyst-coded report{d.coded !== 1 ? 's' : ''}.{d.coded < 5 ? ' Treat as highly preliminary.' : ''}
-            {' '}Coded and NLP provisional signals are displayed separately.
-          </div>
+          </p>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
 
-            {/* Harm Indicators */}
+            {/* Harm and Behavioural Indicators */}
             <div className="card" style={{ padding: '15px 16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 13 }}>
                 <Shield size={13} style={{ color: C.coral }} />
-                <span style={{ fontFamily: 'Lora, serif', fontSize: 13.5, fontWeight: 500 }}>Harm Indicators</span>
+                <span style={{ fontFamily: 'Lora, serif', fontSize: 13.5, fontWeight: 500 }}>Harm and Behavioural Indicators</span>
               </div>
 
-              {/* Analyst-coded section */}
               <div style={{ marginBottom: 12 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 9 }}>
                   <Badge label="CODED" variant="coded" />
@@ -589,12 +622,11 @@ export default function Analysis() {
                 )}
               </div>
 
-              {/* NLP provisional section */}
               {d.nlpTotal > 0 && (
                 <div style={{ paddingTop: 11, borderTop: '1px dashed var(--border)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 9 }}>
                     <Badge label="NLP PROVISIONAL" variant="nlp" />
-                    <span style={{ fontSize: 10, color: 'var(--text-3)' }}>requires analyst review</span>
+                    <span style={{ fontSize: 10, color: 'var(--text-3)' }}>requires analyst confirmation</span>
                   </div>
                   {d.nlpCoercionSignals > 0 && <CountBar label="Coercion signal"         count={d.nlpCoercionSignals} max={d.total} color={C.amber} tag="NLP" barHeight={3} />}
                   {d.nlpPhysSignals > 0     && <CountBar label="Physical signal"          count={d.nlpPhysSignals}     max={d.total} color={C.amber} tag="NLP" barHeight={3} />}
@@ -604,11 +636,83 @@ export default function Analysis() {
               )}
             </div>
 
+            {/* Location / Setting Context */}
+            <div className="card" style={{ padding: '15px 16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 12 }}>
+                <Globe size={13} style={{ color: C.amber }} />
+                <span style={{ fontFamily: 'Lora, serif', fontSize: 13.5, fontWeight: 500 }}>Setting and Location Context</span>
+                <Badge label="CODED" variant="coded" />
+              </div>
+              {stats.cities?.length ? stats.cities.slice(0, 6).map(c => (
+                <div key={c.name} onClick={() => go({ city: c.name })} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12.5, marginBottom: 6, cursor: 'pointer', padding: '2px 5px', borderRadius: 4 }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = 'var(--surface-2)'; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
+                >
+                  <span style={{ color: 'var(--text-1)' }}>{c.name}</span>
+                  <span style={{ fontSize: 11, color: 'var(--text-3)', background: 'var(--surface-2)', padding: '1px 6px', borderRadius: 8 }}>{c.count}</span>
+                </div>
+              )) : <EmptyState message="No city data yet." />}
+              {agg.environment.location_types.length > 0 && (
+                <div style={{ marginTop: 10, paddingTop: 9, borderTop: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', marginBottom: 8, letterSpacing: '0.07em' }}>LOCATION TYPES</div>
+                  {agg.environment.location_types.slice(0, 4).map(t => (
+                    <CountBar key={t.type} label={t.type} count={t.count} max={Math.max(...agg.environment.location_types.map(x => x.count), 1)} color={C.amber} />
+                  ))}
+                </div>
+              )}
+              {agg.codability && (
+                <div style={{ marginTop: 10, paddingTop: 9, borderTop: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', marginBottom: 10, letterSpacing: '0.07em' }}>SITUATIONAL CONDITIONS (CODED)</div>
+                  <ValDistPanel label="Primary setting type"  vc={agg.codability.primary_setting_type} color={C.amber}  total={d.coded} />
+                  <ValDistPanel label="Visibility"            vc={agg.codability.visibility_case}      color={C.blue}   total={d.coded} />
+                  <ValDistPanel label="Isolation"             vc={agg.codability.isolation_case}       color={C.coral}  total={d.coded} />
+                  <ValDistPanel label="Guardianship"          vc={agg.codability.guardianship_case}    color={C.green}  total={d.coded} />
+                  <ValDistPanel label="Setting control"       vc={agg.codability.setting_control}      color={C.purple} total={d.coded} />
+                </div>
+              )}
+            </div>
+
+            {/* Incident Type & Severity */}
+            <div className="card" style={{ padding: '15px 16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 12 }}>
+                <Target size={13} style={{ color: C.coral }} />
+                <span style={{ fontFamily: 'Lora, serif', fontSize: 13.5, fontWeight: 500 }}>Incident Type and Severity</span>
+              </div>
+              {agg.encounter.incident_type_distribution.length === 0 ? (
+                <EmptyState message="Awaiting encounter coding." />
+              ) : (
+                <>
+                  {agg.encounter.incident_type_distribution.slice(0, 5).map(it => (
+                    <CountBar key={it.value} label={it.value} count={it.count} max={Math.max(...agg.encounter.incident_type_distribution.map(x => x.count), 1)} color={C.coral} />
+                  ))}
+                  {agg.encounter.severity_distribution.length > 0 && (
+                    <div style={{ marginTop: 10, paddingTop: 9, borderTop: '1px solid var(--border)' }}>
+                      <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', marginBottom: 8, letterSpacing: '0.07em' }}>SEVERITY</div>
+                      {agg.encounter.severity_distribution.slice(0, 4).map(s => (
+                        <CountBar key={s.value} label={s.value} count={s.count} max={Math.max(...agg.encounter.severity_distribution.map(x => x.count), 1)} color={s.value.toLowerCase().includes('severe') ? C.red : C.coral} />
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ═══ RQ3 — MOBILITY AND SPATIAL MOVEMENT ═════════════════════════════ */}
+        <div style={{ marginBottom: 20 }}>
+          <SectionLabel text="RQ3 — Mobility and Spatial Movement" icon={<Navigation size={11} />} />
+          <p style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 10, marginTop: -4 }}>
+            Movement patterns, mode of movement, and spatial control indicators across coded cases. Addresses how relocation alters victim vulnerability, isolation and offender control.
+          </p>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
+
             {/* Mobility Patterns */}
             <div className="card" style={{ padding: '15px 16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 13 }}>
                 <Navigation size={13} style={{ color: C.purple }} />
-                <span style={{ fontFamily: 'Lora, serif', fontSize: 13.5, fontWeight: 500 }}>Mobility Patterns</span>
+                <span style={{ fontFamily: 'Lora, serif', fontSize: 13.5, fontWeight: 500 }}>Movement and Relocation</span>
                 <Badge label="CODED" variant="coded" />
               </div>
               {agg.data_quality.with_movement_coded === 0 ? (
@@ -632,13 +736,20 @@ export default function Analysis() {
                   ))}
                 </div>
               )}
+              {agg.codability && (
+                <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', marginBottom: 10, letterSpacing: '0.07em' }}>MOVEMENT PATTERNS (CODED)</div>
+                  <ValDistPanel label="Movement pattern type" vc={agg.codability.movement_pattern_type} color={C.purple} total={d.coded} />
+                  <ValDistPanel label="Movement timing"       vc={agg.codability.movement_timing}       color={C.amber}  total={d.coded} />
+                </div>
+              )}
             </div>
 
             {/* Suspect & Vehicle */}
             <div className="card" style={{ padding: '15px 16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 13 }}>
                 <Activity size={13} style={{ color: C.blue }} />
-                <span style={{ fontFamily: 'Lora, serif', fontSize: 13.5, fontWeight: 500 }}>Suspect & Vehicle</span>
+                <span style={{ fontFamily: 'Lora, serif', fontSize: 13.5, fontWeight: 500 }}>Suspect and Vehicle</span>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 13 }}>
                 {[
@@ -677,92 +788,40 @@ export default function Analysis() {
                 <EmptyState message="No vehicle data coded yet." />
               )}
             </div>
-          </div>
 
-          {/* Second row: Location · Incident type · VAWG — only with sufficient data */}
-          {d.coded >= 3 && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14, marginTop: 14 }}>
-
-              <div className="card" style={{ padding: '15px 16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 12 }}>
-                  <Globe size={13} style={{ color: C.amber }} />
-                  <span style={{ fontFamily: 'Lora, serif', fontSize: 13.5, fontWeight: 500 }}>Location Context</span>
-                  <Badge label="CODED" variant="coded" />
-                </div>
-                {stats.cities?.length ? stats.cities.slice(0, 6).map(c => (
-                  <div key={c.name} onClick={() => go({ city: c.name })} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12.5, marginBottom: 6, cursor: 'pointer', padding: '2px 5px', borderRadius: 4 }}
-                    onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = 'var(--surface-2)'; }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'transparent'; }}
-                  >
-                    <span style={{ color: 'var(--text-1)' }}>{c.name}</span>
-                    <span style={{ fontSize: 11, color: 'var(--text-3)', background: 'var(--surface-2)', padding: '1px 6px', borderRadius: 8 }}>{c.count}</span>
-                  </div>
-                )) : <EmptyState message="No city data yet." />}
-                {agg.environment.location_types.length > 0 && (
-                  <div style={{ marginTop: 10, paddingTop: 9, borderTop: '1px solid var(--border)' }}>
-                    <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', marginBottom: 8, letterSpacing: '0.07em' }}>LOCATION TYPES</div>
-                    {agg.environment.location_types.slice(0, 4).map(t => (
-                      <CountBar key={t.type} label={t.type} count={t.count} max={Math.max(...agg.environment.location_types.map(x => x.count), 1)} color={C.amber} />
-                    ))}
-                  </div>
-                )}
+            {/* Supplementary Public Safety Flags */}
+            <div className="card" style={{ padding: '15px 16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 12 }}>
+                <AlertTriangle size={13} style={{ color: C.slate }} />
+                <span style={{ fontFamily: 'Lora, serif', fontSize: 13.5, fontWeight: 500 }}>Supplementary Flags</span>
               </div>
-
-              <div className="card" style={{ padding: '15px 16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 12 }}>
-                  <Target size={13} style={{ color: C.coral }} />
-                  <span style={{ fontFamily: 'Lora, serif', fontSize: 13.5, fontWeight: 500 }}>Incident Type & Severity</span>
-                </div>
-                {agg.encounter.incident_type_distribution.length === 0 ? (
-                  <EmptyState message="Awaiting encounter coding." />
-                ) : (
-                  <>
-                    {agg.encounter.incident_type_distribution.slice(0, 5).map(it => (
-                      <CountBar key={it.value} label={it.value} count={it.count} max={Math.max(...agg.encounter.incident_type_distribution.map(x => x.count), 1)} color={C.coral} />
-                    ))}
-                    {agg.encounter.severity_distribution.length > 0 && (
-                      <div style={{ marginTop: 10, paddingTop: 9, borderTop: '1px solid var(--border)' }}>
-                        <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', marginBottom: 8, letterSpacing: '0.07em' }}>SEVERITY</div>
-                        {agg.encounter.severity_distribution.slice(0, 4).map(s => (
-                          <CountBar key={s.value} label={s.value} count={s.count} max={Math.max(...agg.encounter.severity_distribution.map(x => x.count), 1)} color={s.value.toLowerCase().includes('severe') ? C.red : C.coral} />
-                        ))}
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-
-              <div className="card" style={{ padding: '15px 16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 12 }}>
-                  <AlertTriangle size={13} style={{ color: C.red }} />
-                  <span style={{ fontFamily: 'Lora, serif', fontSize: 13.5, fontWeight: 500 }}>VAWG & Public Safety</span>
-                </div>
-                {agg.vawg.total === 0 ? (
-                  <EmptyState message="Awaiting VAWG coding." />
-                ) : (
-                  <>
-                    {agg.vawg.flag_counts.trafficking_exploitation_concern > 0  && <CountBar label="Trafficking / exploitation concern" count={agg.vawg.flag_counts.trafficking_exploitation_concern}  max={d.coded} color={C.red} />}
-                    {agg.vawg.flag_counts.repeat_targeting_concern > 0          && <CountBar label="Repeat targeting concern"           count={agg.vawg.flag_counts.repeat_targeting_concern}           max={d.coded} color={C.red} onClick={() => go({})} />}
-                    {agg.vawg.flag_counts.third_party_control_indicated > 0     && <CountBar label="Third-party control indicated"      count={agg.vawg.flag_counts.third_party_control_indicated}      max={d.coded} color={C.coral} />}
-                    {agg.vawg.flag_counts.grooming_recruitment_concern > 0      && <CountBar label="Grooming / recruitment concern"     count={agg.vawg.flag_counts.grooming_recruitment_concern}       max={d.coded} color={C.coral} />}
-                    {agg.vawg.flag_counts.public_safety_urgency_urgent_high > 0 && <CountBar label="Urgent / high public safety"        count={agg.vawg.flag_counts.public_safety_urgency_urgent_high}  max={d.coded} color={C.red}  onClick={() => navigate('/bulletin')} />}
-                    {agg.vawg.flag_counts.public_safety_bulletin_suitability_positive > 0 && <CountBar label="Bulletin-suitable" count={agg.vawg.flag_counts.public_safety_bulletin_suitability_positive} max={d.coded} color={C.coral} onClick={() => navigate('/bulletin')} />}
-                  </>
-                )}
-              </div>
+              <p style={{ fontSize: 10.5, color: 'var(--text-3)', marginBottom: 10, lineHeight: 1.5 }}>
+                These fields are supplementary to the research questions. They are not central to RQ1–RQ3 coding.
+              </p>
+              {agg.vawg.total === 0 ? (
+                <EmptyState message="No supplementary flags coded yet." />
+              ) : (
+                <>
+                  {agg.vawg.flag_counts.trafficking_exploitation_concern > 0  && <CountBar label="Trafficking / exploitation concern" count={agg.vawg.flag_counts.trafficking_exploitation_concern}  max={d.coded} color={C.slate} />}
+                  {agg.vawg.flag_counts.repeat_targeting_concern > 0          && <CountBar label="Repeat targeting concern"           count={agg.vawg.flag_counts.repeat_targeting_concern}           max={d.coded} color={C.slate} onClick={() => go({})} />}
+                  {agg.vawg.flag_counts.third_party_control_indicated > 0     && <CountBar label="Third-party control indicated"      count={agg.vawg.flag_counts.third_party_control_indicated}      max={d.coded} color={C.slate} />}
+                  {agg.vawg.flag_counts.grooming_recruitment_concern > 0      && <CountBar label="Grooming / recruitment concern"     count={agg.vawg.flag_counts.grooming_recruitment_concern}       max={d.coded} color={C.slate} />}
+                  {agg.vawg.flag_counts.public_safety_urgency_urgent_high > 0 && <CountBar label="Urgent / high urgency"             count={agg.vawg.flag_counts.public_safety_urgency_urgent_high}  max={d.coded} color={C.slate} onClick={() => navigate('/bulletin')} />}
+                </>
+              )}
             </div>
-          )}
+          </div>
         </div>
 
-        {/* ═══ ENCOUNTER SEQUENCE PATTERNS ══════════════════════════════════════ */}
+        {/* ═══ RQ1 — STAGE VISIBILITY AND ENCOUNTER SEQUENCE ═══════════════════ */}
         <div className="card" style={{ padding: '18px 20px', marginBottom: 20 }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 }}>
             <div>
               <h3 style={{ fontFamily: 'Lora, serif', fontSize: 16, fontWeight: 500, margin: '0 0 3px' }}>
-                Encounter Sequence Patterns
+                RQ1 — Stage Visibility and Encounter Sequence
               </h3>
               <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: 0 }}>
-                Summarizes staged pathways reconstructed from narrative reports. Analyst-confirmed sequences only.
+                Behavioural stages across violent client–sex worker encounters. Analyst-confirmed stage sequences only — not provisional NLP outputs.
               </p>
             </div>
             <button className="btn-ghost" onClick={() => navigate('/research')} style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
@@ -787,7 +846,7 @@ export default function Analysis() {
 
               {/* Left: Top pathway chains (main visual) */}
               <div>
-                <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.08em', marginBottom: 12 }}>OBSERVED CODED PATHWAYS</div>
+                <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.08em', marginBottom: 12 }}>OBSERVED STAGE SEQUENCES — ANALYST CODED CASES</div>
                 {topSeqs.length === 0 ? (
                   <EmptyState message="Awaiting full sequence data." />
                 ) : (
@@ -819,9 +878,9 @@ export default function Analysis() {
                 )}
               </div>
 
-              {/* Right: Stage frequency bars */}
+              {/* Right: Stage frequency + visibility */}
               <div>
-                <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.08em', marginBottom: 12 }}>STAGE FREQUENCY — ACROSS ALL CODED REPORTS</div>
+                <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.08em', marginBottom: 12 }}>STAGE FREQUENCY ACROSS CODED REPORTS</div>
                 {stageFreq.map(s => {
                   const lbl   = STAGE_LABELS[s.stage] || s.stage;
                   const col   = STAGE_COLORS[s.stage]  || C.slate;
@@ -841,17 +900,69 @@ export default function Analysis() {
                     </div>
                   );
                 })}
+
+                {agg.codability && (
+                  <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+                    <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.08em', marginBottom: 12 }}>STAGE VISIBILITY (CODABILITY)</div>
+                    <ValDistPanel label="Initial contact visible"    vc={agg.codability.initial_contact_visible}    color={STAGE_COLORS.initial_contact}   total={d.coded} />
+                    <ValDistPanel label="Negotiation visible"        vc={agg.codability.negotiation_visible}        color={STAGE_COLORS.negotiation}        total={d.coded} />
+                    <ValDistPanel label="Movement visible"           vc={agg.codability.movement_visible}           color={STAGE_COLORS.movement_travel}    total={d.coded} />
+                    <ValDistPanel label="Violence / coercion visible" vc={agg.codability.violence_coercion_visible} color={STAGE_COLORS.violence_coercion}  total={d.coded} />
+                    <ValDistPanel label="Exit / aftermath visible"   vc={agg.codability.exit_aftermath_visible}     color={STAGE_COLORS.exit_escape}        total={d.coded} />
+                  </div>
+                )}
               </div>
             </div>
             </>
           )}
         </div>
 
-        {/* ═══ DATASET PROCESSING STATUS ════════════════════════════════════════ */}
+        {/* ═══ CODABILITY / DATA QUALITY DISTRIBUTIONS ════════════════════════ */}
+        {agg.codability && (
+          <div style={{ marginBottom: 20 }}>
+            <SectionLabel text="Codability and Data Quality" icon={<Database size={11} />} />
+            <p style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 10, marginTop: -4 }}>
+              Report-level assessments of how well each source narrative supports stage coding, sequence reconstruction, and spatial analysis.
+              Populated from the Codability tab on coded cases. Missing info ≠ absence — use these distributions to characterise dataset limitations transparently.
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
+
+              <div className="card" style={{ padding: '15px 16px' }}>
+                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.07em', color: C.blue, textTransform: 'uppercase', marginBottom: 12, borderBottom: `2px solid ${C.blue}22`, paddingBottom: 8 }}>
+                  Narrative Quality
+                </div>
+                <ValDistPanel label="Narrative detail level"        vc={agg.codability.narrative_detail_level}      color={C.blue}   total={d.coded} />
+                <ValDistPanel label="Sequence reconstructable"      vc={agg.codability.sequence_reconstructable}    color={C.green}  total={d.coded} />
+                <ValDistPanel label="Main data limitation"          vc={agg.codability.main_data_limitation}        color={C.slate}  total={d.coded} />
+              </div>
+
+              <div className="card" style={{ padding: '15px 16px' }}>
+                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.07em', color: C.purple, textTransform: 'uppercase', marginBottom: 12, borderBottom: `2px solid ${C.purple}22`, paddingBottom: 8 }}>
+                  Coding Suitability
+                </div>
+                <ValDistPanel label="Stage coding suitability"      vc={agg.codability.stage_coding_suitability}    color={C.purple} total={d.coded} />
+                <ValDistPanel label="Movement coding suitability"   vc={agg.codability.movement_coding_suitability} color={C.amber}  total={d.coded} />
+                <ValDistPanel label="Location coding suitability"   vc={agg.codability.location_coding_suitability} color={C.teal}   total={d.coded} />
+              </div>
+
+              <div className="card" style={{ padding: '15px 16px' }}>
+                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.07em', color: C.teal, textTransform: 'uppercase', marginBottom: 12, borderBottom: `2px solid ${C.teal}22`, paddingBottom: 8 }}>
+                  Sequence Coverage
+                </div>
+                <ValDistPanel label="Sequence pattern"              vc={agg.codability.sequence_pattern}            color={C.indigo} total={d.coded} />
+                <ValDistPanel label="Highest stage reached"         vc={agg.codability.highest_stage_reached}       color={C.coral}  total={d.coded} />
+                <ValDistPanel label="Access to help"                vc={agg.codability.access_to_help}              color={C.green}  total={d.coded} />
+              </div>
+
+            </div>
+          </div>
+        )}
+
+        {/* ═══ DATA QUALITY AND COVERAGE ════════════════════════════════════════ */}
         <div style={{ marginBottom: 20 }}>
-          <SectionLabel text="Dataset Processing Status" icon={<Database size={11} />} />
+          <SectionLabel text="Data Quality and Coverage" icon={<Database size={11} />} />
           <p style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 10, marginTop: -4 }}>
-            Shows which parts of the dataset are ready for analysis and which require further coding or geocoding.
+            Dataset coverage by coding stage. Identifies which cases are ready for each research question and which require further coding or geocoding.
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
 
@@ -881,13 +992,13 @@ export default function Analysis() {
 
             <div className="card" style={{ padding: '15px 16px' }}>
               <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.07em', color: C.coral, textTransform: 'uppercase', marginBottom: 12, borderBottom: `2px solid ${C.coral}22`, paddingBottom: 8 }}>
-                Analyst Attention
+                Coding Gaps
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                <MetricCard label="NLP Signals"     value={d.nlpTotal}             sub="pending confirmation" color={C.amber} tag="provisional" icon={<Zap size={11} />}           onClick={() => go({})} />
-                <MetricCard label="Needs Geocode"   value={d.locationNeedsGeocode} sub="no coordinates"      color={C.slate} icon={<MapPin size={11} />}           onClick={() => go({ geocode_status: 'no' })} />
-                <MetricCard label="Repeat Flags"    value={d.repeatFlags}          sub="suspect / vehicle"   color={C.red}   icon={<AlertTriangle size={11} />}    onClick={() => go({})} />
-                <MetricCard label="Bulletin Review" value={d.bulletinCount}        sub="public safety"       color={C.coral} icon={<FileText size={11} />}         onClick={() => navigate('/bulletin')} />
+                <MetricCard label="NLP Signals"         value={d.nlpTotal}             sub="pending confirmation"   color={C.amber} tag="provisional" icon={<Zap size={11} />}           onClick={() => go({})} />
+                <MetricCard label="Needs Geocode"        value={d.locationNeedsGeocode} sub="no coordinates"        color={C.slate} icon={<MapPin size={11} />}           onClick={() => go({ geocode_status: 'no' })} />
+                <MetricCard label="Repeat Flags"         value={d.repeatFlags}          sub="suspect / vehicle"     color={C.red}   icon={<AlertTriangle size={11} />}    onClick={() => go({})} />
+                <MetricCard label="Stage Coding Needed"  value={d.missingStages}        sub="coded, unstaged cases" color={C.purple} icon={<GitBranch size={11} />}       onClick={() => go({ coding_status: 'coded' })} />
               </div>
             </div>
           </div>
@@ -897,31 +1008,30 @@ export default function Analysis() {
         <div style={{ marginBottom: 22 }}>
           <SectionLabel text="Research Outputs" icon={<FileOutput size={11} />} />
           <p style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 10, marginTop: -4 }}>
-            Exportable tables and summaries for dissertation analysis, sequence mapping, spatial analysis, and methodology documentation.
+            Exportable tables, cross-case analysis, and spatial outputs for dissertation analysis and methodology documentation.
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10 }}>
-            <OutputTile label="Stage Sequence Analysis"  desc="Encounter pathways and transitions"  icon={<GitBranch size={14} />}   color={C.purple} onClick={() => navigate('/research')} />
-            <OutputTile label="Mobility Pathways"        desc="Movement types and control"          icon={<Navigation size={14} />}  color={C.amber}  onClick={() => navigate('/research')} />
-            <OutputTile label="Environmental Context"    desc="Location types and harm context"     icon={<Globe size={14} />}       color={C.blue}   onClick={() => navigate('/research')} />
-            <OutputTile label="Case Linkage"             desc="Repeat suspect / vehicle analysis"   icon={<Link2 size={14} />}       color={C.red}    onClick={() => navigate('/research')} />
-            <OutputTile label="Open GIS Workspace"       desc="Spatial intelligence and mapping"    icon={<MapPin size={14} />}      color={C.amber}  onClick={() => navigate('/map')} />
-            <OutputTile label="Encounter Overview"       desc="Harm and indicator cross-tabs"       icon={<Layers size={14} />}      color={C.coral}  onClick={() => navigate('/research')} />
-            <OutputTile label="Export Coded Dataset"     desc="All coded cases as CSV"              icon={<FileOutput size={14} />}  color={C.green}  onClick={() => api.exportCsv()} />
-            <OutputTile label="Export Research Tables"   desc="Stage, mobility, environment ZIPs"   icon={<FileOutput size={14} />}  color={C.teal}   onClick={() => api.exportResearchTables()} />
-            <OutputTile label="Export Case Summaries"    desc="Per-case analytic summaries"         icon={<TrendingUp size={14} />}  color={C.blue}   onClick={() => api.exportCaseSummaries()} />
-            <OutputTile label="Generate Bulletin"        desc="Public safety bulletin review"       icon={<FileText size={14} />}    color={C.coral}  onClick={() => navigate('/bulletin')} />
+            <OutputTile label="RQ1 Stage Sequences"       desc="Encounter pathways and stage transitions"    icon={<GitBranch size={14} />}   color={C.purple} onClick={() => navigate('/research')} />
+            <OutputTile label="RQ3 Mobility Analysis"     desc="Movement types, control and relocation"      icon={<Navigation size={14} />}  color={C.amber}  onClick={() => navigate('/research')} />
+            <OutputTile label="RQ2 Situational Context"   desc="Setting, location type and harm context"     icon={<Globe size={14} />}       color={C.blue}   onClick={() => navigate('/research')} />
+            <OutputTile label="Case Comparison"           desc="Cross-case pattern and linkage review"       icon={<Link2 size={14} />}       color={C.indigo} onClick={() => navigate('/bulletin')} />
+            <OutputTile label="GIS Workspace"             desc="Spatial mapping and geocoded locations"      icon={<MapPin size={14} />}      color={C.amber}  onClick={() => navigate('/map')} />
+            <OutputTile label="Coded Case Overview"       desc="Cross-case harm and indicator summary"       icon={<Layers size={14} />}      color={C.coral}  onClick={() => navigate('/research')} />
+            <OutputTile label="Export Coded Dataset"      desc="All coded cases as CSV"                      icon={<FileOutput size={14} />}  color={C.green}  onClick={() => api.exportCsv()} />
+            <OutputTile label="Export Research Tables"    desc="Stage, mobility, environment exports"        icon={<FileOutput size={14} />}  color={C.teal}   onClick={() => api.exportResearchTables()} />
+            <OutputTile label="Export Case Summaries"     desc="Per-case analytic summaries"                 icon={<TrendingUp size={14} />}  color={C.blue}   onClick={() => api.exportCaseSummaries()} />
+            <OutputTile label="Codebook"                  desc="Field definitions, coding rules and examples" icon={<FileText size={14} />}   color={C.slate}  onClick={() => navigate('/codebook')} />
           </div>
         </div>
 
-        {/* ═══ INTERPRETATION NOTE ══════════════════════════════════════════════ */}
+        {/* ═══ METHODOLOGICAL NOTE ══════════════════════════════════════════════ */}
         <div style={{ padding: '13px 16px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface-2)', borderLeft: `3px solid ${C.slate}` }}>
-          <div style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.07em', marginBottom: 6 }}>INTERPRETATION NOTE</div>
+          <div style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.07em', marginBottom: 6 }}>METHODOLOGICAL NOTE</div>
           <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: 0, lineHeight: 1.75 }}>
-            Visualizations reflect analyst-coded and geocoded fields only. Sparse coding should be treated as preliminary.
-            NLP signals are provisional pending analyst confirmation — they are not treated as findings until reviewed and accepted by an analyst.
-            Absence of a coded flag does not mean absence in the original source report.
-            Analyst coding determines what is surfaced in patterns, maps, and exported outputs.
-            This system supports human-led, auditable research — all coded observations are observations only, not confirmed legal or investigative findings.
+            All patterns and distributions shown here reflect analyst-coded and geocoded fields only. Sparse coding coverage should be treated as preliminary — patterns may shift as coding progresses.
+            NLP text-scan signals are provisional and are not counted as coded findings until reviewed and accepted by the analyst.
+            Absence of a coded flag does not indicate absence in the original source report — it may indicate that the information was not present, not stated, or has not yet been coded.
+            This tool supports human-led qualitative coding; all outputs are analytical observations, not legal, investigative or clinical findings.
           </p>
         </div>
 

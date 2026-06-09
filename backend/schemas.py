@@ -233,6 +233,49 @@ class ReportUpdate(BaseModel):
     primary_harm: Optional[str] = None
     multi_harm_flag: Optional[str] = None
 
+    # Codability / Data Quality
+    narrative_detail_level: Optional[str] = None
+    sequence_reconstructable: Optional[str] = None
+    movement_coding_suitability: Optional[str] = None
+    location_coding_suitability: Optional[str] = None
+    main_data_limitation: Optional[str] = None
+    data_quality_notes: Optional[str] = None
+    initial_contact_visible: Optional[str] = None
+    negotiation_visible: Optional[str] = None
+    movement_visible: Optional[str] = None
+    violence_coercion_visible: Optional[str] = None
+    exit_aftermath_visible: Optional[str] = None
+
+    # Situation / Environment
+    primary_setting_type: Optional[str] = None
+    specific_setting_type: Optional[str] = None
+    visibility_case: Optional[str] = None
+    isolation_case: Optional[str] = None
+    guardianship_case: Optional[str] = None
+    access_to_help: Optional[str] = None
+    setting_control: Optional[str] = None
+    other_people_nearby: Optional[str] = None
+    security_or_business_nearby: Optional[str] = None
+    environment_notes: Optional[str] = None
+    environment_supporting_excerpt: Optional[str] = None
+
+    # Mobility pattern
+    movement_pattern_type: Optional[str] = None
+    movement_timing: Optional[str] = None
+
+    # Narrative excerpts
+    stage_excerpt: Optional[str] = None
+    behaviour_excerpt: Optional[str] = None
+    environment_excerpt: Optional[str] = None
+    movement_excerpt: Optional[str] = None
+    uncertainty_excerpt: Optional[str] = None
+
+    # Case summary
+    sequence_pattern: Optional[str] = None
+
+    # GIS mappable status
+    mappable_status: Optional[str] = None
+
 
 class ReportOut(BaseModel):
     id: int
@@ -460,6 +503,49 @@ class ReportOut(BaseModel):
     primary_harm: str
     multi_harm_flag: str
 
+    # Codability / Data Quality
+    narrative_detail_level: str = ""
+    sequence_reconstructable: str = ""
+    movement_coding_suitability: str = ""
+    location_coding_suitability: str = ""
+    main_data_limitation: str = ""
+    data_quality_notes: str = ""
+    initial_contact_visible: str = ""
+    negotiation_visible: str = ""
+    movement_visible: str = ""
+    violence_coercion_visible: str = ""
+    exit_aftermath_visible: str = ""
+
+    # Situation / Environment
+    primary_setting_type: str = ""
+    specific_setting_type: str = ""
+    visibility_case: str = ""
+    isolation_case: str = ""
+    guardianship_case: str = ""
+    access_to_help: str = ""
+    setting_control: str = ""
+    other_people_nearby: str = ""
+    security_or_business_nearby: str = ""
+    environment_notes: str = ""
+    environment_supporting_excerpt: str = ""
+
+    # Mobility pattern
+    movement_pattern_type: str = ""
+    movement_timing: str = ""
+
+    # Narrative excerpts
+    stage_excerpt: str = ""
+    behaviour_excerpt: str = ""
+    environment_excerpt: str = ""
+    movement_excerpt: str = ""
+    uncertainty_excerpt: str = ""
+
+    # Case summary
+    sequence_pattern: str = ""
+
+    # GIS mappable status
+    mappable_status: str = ""
+
     class Config:
         from_attributes = True
 
@@ -491,6 +577,8 @@ class StageCreate(BaseModel):
     coder_notes_stage: Optional[str] = ""
     coding_confidence: Optional[str] = ""
     temporal_sequence_note: Optional[str] = ""
+    stage_visible: Optional[str] = ""
+    stage_certainty: Optional[str] = ""
 
 
 class StageUpdate(BaseModel):
@@ -514,6 +602,8 @@ class StageUpdate(BaseModel):
     coder_notes_stage: Optional[str] = None
     coding_confidence: Optional[str] = None
     temporal_sequence_note: Optional[str] = None
+    stage_visible: Optional[str] = None
+    stage_certainty: Optional[str] = None
 
 
 class StageOut(BaseModel):
@@ -539,6 +629,8 @@ class StageOut(BaseModel):
     coder_notes_stage: str = ""
     coding_confidence: str = ""
     temporal_sequence_note: str = ""
+    stage_visible: str = ""
+    stage_certainty: str = ""
 
     @model_validator(mode='before')
     @classmethod
@@ -547,6 +639,7 @@ class StageOut(BaseModel):
             'escalation_level', 'supporting_excerpt', 'spatial_precision',
             'movement_impact', 'able_to_leave', 'coder_notes_stage',
             'coding_confidence', 'temporal_sequence_note',
+            'stage_visible', 'stage_certainty',
         ]
         for f in _new_fields:
             if getattr(data, f, None) is None:

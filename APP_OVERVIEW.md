@@ -20,7 +20,7 @@
 12. [Data Flow — End to End](#12-data-flow--end-to-end)
 13. [File Structure](#13-file-structure)
 
-> **Last updated: 2026-04-28** — Extended harm fields, GIS modal geocoding, MapView GIS overhaul (heatmap/clustering/draw-filter), Bulletin page, Research Notes, linkage patterns, `logo.png`.
+> **Last updated: 2026-06-08** — Extended harm fields, GIS modal geocoding, MapView GIS overhaul (heatmap/clustering/draw-filter), Bulletin page, Research Notes, linkage patterns, `logo.png`; corrected AI model to `claude-sonnet-4-6`, added `LandingPage`, `MapsContext`, `research_notes` table to diagram.
 
 ---
 
@@ -73,8 +73,9 @@ The core analytic unit is: **stage → behaviour → conditions → location**. 
                  redlight.db (SQLite)
           ┌──────────────────────────┐
           │  reports                 │
-          │  report_stages  ← NEW    │
+          │  report_stages           │
           │  case_linkages           │
+          │  research_notes          │
           └──────────────────────────┘
 ```
 
@@ -95,7 +96,7 @@ The frontend is a **pre-built static bundle** served directly by the FastAPI bac
 | Backend framework | FastAPI (Python) |
 | ORM | SQLAlchemy 2 |
 | Database | SQLite (`redlight.db`) |
-| AI field suggestions | Anthropic Claude API (`claude-3-5-haiku`) |
+| AI field suggestions | Anthropic Claude API (`claude-sonnet-4-6`) |
 | NLP violence detection | spaCy `en_core_web_sm` |
 | Weather data | Open-Meteo archive API (free, no key) |
 | Geocoding (map search) | Google Places Autocomplete |
@@ -131,7 +132,7 @@ cd frontend && npm run dev    # runs on :5173, proxies /api → :8000
 
 ## 5. Data Model
 
-All data lives in a single SQLite file: `redlight.db`. Four tables.
+All data lives in a single SQLite file: `redlight.db`. Four tables: `reports`, `report_stages`, `case_linkages`, `research_notes`.
 
 ### `reports` table
 
@@ -367,7 +368,7 @@ Two independent systems. Neither auto-writes to fields.
 
 **Triggered by:** "AI Suggest" button.
 
-Sends the raw narrative to `claude-3-5-haiku` → returns ~35 field suggestions as JSON. Displayed as yellow "Accept" chips. Accepting sets provenance to `analyst_filled`.
+Sends the raw narrative to `claude-sonnet-4-6` → returns ~35 field suggestions as JSON. Displayed as yellow "Accept" chips. Accepting sets provenance to `analyst_filled`.
 
 Also used for bulletin parsing (`/parse-bulletin`) when AI mode is selected.
 
@@ -537,8 +538,11 @@ Red Light Alert/
         ├── api.ts               ← All API calls (typed, centralized)
         ├── types.ts             ← Report, ReportStage, StagePatterns, …
         │
+        ├── context/
+        │   └── MapsContext.tsx      ← Google Maps API provider (wraps app to prevent script reload on navigation)
+        │
         ├── components/
-        │   ├── StageSequencer.tsx   ← Stage coding UI (NEW)
+        │   ├── StageSequencer.tsx   ← Stage coding UI
         │   ├── FieldRow.tsx         ← Single coded field
         │   ├── SectionPanel.tsx     ← Collapsible section with progress bar
         │   ├── TimelineStrip.tsx    ← Field-state timeline strip
@@ -548,6 +552,7 @@ Red Light Alert/
         │   └── ParseViewer.tsx      ← Bulletin parse preview
         │
         └── pages/
+            ├── LandingPage.tsx       ← Welcome / onboarding screen (/welcome)
             ├── CodingScreen.tsx      ← Main coding workspace (8 tabs)
             ├── CaseList.tsx          ← Case browser + filtering
             ├── Analysis.tsx          ← KPI statistics dashboard

@@ -224,6 +224,49 @@ export interface Report {
   // Harm classification — multi-harm support
   primary_harm: string;
   multi_harm_flag: string;
+
+  // Codability / Data Quality
+  narrative_detail_level: string;
+  sequence_reconstructable: string;
+  movement_coding_suitability: string;
+  location_coding_suitability: string;
+  main_data_limitation: string;
+  data_quality_notes: string;
+  initial_contact_visible: string;
+  negotiation_visible: string;
+  movement_visible: string;
+  violence_coercion_visible: string;
+  exit_aftermath_visible: string;
+
+  // Situation / Environment (case-level)
+  primary_setting_type: string;
+  specific_setting_type: string;
+  visibility_case: string;
+  isolation_case: string;
+  guardianship_case: string;
+  access_to_help: string;
+  setting_control: string;
+  other_people_nearby: string;
+  security_or_business_nearby: string;
+  environment_notes: string;
+  environment_supporting_excerpt: string;
+
+  // Mobility — additional pattern fields
+  movement_pattern_type: string;
+  movement_timing: string;
+
+  // Narrative excerpts — topic-specific
+  stage_excerpt: string;
+  behaviour_excerpt: string;
+  environment_excerpt: string;
+  movement_excerpt: string;
+  uncertainty_excerpt: string;
+
+  // Case summary
+  sequence_pattern: string;
+
+  // GIS — mappable status
+  mappable_status: string;
 }
 
 export interface ReportStage {
@@ -254,6 +297,9 @@ export interface ReportStage {
   coder_notes_stage: string;
   coding_confidence: string;
   temporal_sequence_note: string;
+  // Stage visibility (PhD methodology)
+  stage_visible: string;    // present|absent|unclear|not_applicable
+  stage_certainty: string;  // clear|partial|inferred|unclear|not_enough_information
 }
 
 export interface StagePatterns {
@@ -586,6 +632,36 @@ export interface DataQuality {
   with_harm_coded:        number;
 }
 
+export interface ValCount {
+  counts:      Record<string, number>;
+  total_coded: number;
+}
+
+export interface CodabilityAggregate {
+  narrative_detail_level:      ValCount;
+  sequence_reconstructable:    ValCount;
+  stage_coding_suitability:    ValCount;
+  movement_coding_suitability: ValCount;
+  location_coding_suitability: ValCount;
+  main_data_limitation:        ValCount;
+  initial_contact_visible:     ValCount;
+  negotiation_visible:         ValCount;
+  movement_visible:            ValCount;
+  violence_coercion_visible:   ValCount;
+  exit_aftermath_visible:      ValCount;
+  movement_pattern_type:       ValCount;
+  movement_timing:             ValCount;
+  mappable_status:             ValCount;
+  primary_setting_type:        ValCount;
+  visibility_case:             ValCount;
+  isolation_case:              ValCount;
+  guardianship_case:           ValCount;
+  access_to_help:              ValCount;
+  setting_control:             ValCount;
+  sequence_pattern:            ValCount;
+  highest_stage_reached:       ValCount;
+}
+
 export interface ResearchAggregate {
   sequences:    AggregateSequences;
   mobility:     AggregateMobility;
@@ -593,6 +669,7 @@ export interface ResearchAggregate {
   encounter:    AggregateEncounter;
   vawg:         AggregateVawg;
   data_quality: DataQuality;
+  codability:   CodabilityAggregate;
   total:        number;
 }
 

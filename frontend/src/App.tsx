@@ -12,6 +12,7 @@ import SimilarCasesPage from './pages/SimilarCasesPage';
 import LinkageScreen from './pages/LinkageScreen';
 import ResearchOutputs from './pages/ResearchOutputs';
 import BulletinOutput from './pages/BulletinOutput';
+import CodebookPage from './pages/CodebookPage';
 
 function AppLayout() {
   return (
@@ -45,6 +46,7 @@ export default function App() {
             <Route path="/import" element={<ImportBulletin />} />
             <Route path="/similar/:reportId" element={<SimilarCasesPage />} />
             <Route path="/linkage/:reportIdA/:reportIdB" element={<LinkageScreen />} />
+            <Route path="/codebook" element={<CodebookPage />} />
           </Route>
         </Routes>
       </ToastProvider>

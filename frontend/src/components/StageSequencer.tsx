@@ -494,7 +494,8 @@ function StageCard({
     stage.visibility || stage.guardianship || stage.isolation_level ||
     stage.control_type || stage.location_label || stage.spatial_precision ||
     stage.movement_impact || stage.able_to_leave ||
-    stage.coder_notes_stage || stage.coding_confidence || stage.temporal_sequence_note
+    stage.coder_notes_stage || stage.coding_confidence || stage.temporal_sequence_note ||
+    stage.stage_visible || stage.stage_certainty
   );
 
   return (
@@ -892,6 +893,39 @@ function StageCard({
                         background: 'var(--bg)', color: 'var(--text-1)',
                         resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box',
                       }}
+                    />
+                  </div>
+                  <div>
+                    <FieldLabel
+                      label="Stage Visible in Report"
+                      def="Is this stage visible in the narrative? Code only where supported by the report."
+                    />
+                    <StageSelect
+                      value={stage.stage_visible ?? ''}
+                      onChange={(v) => set({ stage_visible: v })}
+                      options={[
+                        { value: 'present',        label: 'Present — supported by narrative',  def: 'The stage is explicitly or clearly described in the report.' },
+                        { value: 'absent',         label: 'Absent — not described',            def: 'The stage is not described or referred to in the report.' },
+                        { value: 'unclear',        label: 'Unclear — insufficient detail',     def: 'The report refers to this stage but without enough detail to code it.' },
+                        { value: 'not_applicable', label: 'Not applicable',                    def: 'This stage does not apply to this type of encounter.' },
+                      ]}
+                    />
+                  </div>
+                  <div>
+                    <FieldLabel
+                      label="Stage Certainty"
+                      def="How confident are you that this stage is correctly identified and sequenced?"
+                    />
+                    <StageSelect
+                      value={stage.stage_certainty ?? ''}
+                      onChange={(v) => set({ stage_certainty: v })}
+                      options={[
+                        { value: 'clear',                  label: 'Clear — explicitly stated',          def: 'The stage is stated directly and unambiguously in the report.' },
+                        { value: 'partial',                label: 'Partial — mostly supported',         def: 'Most elements of the stage are supported but some detail is missing.' },
+                        { value: 'inferred',               label: 'Inferred — implied but not stated',  def: 'The stage is implied by context but not directly described.' },
+                        { value: 'unclear',                label: 'Unclear — significant ambiguity',    def: 'The stage cannot be confidently identified due to ambiguous or conflicting information.' },
+                        { value: 'not_enough_information', label: 'Not enough information',             def: 'The report does not contain enough information to assess this stage.' },
+                      ]}
                     />
                   </div>
                 </div>

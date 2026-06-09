@@ -1,6 +1,6 @@
 import { type ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
-import { Upload, LayoutList, Map, FlaskConical, FileText, Code2, Compass } from 'lucide-react';
+import { Upload, LayoutList, Map, FlaskConical, FileText, Code2, BarChart3, BookOpen } from 'lucide-react';
 
 interface Props { children: ReactNode; }
 
@@ -30,13 +30,14 @@ export default function Layout({ children }: Props) {
 
         {/* Nav */}
         <nav style={{ display: 'flex', gap: 1, flex: 1 }}>
-          <NavItem to="/analysis" icon={<Compass size={13} />}    label="Overview" />
           <NavItem to="/cases"    icon={<LayoutList size={13} />} label="Cases" />
-          <NavItem to="/code"     icon={<Code2 size={13} />}      label="Code" exact />
-          <NavItem to="/map"      icon={<Map size={13} />}        label="Map" />
-          <NavItem to="/research" icon={<FlaskConical size={13} />} label="Research" />
-          <NavItem to="/bulletin" icon={<FileText size={13} />}   label="Bulletin" />
-          <NavItem to="/import"   icon={<Upload size={13} />}     label="Import" />
+          <NavItem to="/code"     icon={<Code2 size={13} />}      label="Coding Workspace" exact />
+          <NavItem to="/import"   icon={<Upload size={13} />}     label="Import Data" />
+          <NavItem to="/analysis" icon={<BarChart3 size={13} />}  label="Analysis Dashboard" />
+          <NavItem to="/map"      icon={<Map size={13} />}        label="Map / GIS" />
+          <NavItem to="/research" icon={<FlaskConical size={13} />} label="Research Outputs" />
+          <NavItem to="/bulletin" icon={<FileText size={13} />}   label="Case Comparison" />
+          <NavItem to="/codebook" icon={<BookOpen size={13} />}   label="Codebook" />
         </nav>
 
         {/* Right tagline */}

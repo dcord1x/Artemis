@@ -933,6 +933,56 @@ function SummaryTab({ fields, analystName, analystSummary, tags, reportId }: {
         )}
       </div>
 
+      {/* Encounter Sequence Output */}
+      <SummarySectionBox title="Encounter Sequence Output">
+        <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 10, lineHeight: 1.55, borderLeft: '2px solid var(--border)', paddingLeft: 8 }}>
+          This section shows what the case becomes after coding. The auto-generated chain is derived from encounter fields.
+          The sequence pattern is the analyst-written summary of the full coded sequence.
+          Missing or unclear stages do not mean those stages did not occur — use the coding limitations field to document what the report could not support.
+        </div>
+        {/* Stage coding suitability + reconstructability */}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+          {fields.stage_coding_suitability && (
+            <span style={{ fontSize: 11.5, fontWeight: 600, padding: '2px 9px', borderRadius: 5,
+              background: 'var(--surface-2)', color: 'var(--text-2)', border: '1px solid var(--border)' }}>
+              Stage coding: {fields.stage_coding_suitability as string}
+            </span>
+          )}
+          {fields.sequence_reconstructable && (
+            <span style={{ fontSize: 11.5, fontWeight: 600, padding: '2px 9px', borderRadius: 5,
+              background: 'var(--surface-2)', color: 'var(--text-2)', border: '1px solid var(--border)' }}>
+              Sequence reconstructable: {fields.sequence_reconstructable as string}
+            </span>
+          )}
+          {fields.narrative_detail_level && (
+            <span style={{ fontSize: 11.5, fontWeight: 600, padding: '2px 9px', borderRadius: 5,
+              background: 'var(--surface-2)', color: 'var(--text-2)', border: '1px solid var(--border)' }}>
+              Narrative detail: {fields.narrative_detail_level as string}
+            </span>
+          )}
+        </div>
+        {/* Analyst-written sequence pattern */}
+        {fields.sequence_pattern ? (
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-3)', marginBottom: 4 }}>Coded sequence pattern</div>
+            <div style={{ fontSize: 12.5, color: 'var(--text-1)', lineHeight: 1.55, whiteSpace: 'pre-wrap', borderLeft: '2px solid var(--accent, #3B82F6)', paddingLeft: 10 }}>
+              {fields.sequence_pattern as string}
+            </div>
+          </div>
+        ) : (
+          <div style={{ fontSize: 12, color: 'var(--text-3)', fontStyle: 'italic', marginBottom: 8 }}>
+            No sequence pattern entered yet — add in the Narrative Excerpts tab.
+          </div>
+        )}
+        {/* Coding limitations */}
+        {fields.main_data_limitation && (fields.main_data_limitation as string) !== 'none apparent' && (
+          <div style={{ padding: '6px 10px', borderRadius: 5, background: 'var(--amber-pale)', border: '1px solid var(--amber-border)', fontSize: 11.5, color: 'var(--amber)', marginTop: 4 }}>
+            <strong style={{ fontWeight: 600 }}>Coding limitation:</strong> {fields.main_data_limitation as string}
+            {fields.data_quality_notes && <span style={{ marginLeft: 6, color: 'var(--text-3)' }}>— {(fields.data_quality_notes as string).slice(0, 200)}</span>}
+          </div>
+        )}
+      </SummarySectionBox>
+
       {/* Row A: Harm | Suspect + Vehicle */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
         <SummarySectionBox title="Harm Indicators">
@@ -1161,7 +1211,7 @@ function SummaryTab({ fields, analystName, analystSummary, tags, reportId }: {
   );
 }
 
-type Section = 'basics' | 'stages' | 'encounter' | 'mobility' | 'suspect' | 'narrative' | 'gis' | 'summary';
+type Section = 'basics' | 'codability' | 'stages' | 'encounter' | 'mobility' | 'suspect' | 'narrative' | 'gis' | 'summary';
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; border: string }> = {
   uncoded:     { label: 'Uncoded',     color: 'var(--text-3)',  bg: 'var(--surface-2)', border: 'var(--border)' },
@@ -1324,6 +1374,23 @@ export default function CodingScreen() {
           'initial_contact_geocoding_status','incident_geocoding_status','destination_geocoding_status',
           // Harm classification
           'primary_harm','multi_harm_flag',
+          // Codability / Data Quality
+          'narrative_detail_level','sequence_reconstructable','movement_coding_suitability',
+          'location_coding_suitability','main_data_limitation','data_quality_notes',
+          'initial_contact_visible','negotiation_visible','movement_visible',
+          'violence_coercion_visible','exit_aftermath_visible',
+          // Situation / Environment
+          'primary_setting_type','specific_setting_type','visibility_case','isolation_case',
+          'guardianship_case','access_to_help','setting_control','other_people_nearby',
+          'security_or_business_nearby','environment_notes','environment_supporting_excerpt',
+          // Mobility pattern
+          'movement_pattern_type','movement_timing',
+          // Narrative excerpts
+          'stage_excerpt','behaviour_excerpt','environment_excerpt','movement_excerpt','uncertainty_excerpt',
+          // Case summary
+          'sequence_pattern',
+          // GIS mappable status
+          'mappable_status',
         ];
         const f: Partial<Report> = {};
         for (const k of fieldKeys) f[k] = r[k] as any;
@@ -2189,14 +2256,15 @@ export default function CodingScreen() {
             overflowX: 'auto',
           }}>
             {([
-              ['basics', 'Basics', ['incident_date','city','neighbourhood','indoor_outdoor','public_private','deserted','incident_time_exact','day_of_week','destination_known','location_certainty','initial_contact_city','incident_city','destination_city']],
-              ['stages', 'Stages', []],
-              ['encounter', 'Encounter', ['initial_approach_type','negotiation_present','refusal_present','pressure_after_refusal','coercion_present','threats_present','verbal_abuse','physical_force','sexual_assault','robbery_theft','stealthing','repeated_pressure','intimidation_present','abrupt_tone_change','verbal_abuse_before_violence']],
-              ['mobility', 'Mobility', ['movement_present','movement_attempted','mode_of_movement','entered_vehicle','public_to_private_shift','public_to_secluded_shift','cross_neighbourhood','cross_municipality','cross_city_movement','offender_control_over_movement','movement_completed','who_controlled_movement','movement_confidence']],
-              ['suspect', 'Suspect', ['suspect_gender','suspect_age_estimate','vehicle_present','vehicle_make','vehicle_year','vehicle_model','vehicle_colour','plate_partial']],
-              ['narrative', 'Narrative', ['highest_stage_reached','turning_point','escalation_point','resolution_endpoint','summary_analytic','key_quotes','coder_notes']],
-              ['gis', 'GIS', ['initial_contact_address_raw','incident_address_raw','initial_contact_confidence','incident_confidence','destination_confidence']],
-              ['summary', 'Summary', ['initial_approach_type','negotiation_present','refusal_present','pressure_after_refusal','coercion_present','threats_present','physical_force','sexual_assault','robbery_theft','exit_type','movement_present','entered_vehicle','public_to_private_shift','public_to_secluded_shift','indoor_outdoor','public_private']],
+              ['basics',      'Case Record',               ['incident_date','city','neighbourhood','indoor_outdoor','public_private','deserted','incident_time_exact','day_of_week','destination_known','location_certainty','initial_contact_city','incident_city','destination_city']],
+              ['codability',  'Codability / Data Quality', ['narrative_detail_level','sequence_reconstructable','stage_coding_suitability','movement_coding_suitability','location_coding_suitability','main_data_limitation']],
+              ['stages',      'Stage Coding',              []],
+              ['encounter',   'Incident-Level Coding',     ['initial_approach_type','negotiation_present','refusal_present','pressure_after_refusal','coercion_present','threats_present','verbal_abuse','physical_force','sexual_assault','robbery_theft','stealthing','repeated_pressure','intimidation_present','abrupt_tone_change','verbal_abuse_before_violence']],
+              ['mobility',    'Mobility / Spatial Sequence', ['movement_present','movement_attempted','mode_of_movement','entered_vehicle','public_to_private_shift','public_to_secluded_shift','cross_neighbourhood','cross_municipality','cross_city_movement','offender_control_over_movement','movement_completed','who_controlled_movement','movement_confidence']],
+              ['suspect',     'Suspect / Vehicle',         ['suspect_gender','suspect_age_estimate','vehicle_present','vehicle_make','vehicle_year','vehicle_model','vehicle_colour','plate_partial']],
+              ['narrative',   'Narrative Excerpts',        ['highest_stage_reached','turning_point','escalation_point','resolution_endpoint','summary_analytic','key_quotes','coder_notes']],
+              ['gis',         'GIS',                       ['initial_contact_address_raw','incident_address_raw','initial_contact_confidence','incident_confidence','destination_confidence']],
+              ['summary',     'Case Summary',              ['initial_approach_type','negotiation_present','refusal_present','pressure_after_refusal','coercion_present','threats_present','physical_force','sexual_assault','robbery_theft','exit_type','movement_present','entered_vehicle','public_to_private_shift','public_to_secluded_shift','indoor_outdoor','public_private']],
             ] as [Section, string, string[]][]).map(([sec, label, keys]) => {
               const filled = keys.filter(k => { const v = fields[k as keyof Report]; return v !== null && v !== undefined && String(v).trim() !== ''; }).length;
               return (
@@ -2231,6 +2299,9 @@ export default function CodingScreen() {
 
             {activeTab === 'basics' && (
               <div style={{ marginBottom: 12 }}>
+                <div style={{ marginBottom: 14, padding: '10px 14px', borderRadius: 6, background: 'var(--surface-2)', border: '1px solid var(--border)', fontSize: 12, color: 'var(--text-2)', fontStyle: 'italic', lineHeight: 1.5 }}>
+                  This tab preserves the original report and basic case details. Analytical coding is completed in the following tabs.
+                </div>
                 <SectionPanel title="Date & Time" fieldKeys={['incident_date','incident_time_exact','incident_time_range','day_of_week']} fields={fields}>
                   <FieldRow label="Incident date" value={f('incident_date')} onChange={(v) => set('incident_date', v)} suggested={s('incident_date')} onAcceptSuggestion={() => acceptSuggestion('incident_date')} placeholder="YYYY-MM-DD" provenance={prov('incident_date')} onMarkReviewed={() => markReviewed('incident_date')}
                     badge={showNlpChips ? <DateCertaintyBadge certainty={nlp.date_certainty ?? ''} reason={nlp.date_certainty_reason} /> : undefined}
@@ -2334,8 +2405,39 @@ export default function CodingScreen() {
               </div>
             )}
 
+            {activeTab === 'codability' && (
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ marginBottom: 14, padding: '10px 14px', borderRadius: 6, background: 'var(--surface-2)', border: '1px solid var(--border)', fontSize: 12, color: 'var(--text-2)', lineHeight: 1.5 }}>
+                  This section records what the report makes visible. Missing or unclear information must not be treated as evidence that a stage or behaviour did not occur.
+                </div>
+                <SectionPanel title="Narrative Detail" fieldKeys={['narrative_detail_level','sequence_reconstructable']} fields={fields}>
+                  <FieldRow label="Narrative detail level" value={f('narrative_detail_level')} onChange={(v) => set('narrative_detail_level', v)} type="select" options={['low','moderate','high','not reviewed']} provenance={prov('narrative_detail_level')} onMarkReviewed={() => markReviewed('narrative_detail_level')} />
+                  <FieldRow label="Sequence reconstructable" value={f('sequence_reconstructable')} onChange={(v) => set('sequence_reconstructable', v)} type="select" options={['yes','partial','no','unclear','not reviewed']} provenance={prov('sequence_reconstructable')} onMarkReviewed={() => markReviewed('sequence_reconstructable')} />
+                </SectionPanel>
+                <SectionPanel title="Coding Suitability" fieldKeys={['stage_coding_suitability','movement_coding_suitability','location_coding_suitability','main_data_limitation']} fields={fields}>
+                  <FieldRow label="Stage coding suitability" value={f('stage_coding_suitability')} onChange={(v) => set('stage_coding_suitability', v)} type="select" options={['full staged coding','partial staged coding','incident-level coding only','not suitable','not reviewed']} provenance={prov('stage_coding_suitability')} onMarkReviewed={() => markReviewed('stage_coding_suitability')} />
+                  <FieldRow label="Movement coding suitability" value={f('movement_coding_suitability')} onChange={(v) => set('movement_coding_suitability', v)} type="select" options={['full','partial','limited','not suitable','not reviewed']} provenance={prov('movement_coding_suitability')} onMarkReviewed={() => markReviewed('movement_coding_suitability')} />
+                  <FieldRow label="Location coding suitability" value={f('location_coding_suitability')} onChange={(v) => set('location_coding_suitability', v)} type="select" options={['mappable','approximate','descriptive only','not mappable','not reviewed']} provenance={prov('location_coding_suitability')} onMarkReviewed={() => markReviewed('location_coding_suitability')} />
+                  <FieldRow label="Main data limitation" value={f('main_data_limitation')} onChange={(v) => set('main_data_limitation', v)} type="select" options={['brief narrative','vague location','unclear sequence','warning-only report','third-party report','missing date/time','missing movement detail','missing incident detail','other','none apparent']} provenance={prov('main_data_limitation')} onMarkReviewed={() => markReviewed('main_data_limitation')} />
+                </SectionPanel>
+                <SectionPanel title="Stage Visibility" fieldKeys={['initial_contact_visible','negotiation_visible','movement_visible','violence_coercion_visible','exit_aftermath_visible']} fields={fields}>
+                  <FieldRow label="Initial contact visible" value={f('initial_contact_visible')} onChange={(v) => set('initial_contact_visible', v)} type="select" options={['yes','no','unclear']} provenance={prov('initial_contact_visible')} onMarkReviewed={() => markReviewed('initial_contact_visible')} />
+                  <FieldRow label="Negotiation visible" value={f('negotiation_visible')} onChange={(v) => set('negotiation_visible', v)} type="select" options={['yes','no','unclear']} provenance={prov('negotiation_visible')} onMarkReviewed={() => markReviewed('negotiation_visible')} />
+                  <FieldRow label="Movement visible" value={f('movement_visible')} onChange={(v) => set('movement_visible', v)} type="select" options={['yes','no','unclear']} provenance={prov('movement_visible')} onMarkReviewed={() => markReviewed('movement_visible')} />
+                  <FieldRow label="Violence / coercion visible" value={f('violence_coercion_visible')} onChange={(v) => set('violence_coercion_visible', v)} type="select" options={['yes','no','unclear']} provenance={prov('violence_coercion_visible')} onMarkReviewed={() => markReviewed('violence_coercion_visible')} />
+                  <FieldRow label="Exit / aftermath visible" value={f('exit_aftermath_visible')} onChange={(v) => set('exit_aftermath_visible', v)} type="select" options={['yes','no','unclear']} provenance={prov('exit_aftermath_visible')} onMarkReviewed={() => markReviewed('exit_aftermath_visible')} />
+                </SectionPanel>
+                <SectionPanel title="Data Quality Notes" fieldKeys={['data_quality_notes']} fields={fields}>
+                  <FieldRow label="Data quality notes" value={f('data_quality_notes')} onChange={(v) => set('data_quality_notes', v)} type="textarea" provenance={prov('data_quality_notes')} onMarkReviewed={() => markReviewed('data_quality_notes')} />
+                </SectionPanel>
+              </div>
+            )}
+
             {activeTab === 'stages' && (
               <div style={{ marginBottom: 12 }}>
+                <div style={{ marginBottom: 14, padding: '10px 14px', borderRadius: 6, background: 'var(--surface-2)', border: '1px solid var(--border)', fontSize: 12, color: 'var(--text-2)', lineHeight: 1.5 }}>
+                  This tab codes which parts of the encounter sequence are visible in the report. Stages are coded only where supported by the narrative. Stages may be present, absent, unclear or not applicable.
+                </div>
                 {reportId ? (
                   <StageSequencer reportId={reportId} />
                 ) : (
@@ -2348,9 +2450,9 @@ export default function CodingScreen() {
 
             {activeTab === 'encounter' && (
               <div style={{ marginBottom: 12 }}>
-                <p style={{ fontSize: 12.5, color: 'var(--text-3)', fontStyle: 'italic', margin: '0 0 12px 0', padding: '8px 10px', background: 'var(--surface-2)', borderRadius: 4, borderLeft: '3px solid var(--border-mid)' }}>
-                  This tab captures whole-incident indicators. Use the Stages tab to code when and how behaviours occurred across the encounter.
-                </p>
+                <div style={{ marginBottom: 14, padding: '10px 14px', borderRadius: 6, background: 'var(--surface-2)', border: '1px solid var(--border)', fontSize: 12, color: 'var(--text-2)', lineHeight: 1.5 }}>
+                  This tab records case-level indicators that appear anywhere in the report. Timing should be coded in Stage Coding where the narrative allows.
+                </div>
 
                 <SectionPanel title="Incident Overview" fieldKeys={['primary_incident_type','overall_severity','overall_incident_summary','stage_coding_suitability','sequence_clarity']} fields={fields}>
                   <FieldRow label="Primary incident type" value={f('primary_incident_type')} onChange={(v) => set('primary_incident_type', v)} type="select" options={['suspicious / concerning behaviour','non-payment / payment dispute','coercion / intimidation','physical violence','sexual violence','robbery / theft','substance-facilitated harm','movement / relocation concern','multiple harms','other','unknown / unclear']} provenance={prov('primary_incident_type')} onMarkReviewed={() => markReviewed('primary_incident_type')} />
@@ -2400,7 +2502,24 @@ export default function CodingScreen() {
                   <FieldRow label="Escalation trigger" value={f('escalation_trigger')} onChange={(v) => set('escalation_trigger', v)} type="textarea" placeholder="What triggered escalation? e.g. refusal, payment dispute, boundary setting, request to leave, condom refusal, relocation, disagreement over service." provenance={prov('escalation_trigger')} onMarkReviewed={() => markReviewed('escalation_trigger')} />
                 </SectionPanel>
 
-                <SectionPanel title="VAWG / Exploitation and Public Safety Flags" fieldKeys={['trafficking_exploitation_concern','third_party_control_indicated','worker_appears_controlled','client_connected_to_controller','movement_to_unknown_unsafe_location','worker_unaware_how_arrived','grooming_recruitment_concern','repeat_targeting_concern','multiple_women_referenced','organized_group_offending_concern','public_safety_bulletin_suitability','public_safety_urgency_level','vawg_exploitation_notes','vawg_key_excerpts']} fields={fields}>
+                <SectionPanel title="Situation / Environment" fieldKeys={['primary_setting_type','specific_setting_type','visibility_case','isolation_case','guardianship_case','access_to_help','setting_control','other_people_nearby','security_or_business_nearby','environment_notes','environment_supporting_excerpt']} fields={fields}>
+                  <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: '0 0 10px 0', lineHeight: 1.5 }}>
+                    This section operationalises the immediate conditions surrounding the encounter, including visibility, isolation, guardianship, access to assistance and control over the setting.
+                  </p>
+                  <FieldRow label="Primary setting type" value={f('primary_setting_type')} onChange={(v) => set('primary_setting_type', v)} type="select" options={['indoor','outdoor','mobile','mixed','unclear','not stated']} provenance={prov('primary_setting_type')} onMarkReviewed={() => markReviewed('primary_setting_type')} />
+                  <FieldRow label="Specific setting type" value={f('specific_setting_type')} onChange={(v) => set('specific_setting_type', v)} type="select" options={['street','alley/lane','park/open space','vehicle','residence','hotel/motel','business/commercial','parking lot','industrial area','transit hub','SRO','shelter/hostel','support service','other','unknown']} provenance={prov('specific_setting_type')} onMarkReviewed={() => markReviewed('specific_setting_type')} />
+                  <FieldRow label="Visibility" value={f('visibility_case')} onChange={(v) => set('visibility_case', v)} type="select" options={['visible','limited visibility','not visible','unclear','not stated']} provenance={prov('visibility_case')} onMarkReviewed={() => markReviewed('visibility_case')} />
+                  <FieldRow label="Isolation" value={f('isolation_case')} onChange={(v) => set('isolation_case', v)} type="select" options={['not isolated','partially isolated','isolated','unclear','not stated']} provenance={prov('isolation_case')} onMarkReviewed={() => markReviewed('isolation_case')} />
+                  <FieldRow label="Guardianship" value={f('guardianship_case')} onChange={(v) => set('guardianship_case', v)} type="select" options={['present','limited/reduced','absent','unclear','not stated']} provenance={prov('guardianship_case')} onMarkReviewed={() => markReviewed('guardianship_case')} />
+                  <FieldRow label="Access to help" value={f('access_to_help')} onChange={(v) => set('access_to_help', v)} type="select" options={['apparent','limited','absent','unclear','not stated']} provenance={prov('access_to_help')} onMarkReviewed={() => markReviewed('access_to_help')} />
+                  <FieldRow label="Setting control" value={f('setting_control')} onChange={(v) => set('setting_control', v)} type="select" options={['worker-controlled','client-controlled','shared','unclear','not stated']} provenance={prov('setting_control')} onMarkReviewed={() => markReviewed('setting_control')} />
+                  <FieldRow label="Other people nearby" value={f('other_people_nearby')} onChange={(v) => set('other_people_nearby', v)} type="select" options={['yes','no','unclear']} provenance={prov('other_people_nearby')} onMarkReviewed={() => markReviewed('other_people_nearby')} />
+                  <FieldRow label="Security / business nearby" value={f('security_or_business_nearby')} onChange={(v) => set('security_or_business_nearby', v)} type="select" options={['yes','no','unclear']} provenance={prov('security_or_business_nearby')} onMarkReviewed={() => markReviewed('security_or_business_nearby')} />
+                  <FieldRow label="Environment notes" value={f('environment_notes')} onChange={(v) => set('environment_notes', v)} type="textarea" provenance={prov('environment_notes')} onMarkReviewed={() => markReviewed('environment_notes')} />
+                  <FieldRow label="Environment supporting excerpt" value={f('environment_supporting_excerpt')} onChange={(v) => set('environment_supporting_excerpt', v)} type="textarea" provenance={prov('environment_supporting_excerpt')} onMarkReviewed={() => markReviewed('environment_supporting_excerpt')} />
+                </SectionPanel>
+
+                <SectionPanel title="Supplementary Public Safety Flags" fieldKeys={['trafficking_exploitation_concern','third_party_control_indicated','worker_appears_controlled','client_connected_to_controller','movement_to_unknown_unsafe_location','worker_unaware_how_arrived','grooming_recruitment_concern','repeat_targeting_concern','multiple_women_referenced','organized_group_offending_concern','public_safety_bulletin_suitability','public_safety_urgency_level','vawg_exploitation_notes','vawg_key_excerpts']} fields={fields} defaultCollapsed>
                   <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '0 0 12px 0', lineHeight: 1.5 }}>
                     Violence Against Women and Girls indicators relevant to exploitation, coercive control, trafficking concerns, repeat offending, escalation, and public safety review. Code at whole-incident level — timing details belong in Stages.
                   </p>
@@ -2424,6 +2543,9 @@ export default function CodingScreen() {
 
             {activeTab === 'mobility' && (
               <div style={{ marginBottom: 12 }}>
+                <div style={{ marginBottom: 14, padding: '10px 14px', borderRadius: 6, background: 'var(--surface-2)', border: '1px solid var(--border)', fontSize: 12, color: 'var(--text-2)', lineHeight: 1.5 }}>
+                  This tab codes whether the encounter moved, how it moved, who controlled movement and whether movement changed visibility, isolation, access to help or client control.
+                </div>
                 {/* A. Movement present */}
                 <SectionPanel title="Movement Present" fieldKeys={['movement_present']} fields={fields}>
                   <FieldRow label="Movement present" value={f('movement_present')} onChange={(v) => set('movement_present', v)} type="yesno-extended" suggested={s('movement_present')} onAcceptSuggestion={() => acceptSuggestion('movement_present')} provenance={prov('movement_present')} onMarkReviewed={() => markReviewed('movement_present')} badge={showNlpChips ? <NlpBadge rank={nlp.movement_rank ?? 3} evidence={nlp.movement_evidence ?? []} fieldValue={f('movement_present')} /> : undefined} />
@@ -2467,7 +2589,13 @@ export default function CodingScreen() {
                   </SectionPanel>
                 )}
 
-                {/* E. Confidence and notes */}
+                {/* E. Movement pattern classification */}
+                <SectionPanel title="Movement Pattern" fieldKeys={['movement_pattern_type','movement_timing']} fields={fields}>
+                  <FieldRow label="Movement pattern type" value={f('movement_pattern_type')} onChange={(v) => set('movement_pattern_type', v)} type="select" options={['no movement described','movement unclear','movement within same area','public/street to vehicle','public/street to secluded outdoor location','public/street to residence/private indoor location','vehicle-based encounter','movement across neighbourhood','movement across municipality','post-incident drop-off/stranding','multiple-stage movement','other']} provenance={prov('movement_pattern_type')} onMarkReviewed={() => markReviewed('movement_pattern_type')} />
+                  <FieldRow label="Movement timing" value={f('movement_timing')} onChange={(v) => set('movement_timing', v)} type="select" options={['before negotiation','after negotiation','before escalation','during escalation','during/after violence','post-incident','unclear','not applicable']} provenance={prov('movement_timing')} onMarkReviewed={() => markReviewed('movement_timing')} />
+                </SectionPanel>
+
+                {/* F. Confidence and notes */}
                 <SectionPanel title="Confidence and Notes" fieldKeys={['movement_confidence','basis_for_movement_coding','movement_notes']} fields={fields} defaultCollapsed>
                   <FieldRow label="Movement confidence" value={f('movement_confidence')} onChange={(v) => set('movement_confidence', v)} type="select" options={['high','medium','low','unclear']} provenance={prov('movement_confidence')} onMarkReviewed={() => markReviewed('movement_confidence')} />
                   <FieldRow label="Basis for movement coding" value={f('basis_for_movement_coding')} onChange={(v) => set('basis_for_movement_coding', v)} type="select" options={['explicit narrative statement','inferred from sequence','inferred from addresses / GIS','NLP suggestion only','unclear']} provenance={prov('basis_for_movement_coding')} onMarkReviewed={() => markReviewed('basis_for_movement_coding')} />
@@ -2478,6 +2606,9 @@ export default function CodingScreen() {
 
             {activeTab === 'suspect' && (
               <div style={{ marginBottom: 12 }}>
+                <div style={{ marginBottom: 14, padding: '10px 14px', borderRadius: 6, background: 'var(--surface-2)', border: '1px solid var(--border)', fontSize: 12, color: 'var(--text-2)', lineHeight: 1.5 }}>
+                  This tab records suspect and vehicle information where it supports case comparison, repeat-client identification, vehicle involvement or movement analysis.
+                </div>
                 <SectionPanel title="Suspect Description" fieldKeys={['suspect_count','suspect_gender','suspect_description_text','suspect_race_ethnicity','suspect_age_estimate','suspect_distinctive_features','suspect_clothing','suspect_speech_notes','suspect_behavioural_descriptors','known_repeat_suspect','repeat_suspect_flag']} fields={fields} noAutoCollapse>
                   <FieldRow label="Suspect count" value={f('suspect_count')} onChange={(v) => set('suspect_count', v)} suggested={s('suspect_count')} onAcceptSuggestion={() => acceptSuggestion('suspect_count')} provenance={prov('suspect_count')} onMarkReviewed={() => markReviewed('suspect_count')} />
                   <FieldRow label="Suspect gender" value={f('suspect_gender')} onChange={(v) => set('suspect_gender', v)} suggested={s('suspect_gender')} onAcceptSuggestion={() => acceptSuggestion('suspect_gender')} provenance={prov('suspect_gender')} onMarkReviewed={() => markReviewed('suspect_gender')} />
@@ -2510,7 +2641,7 @@ export default function CodingScreen() {
                   )}
                 </SectionPanel>
 
-                <SectionPanel title="Concern Flags" fieldKeys={['concern_trafficking','concern_third_party_control','concern_grooming','concern_organized_offending','concern_repeat_suspect','concern_repeat_vehicle','concern_urgent_public_safety','concern_bulletin_suitable','concern_flag_rationale']} fields={fields}>
+                <SectionPanel title="Supplementary Concern Flags" fieldKeys={['concern_trafficking','concern_third_party_control','concern_grooming','concern_organized_offending','concern_repeat_suspect','concern_repeat_vehicle','concern_urgent_public_safety','concern_bulletin_suitable','concern_flag_rationale']} fields={fields} defaultCollapsed>
                   <div style={{ fontSize: 11.5, color: 'var(--text-3)', padding: '4px 0 10px', lineHeight: 1.55 }}>
                     Code each concern flag as <strong>yes, no, unclear, probable, inferred,</strong> or <strong>unknown</strong>.
                     Leave blank if the field has not yet been reviewed.
@@ -2537,12 +2668,10 @@ export default function CodingScreen() {
 
             {activeTab === 'narrative' && (
               <div style={{ marginBottom: 12 }}>
-                <NlpSignalsPanel nlp={nlp} onSetField={(field, value) => set(field as keyof Report, value)} reportId={report?.report_id} getFieldValue={(field) => f(field as keyof Report)} />
-                <EscalationArc esc={nlp.escalation ?? {}} />
-                <WeatherCard w={weather} />
-                {!isNew && (
-                  <ParseViewer narrative={narrative} reportId={report?.report_id} />
-                )}
+                <div style={{ marginBottom: 14, padding: '10px 14px', borderRadius: 6, background: 'var(--surface-2)', border: '1px solid var(--border)', fontSize: 12, color: 'var(--text-2)', lineHeight: 1.5 }}>
+                  Narrative excerpts are verbatim quotations that support specific coding decisions. Text scan outputs are suggestions only — coding decisions must be reviewed and confirmed by the analyst.
+                </div>
+
                 <MultiCheckboxField
                   label="Highest stages reached (select all that apply)"
                   value={f('highest_stage_reached')}
@@ -2574,15 +2703,43 @@ export default function CodingScreen() {
                   ) : null;
                 })()}
                 <FieldRow label="Analytic summary (coded)" value={f('summary_analytic')} onChange={(v) => set('summary_analytic', v)} type="textarea" suggested={s('summary_analytic')} onAcceptSuggestion={() => acceptSuggestion('summary_analytic')} placeholder="Brief coded summary of the sequence, turning point, and outcome. Do not add interpretation beyond the report." provenance={prov('summary_analytic')} onMarkReviewed={() => markReviewed('summary_analytic')} />
+                <FieldRow label="Encounter sequence pattern" value={f('sequence_pattern')} onChange={(v) => set('sequence_pattern', v)} type="textarea" placeholder="Describe the overall encounter sequence pattern as derived from coding. Example: contact → negotiation → refusal ignored → movement to vehicle → assault → abandoned at location. Distinct from the auto-generated chain — write this after reviewing all coded stages." provenance={prov('sequence_pattern')} onMarkReviewed={() => markReviewed('sequence_pattern')} helper="Used in Case Summary and cross-case comparison. Missing information must not be treated as absence — use 'unclear' or 'not enough information' for gaps." />
                 <FieldRow label="Key quotes" value={f('key_quotes')} onChange={(v) => set('key_quotes', v)} type="textarea" placeholder="Verbatim phrases from the report that justify coding." suggested={s('key_quotes')} onAcceptSuggestion={() => acceptSuggestion('key_quotes')} provenance={prov('key_quotes')} onMarkReviewed={() => markReviewed('key_quotes')} />
                 <FieldRow label="Coder notes" value={f('coder_notes')} onChange={(v) => set('coder_notes', v)} type="textarea" placeholder="Analyst observations about coding choices." provenance={prov('coder_notes')} onMarkReviewed={() => markReviewed('coder_notes')} />
                 <FieldRow label="Uncertainty notes" value={f('uncertainty_notes')} onChange={(v) => set('uncertainty_notes', v)} type="textarea" placeholder="Missing, conflicting, or ambiguous details." suggested={s('uncertainty_notes')} onAcceptSuggestion={() => acceptSuggestion('uncertainty_notes')} provenance={prov('uncertainty_notes')} onMarkReviewed={() => markReviewed('uncertainty_notes')} />
+
+                <SectionPanel title="Topic-Specific Excerpts" fieldKeys={['stage_excerpt','behaviour_excerpt','environment_excerpt','movement_excerpt','uncertainty_excerpt']} fields={fields} defaultCollapsed>
+                  <FieldRow label="Stage excerpt" value={f('stage_excerpt')} onChange={(v) => set('stage_excerpt', v)} type="textarea" placeholder="Verbatim text supporting stage coding." provenance={prov('stage_excerpt')} onMarkReviewed={() => markReviewed('stage_excerpt')} />
+                  <FieldRow label="Behaviour excerpt" value={f('behaviour_excerpt')} onChange={(v) => set('behaviour_excerpt', v)} type="textarea" placeholder="Verbatim text supporting behaviour coding." provenance={prov('behaviour_excerpt')} onMarkReviewed={() => markReviewed('behaviour_excerpt')} />
+                  <FieldRow label="Environment excerpt" value={f('environment_excerpt')} onChange={(v) => set('environment_excerpt', v)} type="textarea" placeholder="Verbatim text supporting environment / setting coding." provenance={prov('environment_excerpt')} onMarkReviewed={() => markReviewed('environment_excerpt')} />
+                  <FieldRow label="Movement excerpt" value={f('movement_excerpt')} onChange={(v) => set('movement_excerpt', v)} type="textarea" placeholder="Verbatim text supporting mobility coding." provenance={prov('movement_excerpt')} onMarkReviewed={() => markReviewed('movement_excerpt')} />
+                  <FieldRow label="Uncertainty excerpt" value={f('uncertainty_excerpt')} onChange={(v) => set('uncertainty_excerpt', v)} type="textarea" placeholder="Verbatim text illustrating ambiguity or data limitation." provenance={prov('uncertainty_excerpt')} onMarkReviewed={() => markReviewed('uncertainty_excerpt')} />
+                </SectionPanel>
+
+                <SectionPanel title="Optional Text Scan / Analyst Support" fieldKeys={[]} fields={fields} defaultCollapsed>
+                  <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginBottom: 10, fontStyle: 'italic' }}>
+                    Text scan outputs are suggestions only. Coding decisions must be reviewed and confirmed by the analyst.
+                  </div>
+                  <NlpSignalsPanel nlp={nlp} onSetField={(field, value) => set(field as keyof Report, value)} reportId={report?.report_id} getFieldValue={(field) => f(field as keyof Report)} />
+                  <EscalationArc esc={nlp.escalation ?? {}} />
+                  <WeatherCard w={weather} />
+                  {!isNew && (
+                    <ParseViewer narrative={narrative} reportId={report?.report_id} />
+                  )}
+                </SectionPanel>
               </div>
             )}
 
             {activeTab === 'gis' && (
               <div style={{ marginBottom: 12 }}>
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
+                <div style={{ marginBottom: 10, padding: '10px 14px', borderRadius: 6, background: 'var(--surface-2)', border: '1px solid var(--border)', fontSize: 12, color: 'var(--text-2)', lineHeight: 1.5 }}>
+                  GIS outputs reflect coded and geocoded fields only. Cases with vague or uncertain location information should be coded as approximate or not mappable rather than forced into precise spatial analysis.
+                </div>
+                <div style={{ marginBottom: 10, display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <div style={{ flex: 1 }}>
+                    <FieldRow label="Mappable status" value={f('mappable_status')} onChange={(v) => set('mappable_status', v)} type="select" options={['mappable','approximate','not mappable','withheld/sensitive','not reviewed']} provenance={prov('mappable_status')} onMarkReviewed={() => markReviewed('mappable_status')} />
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                   <button
                     onClick={() => setShowGisMap(true)}
                     style={{
@@ -2601,6 +2758,7 @@ export default function CodingScreen() {
                     </svg>
                     Open Map
                   </button>
+                  </div>
                 </div>
                 {([
                   {

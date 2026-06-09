@@ -1588,6 +1588,40 @@ def get_research_aggregate(db: Session = Depends(get_db)):
         )),
     }
 
+    def _val_counts(field: str) -> dict:
+        from collections import Counter
+        c: Counter = Counter()
+        for r in reports:
+            val = (getattr(r, field, None) or '').strip()
+            if val:
+                c[val] += 1
+        return {'counts': dict(c), 'total_coded': sum(c.values())}
+
+    codability = {
+        'narrative_detail_level':      _val_counts('narrative_detail_level'),
+        'sequence_reconstructable':    _val_counts('sequence_reconstructable'),
+        'stage_coding_suitability':    _val_counts('stage_coding_suitability'),
+        'movement_coding_suitability': _val_counts('movement_coding_suitability'),
+        'location_coding_suitability': _val_counts('location_coding_suitability'),
+        'main_data_limitation':        _val_counts('main_data_limitation'),
+        'initial_contact_visible':     _val_counts('initial_contact_visible'),
+        'negotiation_visible':         _val_counts('negotiation_visible'),
+        'movement_visible':            _val_counts('movement_visible'),
+        'violence_coercion_visible':   _val_counts('violence_coercion_visible'),
+        'exit_aftermath_visible':      _val_counts('exit_aftermath_visible'),
+        'movement_pattern_type':       _val_counts('movement_pattern_type'),
+        'movement_timing':             _val_counts('movement_timing'),
+        'mappable_status':             _val_counts('mappable_status'),
+        'primary_setting_type':        _val_counts('primary_setting_type'),
+        'visibility_case':             _val_counts('visibility_case'),
+        'isolation_case':              _val_counts('isolation_case'),
+        'guardianship_case':           _val_counts('guardianship_case'),
+        'access_to_help':              _val_counts('access_to_help'),
+        'setting_control':             _val_counts('setting_control'),
+        'sequence_pattern':            _val_counts('sequence_pattern'),
+        'highest_stage_reached':       _val_counts('highest_stage_reached'),
+    }
+
     return {
         'sequences':    aggregate_sequences(reports),
         'mobility':     aggregate_mobility(reports),
@@ -1595,6 +1629,7 @@ def get_research_aggregate(db: Session = Depends(get_db)):
         'encounter':    aggregate_encounter(reports),
         'vawg':         aggregate_vawg(reports),
         'data_quality': dq,
+        'codability':   codability,
         'total':        len(reports),
     }
 

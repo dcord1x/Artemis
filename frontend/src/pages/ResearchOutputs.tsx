@@ -152,6 +152,24 @@ function CrossTabCard({
   );
 }
 
+/** Small colour chip for table cells in filtered groups */
+function CellChip({ value, goodValues, warnValues, neutral }: {
+  value: string; goodValues: string[]; warnValues: string[]; neutral?: boolean;
+}) {
+  if (!value) return <span style={{ fontSize: 11, color: 'var(--text-3)', fontStyle: 'italic' }}>—</span>;
+  const v = value.toLowerCase();
+  let bg = 'var(--surface-3)', color = 'var(--text-3)', border = 'var(--border)';
+  if (!neutral) {
+    if (goodValues.some(g => v.includes(g.toLowerCase()))) { bg = '#22C55E14'; color = '#22C55E'; border = '#22C55E30'; }
+    else if (warnValues.some(w => v.includes(w.toLowerCase()))) { bg = '#F59E0B14'; color = '#F59E0B'; border = '#F59E0B30'; }
+  }
+  return (
+    <span style={{ fontSize: 10.5, fontWeight: 600, padding: '2px 6px', borderRadius: 3, background: bg, color, border: `1px solid ${border}`, whiteSpace: 'nowrap' }}>
+      {value}
+    </span>
+  );
+}
+
 /** Card wrapper */
 function Panel({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
   return (
@@ -611,18 +629,19 @@ function MovementRiskCard({ counts, total }: { counts: { movement_present: numbe
 
 // ── Tab types ─────────────────────────────────────────────────────────────────
 
-type Tab = 'encounter_overview' | 'vawg' | 'sequences' | 'mobility' | 'environment' | 'caselist' | 'stage_patterns' | 'spatial' | 'linkage_view';
+type Tab = 'encounter_overview' | 'vawg' | 'sequences' | 'mobility' | 'environment' | 'caselist' | 'stage_patterns' | 'spatial' | 'linkage_view' | 'filtered_groups';
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'encounter_overview', label: 'Encounter Overview' },
-  { id: 'vawg',               label: 'VAWG / Exploitation' },
-  { id: 'stage_patterns',     label: 'Stage Patterns' },
-  { id: 'sequences',          label: 'Encounter Sequences' },
-  { id: 'mobility',           label: 'Mobility Pathways' },
-  { id: 'environment',        label: 'Environmental Patterns' },
+  { id: 'encounter_overview', label: 'Coded Case Overview' },
+  { id: 'stage_patterns',     label: 'RQ1 — Stage Patterns' },
+  { id: 'sequences',          label: 'RQ1 — Encounter Sequences' },
+  { id: 'mobility',           label: 'RQ3 — Mobility Pathways' },
+  { id: 'environment',        label: 'RQ2 — Environmental Patterns' },
+  { id: 'filtered_groups',    label: 'Filtered Case Groups' },
   { id: 'spatial',            label: 'Spatial Overview' },
-  { id: 'linkage_view',       label: 'Case Linkage View' },
+  { id: 'linkage_view',       label: 'Case Comparison' },
   { id: 'caselist',           label: 'Case Sequence Table' },
+  { id: 'vawg',               label: 'Supplementary Flags' },
 ];
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -649,6 +668,11 @@ export default function ResearchOutputs() {
   const [caseFilterHarm, setCaseFilterHarm]         = useState('');
   const [caseFilterEsc, setCaseFilterEsc]           = useState('');
   const [caseFilterStages, setCaseFilterStages]     = useState('1+');
+
+  // Filtered case groups
+  const [fgReports, setFgReports]           = useState<import('../types').Report[]>([]);
+  const [fgLoading, setFgLoading]           = useState(false);
+  const [fgPreset, setFgPreset]             = useState('');
 
   // Linkage patterns
   const [linkageData, setLinkageData]       = useState<LinkagePatterns | null>(null);
@@ -1701,6 +1725,153 @@ export default function ResearchOutputs() {
 
   // ── Case list tab ─────────────────────────────────────────────────────────
 
+  // ── Filtered Case Groups tab ─────────────────────────────────────────────
+
+  const FG_PRESETS: { id: string; label: string; params: Record<string, string>; desc: string }[] = [
+    { id: 'high_detail',      label: 'High narrative detail',   params: { narrative_detail_level: 'high' },                desc: 'Reports coded as high narrative detail — best candidates for deep sequence analysis.' },
+    { id: 'seq_recon',        label: 'Sequence reconstructable', params: { sequence_reconstructable: 'yes' },              desc: 'Reports where the analyst marked the encounter sequence as reconstructable.' },
+    { id: 'stage_suitable',   label: 'Stage-coding suitable',   params: { stage_coding_suitability: 'yes' },               desc: 'Reports suitable for stage-level coding.' },
+    { id: 'with_movement',    label: 'Movement present',        params: { movement_present: 'yes' },                       desc: 'Reports where movement / relocation is recorded.' },
+    { id: 'mappable',         label: 'Mappable',                params: { mappable_status: 'mappable' },                   desc: 'Reports coded as spatially mappable.' },
+    { id: 'has_sequence_pattern', label: 'Has sequence pattern', params: { has_sequence_pattern: 'yes' },                  desc: 'Reports where the analyst has written a coded sequence pattern.' },
+    { id: 'coded',            label: 'All analyst-coded',       params: { coding_status: 'coded' },                        desc: 'All reports that have been analyst-reviewed and coded.' },
+  ];
+
+  const loadFgReports = (params: Record<string, string>) => {
+    setFgLoading(true);
+    api.listReports(params)
+      .then(rs => { setFgReports(rs); setFgLoading(false); })
+      .catch(() => setFgLoading(false));
+  };
+
+  const FilteredGroupsTab = () => {
+    const preset = FG_PRESETS.find(p => p.id === fgPreset);
+    return (
+      <Panel>
+        <SectionHeading>Filtered Case Groups</SectionHeading>
+        <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: '0 0 14px', lineHeight: 1.55 }}>
+          Select a preset group to load matching cases. Each row shows codability-relevant fields for fast cross-case review.
+          Click a case ID to open the coding workspace for that case.
+        </p>
+
+        {/* Preset buttons */}
+        <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginBottom: 16 }}>
+          {FG_PRESETS.map(p => (
+            <button
+              key={p.id}
+              onClick={() => { setFgPreset(p.id); loadFgReports(p.params); }}
+              style={{
+                padding: '6px 13px', fontSize: 12, border: `1px solid ${fgPreset === p.id ? 'var(--accent)' : 'var(--border)'}`,
+                borderRadius: 5, background: fgPreset === p.id ? 'var(--accent)' : 'var(--surface)',
+                color: fgPreset === p.id ? '#fff' : 'var(--text-2)', cursor: 'pointer', fontWeight: fgPreset === p.id ? 600 : 400,
+                transition: 'all 0.12s',
+              }}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+
+        {preset && (
+          <div style={{ fontSize: 11.5, color: 'var(--text-3)', padding: '7px 11px', background: 'var(--surface-2)', borderRadius: 5, border: '1px solid var(--border)', marginBottom: 14, lineHeight: 1.5 }}>
+            <strong style={{ color: 'var(--text-2)', fontWeight: 600 }}>{preset.label}:</strong> {preset.desc}
+          </div>
+        )}
+
+        {!fgPreset && (
+          <div style={{ fontSize: 12.5, color: 'var(--text-3)', fontStyle: 'italic', padding: '28px 0', textAlign: 'center' }}>
+            Select a case group above to load reports.
+          </div>
+        )}
+
+        {fgLoading && (
+          <div style={{ fontSize: 12.5, color: 'var(--text-3)', padding: '20px 0', textAlign: 'center' }}>
+            Loading…
+          </div>
+        )}
+
+        {!fgLoading && fgPreset && fgReports.length === 0 && (
+          <div style={{ fontSize: 12.5, color: 'var(--text-3)', fontStyle: 'italic', padding: '20px 0', textAlign: 'center' }}>
+            No cases match this group yet — code the relevant fields to populate.
+          </div>
+        )}
+
+        {!fgLoading && fgReports.length > 0 && (
+          <>
+            <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginBottom: 10 }}>
+              {fgReports.length} case{fgReports.length !== 1 ? 's' : ''}
+            </div>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                    {[
+                      'Case ID', 'Narrative detail', 'Seq. reconstructable', 'Stage suitability',
+                      'Sequence pattern', 'Primary harm', 'Movement pattern', 'Mappable', 'Key excerpt',
+                    ].map(h => (
+                      <th key={h} style={{ textAlign: 'left', padding: '6px 10px', fontSize: 10.5, color: 'var(--text-3)', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {fgReports.map(r => {
+                    const hasExcerpt = !!(r.stage_excerpt || r.behaviour_excerpt || r.environment_excerpt || r.movement_excerpt || r.key_supporting_excerpts);
+                    return (
+                      <tr
+                        key={r.id}
+                        style={{ borderBottom: '1px solid var(--border)', transition: 'background 0.1s', cursor: 'pointer' }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLTableRowElement).style.background = 'var(--surface-2)'; }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'; }}
+                        onClick={() => window.location.href = `/case/${r.report_id}`}
+                      >
+                        <td style={{ padding: '7px 10px', fontFamily: 'monospace', fontSize: 11, color: 'var(--accent)', fontWeight: 700 }}>{r.report_id}</td>
+                        <td style={{ padding: '7px 10px' }}>
+                          <CellChip value={r.narrative_detail_level} goodValues={['high']} warnValues={['medium']} />
+                        </td>
+                        <td style={{ padding: '7px 10px' }}>
+                          <CellChip value={r.sequence_reconstructable} goodValues={['yes']} warnValues={['partial']} />
+                        </td>
+                        <td style={{ padding: '7px 10px' }}>
+                          <CellChip value={r.stage_coding_suitability} goodValues={['yes']} warnValues={['partial']} />
+                        </td>
+                        <td style={{ padding: '7px 10px', maxWidth: 200 }}>
+                          {r.sequence_pattern ? (
+                            <span style={{ fontSize: 11.5, color: 'var(--text-2)', fontStyle: 'italic', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                              {r.sequence_pattern}
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: 11, color: 'var(--text-3)', fontStyle: 'italic' }}>—</span>
+                          )}
+                        </td>
+                        <td style={{ padding: '7px 10px', fontSize: 11.5, color: 'var(--text-2)' }}>
+                          {r.primary_harm || r.primary_incident_type || '—'}
+                        </td>
+                        <td style={{ padding: '7px 10px' }}>
+                          <CellChip value={r.movement_pattern_type} goodValues={[]} warnValues={[]} neutral />
+                        </td>
+                        <td style={{ padding: '7px 10px' }}>
+                          <CellChip value={r.mappable_status} goodValues={['mappable']} warnValues={['partial']} />
+                        </td>
+                        <td style={{ padding: '7px 10px' }}>
+                          {hasExcerpt
+                            ? <span style={{ fontSize: 10.5, fontWeight: 700, color: '#22C55E', background: '#22C55E14', padding: '2px 6px', borderRadius: 3, border: '1px solid #22C55E30' }}>Yes</span>
+                            : <span style={{ fontSize: 10.5, color: 'var(--text-3)', fontStyle: 'italic' }}>—</span>
+                          }
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </Panel>
+    );
+  };
+
   const CaseListTab = () => {
     const sortField = caseSort;
     const setSortField = setCaseSort;
@@ -2499,7 +2670,7 @@ export default function ResearchOutputs() {
               Research Outputs
             </h2>
             <p style={{ fontSize: 13, color: 'var(--text-3)', margin: 0, maxWidth: 560, lineHeight: 1.55 }}>
-              Exportable tables and summaries for dissertation analysis, sequence reconstruction, mobility pathways, and spatial intelligence.
+              Cross-case analysis outputs for dissertation research — stage sequences (RQ1), situational conditions (RQ2), and mobility patterns (RQ3). All outputs reflect analyst-coded cases only.
             </p>
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'flex-end' }}>
@@ -2508,21 +2679,21 @@ export default function ResearchOutputs() {
               <RefreshCw size={11} style={{ flexShrink: 0 }} /> Refresh
             </button>
             {([
-              { label: 'Export coded dataset CSV',  title: 'All coded cases as CSV — for quantitative analysis',             action: () => api.exportCsv()                   },
-              { label: 'Export case summaries',     title: 'Per-case summary CSV — narrative, harm, mobility, GIS',          action: () => api.exportCaseSummaries()         },
-              { label: 'Export stage sequences',    title: 'Stage sequences + transitions ZIP — for sequence analysis',      action: () => api.exportResearchTables()        },
-              { label: 'Export GeoJSON',            title: 'Geocoded points as GeoJSON — for QGIS / ArcGIS',                action: () => api.exportGeoJson()               },
-              { label: 'Export codebook',           title: 'Field definitions and allowed values — for methodology appendix',action: () => api.exportCodebook()              },
-              { label: 'Methodology summary',       title: 'Coding coverage report — for dissertation methods chapter',      action: () => api.exportMethodologySummary()    },
+              { label: 'Export coded cases (CSV)',    title: 'All coded cases as CSV — for quantitative analysis',             action: () => api.exportCsv()                   },
+              { label: 'Export case summaries',       title: 'Per-case summary CSV — narrative, harm, mobility, GIS',          action: () => api.exportCaseSummaries()         },
+              { label: 'Export stage sequences',      title: 'Stage sequences + transitions ZIP — for sequence analysis',      action: () => api.exportResearchTables()        },
+              { label: 'Export GeoJSON',              title: 'Geocoded points as GeoJSON — for QGIS / ArcGIS',                action: () => api.exportGeoJson()               },
+              { label: 'Export codebook',             title: 'Field definitions and allowed values — for methodology appendix',action: () => api.exportCodebook()              },
+              { label: 'Coding coverage report',      title: 'Coding coverage summary — for dissertation methods chapter',    action: () => api.exportMethodologySummary()    },
             ] as { label: string; title: string; action: () => void }[]).map(({ label, title, action }) => (
               <button key={label} onClick={action} title={title}
                 style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 11px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-2)', fontSize: 11.5, cursor: 'pointer', whiteSpace: 'nowrap' }}>
                 <Download size={11} style={{ flexShrink: 0 }} /> {label}
               </button>
             ))}
-            <button onClick={() => navigate('/bulletin')} title="Public safety bulletin review"
+            <button onClick={() => navigate('/bulletin')} title="Case comparison and cross-case review"
               style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 11px', borderRadius: 6, border: '1px solid var(--accent)', background: 'var(--accent-pale)', color: 'var(--accent)', fontSize: 11.5, cursor: 'pointer', fontWeight: 500, whiteSpace: 'nowrap' }}>
-              <FileText size={11} style={{ flexShrink: 0 }} /> Generate bulletin
+              <FileText size={11} style={{ flexShrink: 0 }} /> Case comparison
             </button>
           </div>
         </div>
@@ -2555,9 +2726,9 @@ export default function ResearchOutputs() {
               ],
             },
             {
-              label: 'Public safety coding',
+              label: 'Supplementary flags',
               items: [
-                ['VAWG flags coded',     dq.with_vawg_coded,        '#ef4444'],
+                ['Supplementary flags coded', dq.with_vawg_coded, '#ef4444'],
               ],
             },
           ];
@@ -2639,6 +2810,7 @@ export default function ResearchOutputs() {
         {tab === 'environment'     && <EnvironmentTab />}
         {tab === 'spatial'         && <SpatialOverviewTab />}
         {tab === 'linkage_view'    && <LinkageViewTab />}
+        {tab === 'filtered_groups' && <FilteredGroupsTab />}
         {tab === 'caselist'        && <CaseListTab />}
 
         <ResearchNotesPanel />

@@ -240,6 +240,49 @@ class Report(Base):
     primary_harm  = Column(String, default="")  # most analytically significant harm
     multi_harm_flag = Column(String, default="")  # yes / no / unclear — more than one harm category coded
 
+    # Codability / Data Quality
+    narrative_detail_level      = Column(String, default="")  # low/moderate/high/not_reviewed
+    sequence_reconstructable    = Column(String, default="")  # yes/partial/no/unclear/not_reviewed
+    movement_coding_suitability = Column(String, default="")  # full/partial/limited/not_suitable/not_reviewed
+    location_coding_suitability = Column(String, default="")  # mappable/approximate/descriptive_only/not_mappable/not_reviewed
+    main_data_limitation        = Column(String, default="")  # brief_narrative/vague_location/...
+    data_quality_notes          = Column(Text, default="")
+    initial_contact_visible     = Column(String, default="")  # yes/no/unclear
+    negotiation_visible         = Column(String, default="")
+    movement_visible            = Column(String, default="")
+    violence_coercion_visible   = Column(String, default="")
+    exit_aftermath_visible      = Column(String, default="")
+
+    # Situation / Environment (case-level)
+    primary_setting_type        = Column(String, default="")  # indoor/outdoor/mobile/mixed/unclear/not_stated
+    specific_setting_type       = Column(String, default="")  # street/alley.../other/unknown
+    visibility_case             = Column(String, default="")  # visible/limited_visibility/not_visible/unclear/not_stated
+    isolation_case              = Column(String, default="")  # not_isolated/partially_isolated/isolated/unclear/not_stated
+    guardianship_case           = Column(String, default="")  # present/limited_reduced/absent/unclear/not_stated
+    access_to_help              = Column(String, default="")  # apparent/limited/absent/unclear/not_stated
+    setting_control             = Column(String, default="")  # worker-controlled/client-controlled/shared/unclear/not_stated
+    other_people_nearby         = Column(String, default="")  # yes/no/unclear
+    security_or_business_nearby = Column(String, default="")  # yes/no/unclear
+    environment_notes           = Column(Text, default="")
+    environment_supporting_excerpt = Column(Text, default="")
+
+    # Mobility — additional pattern fields
+    movement_pattern_type = Column(String, default="")  # no_movement/within_same_area/public_to_vehicle/...
+    movement_timing       = Column(String, default="")  # before_negotiation/after_negotiation/...
+
+    # Narrative excerpts — topic-specific
+    stage_excerpt       = Column(Text, default="")
+    behaviour_excerpt   = Column(Text, default="")
+    environment_excerpt = Column(Text, default="")
+    movement_excerpt    = Column(Text, default="")
+    uncertainty_excerpt = Column(Text, default="")
+
+    # Case summary
+    sequence_pattern = Column(String, default="")  # no_sequence_available/incident_only/contact_to_violence/...
+
+    # GIS — mappable status
+    mappable_status = Column(String, default="")  # mappable/approximate/not_mappable/withheld_sensitive/not_reviewed
+
     # Audit / meta
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -288,6 +331,10 @@ class ReportStage(Base):
     coder_notes_stage       = Column(String, default="")  # stage-level coder notes (distinct from report-level coder_notes)
     coding_confidence       = Column(String, default="")  # high|moderate|low|not_enough_info
     temporal_sequence_note  = Column(Text,   default="")  # ordering/temporal context note
+
+    # Stage visibility and certainty (PhD methodology)
+    stage_visible   = Column(String, default="")  # present|absent|unclear|not_applicable
+    stage_certainty = Column(String, default="")  # clear|partial|inferred|unclear|not_enough_information
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -517,6 +564,43 @@ def init_db():
         # Harm classification
         ("primary_harm",                        "VARCHAR DEFAULT ''"),
         ("multi_harm_flag",                     "VARCHAR DEFAULT ''"),
+        # Codability / Data Quality
+        ("narrative_detail_level",              "VARCHAR DEFAULT ''"),
+        ("sequence_reconstructable",            "VARCHAR DEFAULT ''"),
+        ("movement_coding_suitability",         "VARCHAR DEFAULT ''"),
+        ("location_coding_suitability",         "VARCHAR DEFAULT ''"),
+        ("main_data_limitation",                "VARCHAR DEFAULT ''"),
+        ("data_quality_notes",                  "TEXT DEFAULT ''"),
+        ("initial_contact_visible",             "VARCHAR DEFAULT ''"),
+        ("negotiation_visible",                 "VARCHAR DEFAULT ''"),
+        ("movement_visible",                    "VARCHAR DEFAULT ''"),
+        ("violence_coercion_visible",           "VARCHAR DEFAULT ''"),
+        ("exit_aftermath_visible",              "VARCHAR DEFAULT ''"),
+        # Situation / Environment
+        ("primary_setting_type",                "VARCHAR DEFAULT ''"),
+        ("specific_setting_type",               "VARCHAR DEFAULT ''"),
+        ("visibility_case",                     "VARCHAR DEFAULT ''"),
+        ("isolation_case",                      "VARCHAR DEFAULT ''"),
+        ("guardianship_case",                   "VARCHAR DEFAULT ''"),
+        ("access_to_help",                      "VARCHAR DEFAULT ''"),
+        ("setting_control",                     "VARCHAR DEFAULT ''"),
+        ("other_people_nearby",                 "VARCHAR DEFAULT ''"),
+        ("security_or_business_nearby",         "VARCHAR DEFAULT ''"),
+        ("environment_notes",                   "TEXT DEFAULT ''"),
+        ("environment_supporting_excerpt",      "TEXT DEFAULT ''"),
+        # Mobility pattern
+        ("movement_pattern_type",               "VARCHAR DEFAULT ''"),
+        ("movement_timing",                     "VARCHAR DEFAULT ''"),
+        # Narrative excerpts
+        ("stage_excerpt",                       "TEXT DEFAULT ''"),
+        ("behaviour_excerpt",                   "TEXT DEFAULT ''"),
+        ("environment_excerpt",                 "TEXT DEFAULT ''"),
+        ("movement_excerpt",                    "TEXT DEFAULT ''"),
+        ("uncertainty_excerpt",                 "TEXT DEFAULT ''"),
+        # Case summary
+        ("sequence_pattern",                    "VARCHAR DEFAULT ''"),
+        # GIS
+        ("mappable_status",                     "VARCHAR DEFAULT ''"),
     ]
     with engine.connect() as conn:
         for col_name, col_def in _new_columns:
@@ -536,6 +620,8 @@ def init_db():
         ("coder_notes_stage",      "VARCHAR DEFAULT ''"),
         ("coding_confidence",      "VARCHAR DEFAULT ''"),
         ("temporal_sequence_note", "TEXT DEFAULT ''"),
+        ("stage_visible",          "VARCHAR DEFAULT ''"),
+        ("stage_certainty",        "VARCHAR DEFAULT ''"),
     ]
     with engine.connect() as conn:
         for col_name, col_def in _stage_new_columns:
