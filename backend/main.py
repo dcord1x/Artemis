@@ -1620,6 +1620,12 @@ def get_research_aggregate(db: Session = Depends(get_db)):
         'setting_control':             _val_counts('setting_control'),
         'sequence_pattern':            _val_counts('sequence_pattern'),
         'highest_stage_reached':       _val_counts('highest_stage_reached'),
+        'approach_method':             _val_counts('approach_method'),
+        'approach_setting':            _val_counts('approach_setting'),
+        'approach_mobility_context':   _val_counts('approach_mobility_context'),
+        'client_known_at_contact':     _val_counts('client_known_at_contact'),
+        'initial_contact_visibility':  _val_counts('initial_contact_visibility'),
+        'initial_contact_guardianship': _val_counts('initial_contact_guardianship'),
     }
 
     return {

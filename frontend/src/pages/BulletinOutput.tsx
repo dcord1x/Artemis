@@ -337,7 +337,7 @@ export default function BulletinOutput() {
                   { label: 'Geocoded',              value: geocodedCount },
                   { label: 'Date range',            value: (overview.date_earliest || overview.date_latest) ? `${fmt(overview.date_earliest)} – ${fmt(overview.date_latest)}` : 'All dates' },
                   { label: 'Filters applied',       value: [bulletinData.meta.status && `Status: ${bulletinData.meta.status}`, bulletinData.meta.city && `City: ${bulletinData.meta.city}`].filter(Boolean).join(', ') || 'None' },
-                  { label: 'Analyst review',        value: 'Required for NLP signals' },
+                  { label: 'Analyst review',        value: 'Required before use as findings' },
                 ].map(({ label, value }) => (
                   <div key={label} style={{ textAlign: 'center' }}>
                     <div style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 3 }}>{label}</div>
@@ -354,7 +354,7 @@ export default function BulletinOutput() {
                 fontSize: 11.5, lineHeight: 1.6,
               }}>
                 <strong>Research use only.</strong> This report summarizes coded observations only.
-                Provisional NLP signals are not findings until confirmed by an analyst.
+                Unreviewed or system-populated fields are not counted as findings until confirmed by the analyst.
                 Absence of a coded flag does not mean absence in the original source report.
                 Coded fields reflect the current analyst-coded subset — sparse coding should be treated as preliminary.
               </div>

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { GoogleMap, Marker } from '@react-google-maps/api';
 import { api } from '../api';
 import type { Stats, ResearchAggregate } from '../types';
+import { formatLabel } from '../utils';
 import { useMaps } from '../context/MapsContext';
 import {
   RefreshCw, AlertTriangle, MapPin, Shield,
@@ -26,17 +27,22 @@ const C = {
 };
 
 const STAGE_LABELS: Record<string, string> = {
-  initial_contact:   'Contact',
-  negotiation:       'Negotiation',
-  pickup_meeting:    'Pickup',
-  movement_travel:   'Movement',
-  arrival_location:  'Arrival',
-  escalation:        'Escalation',
-  violence_coercion: 'Violence',
-  exit_escape:       'Exit',
-  aftermath:         'Aftermath',
-  other:             'Other',
-  unknown_unclear:   'Unknown',
+  initial_contact:          'Contact',
+  screening_recognition:    'Screening',
+  negotiation:              'Negotiation',
+  pickup_meeting:           'Pickup',
+  movement_relocation:      'Movement',
+  movement_travel:          'Movement',
+  arrival_setting:          'Arrival',
+  arrival_location:         'Arrival',
+  escalation:               'Escalation',
+  violence_coercion:        'Violence',
+  exit_escape:              'Exit',
+  exit_aftermath:           'Aftermath',
+  aftermath:                'Aftermath',
+  aftermath_warning:        'Aftermath',
+  other:                    'Other',
+  unknown_unclear:          'Unknown',
 };
 
 const STAGE_COLORS: Record<string, string> = {
@@ -233,7 +239,7 @@ function ValDistPanel({ label, vc, color = 'var(--accent)', total }: {
     return (
       <div style={{ marginBottom: 12 }}>
         <div style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 5 }}>{label}</div>
-        <div style={{ fontSize: 11.5, color: 'var(--text-3)', fontStyle: 'italic' }}>Not yet coded — {total} cases imported</div>
+        <div style={{ fontSize: 11.5, color: 'var(--text-3)', fontStyle: 'italic' }}>No analyst-coded values yet</div>
       </div>
     );
   }
@@ -248,7 +254,7 @@ function ValDistPanel({ label, vc, color = 'var(--accent)', total }: {
       {sorted.map(([val, cnt]) => (
         <div key={val} style={{ marginBottom: 5 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
-            <span style={{ fontSize: 11.5, color: 'var(--text-2)' }}>{val}</span>
+            <span style={{ fontSize: 11.5, color: 'var(--text-2)' }}>{formatLabel(val)}</span>
             <span style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 600 }}>
               {cnt} <span style={{ fontWeight: 400, fontSize: 10 }}>({total > 0 ? Math.round(cnt / total * 100) : 0}%)</span>
             </span>
@@ -395,8 +401,6 @@ export default function Analysis() {
   const topCity = stats.cities?.[0];
   if (topCity && d.total > 0 && topCity.count / d.total >= 0.4)
     insights.push({ text: `${topCity.count} of ${d.total} reports concentrated in ${topCity.name} (${Math.round(topCity.count / d.total * 100)}%)`, color: C.amber, icon: <Globe size={11} /> });
-  if (d.nlpTotal > 0)
-    insights.push({ text: `${d.nlpTotal} NLP signals pending analyst confirmation — provisional, not coded findings`, color: C.amber, icon: <Zap size={11} /> });
   if (d.total > 0 && d.codingPct < 50)
     insights.push({ text: `${d.codingPct}% of reports analyst-coded — patterns reflect a partial dataset`, color: C.coral, icon: <AlertTriangle size={11} /> });
   if (d.movUncoded > 0)
@@ -454,7 +458,7 @@ export default function Analysis() {
           </p>
           <div style={{ display: 'flex', alignItems: 'stretch', gap: 0 }}>
             <PipelineStep label="Source Reports"      count={d.total}          color={C.blue}   onClick={() => go({})} />
-            <PipelineStep label="NLP Screened"        count={d.total}          pct={100}        color={C.indigo} sub="provisional only" />
+            <PipelineStep label="Imported"             count={d.total}          pct={100}        color={C.indigo} sub="source reports" />
             <PipelineStep label="Analyst Coded"       count={d.coded}          pct={d.codingPct}  color={C.green}  onClick={() => go({ coding_status: 'coded' })} />
             <PipelineStep label="Stage Coded"         count={d.analystStaged}  pct={d.stagedPct}  color={C.purple} sub="stage records created" onClick={() => navigate('/research')} />
             <PipelineStep label="Geocoded"            count={d.geocoded}       pct={d.geocodedPct} color={C.amber} onClick={() => go({ geocode_status: 'yes' })} />
@@ -578,18 +582,150 @@ export default function Analysis() {
               <QueueRow label="Stage coding not yet completed" count={d.missingStages} desc="Analyst-coded cases without stage records" color={C.purple} onClick={() => go({ coding_status: 'coded' })} />
               <QueueRow label="Movement present — mobility tab incomplete" count={d.movUncoded} desc="Movement flag coded but Mobility tab not filled" color={C.purple} onClick={() => go({ movement_present: 'yes' })} />
               <QueueRow label="Location phrase — no geocode" count={d.locationNeedsGeocode} desc="Has location text but coordinates missing" color={C.blue} onClick={() => go({ geocode_status: 'no' })} />
-              <QueueRow label="NLP signals — pending analyst confirmation" count={d.nlpTotal} desc="Provisional text-scan signals, not yet confirmed" color={C.amber} onClick={() => go({})} />
               <QueueRow label="Repeat suspect / vehicle indicator" count={d.repeatFlags} desc="Cross-case repeat flag requiring review" color={C.red} onClick={() => go({})} />
               <QueueRow label="Trafficking / exploitation concern" count={agg.vawg.flag_counts.trafficking_exploitation_concern} desc="Supplementary exploitation flag coded" color={C.coral} onClick={() => go({})} />
             </div>
           </div>
         </div>
 
+        {/* ═══ RQ1 — STAGE VISIBILITY AND ENCOUNTER SEQUENCE ═══════════════════ */}
+        <div className="card" style={{ padding: '18px 20px', marginBottom: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 }}>
+            <div>
+              <h3 style={{ fontFamily: 'Lora, serif', fontSize: 16, fontWeight: 500, margin: '0 0 3px' }}>
+                RQ1 — Stage Visibility and Encounter Sequence
+              </h3>
+              <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: 0 }}>
+                Behavioural stages across violent client–sex worker encounters. Analyst-confirmed stage sequences only.
+              </p>
+            </div>
+            <button className="btn-ghost" onClick={() => navigate('/research')} style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+              <ExternalLink size={10} /> Full Sequence Analysis
+            </button>
+          </div>
+
+          {d.analystStaged === 0 ? (
+            <div style={{ padding: '28px', textAlign: 'center', color: 'var(--text-3)', fontSize: 12, fontStyle: 'italic', background: 'var(--surface-2)', borderRadius: 7, border: '1px dashed var(--border)' }}>
+              Stage sequence visualization will populate once analyst-staged coding is completed.
+              <br /><span style={{ fontSize: 11, marginTop: 6, display: 'block' }}>Complete the Stages tab on coded reports to build observed encounter pathways.</span>
+            </div>
+          ) : (
+            <>
+            {d.analystStaged < 5 && (
+              <div style={{ fontSize: 11, color: C.amber, padding: '6px 10px', background: `${C.amber}10`, border: `1px solid ${C.amber}30`, borderRadius: 5, marginBottom: 14 }}>
+                Patterns reflect {d.analystStaged} analyst-coded case{d.analystStaged !== 1 ? 's' : ''} only — preliminary until coding coverage is sufficient.
+                Not causal inference. Observed coded pathways only.
+              </div>
+            )}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 22 }}>
+
+              {/* Left: Top pathway chains (main visual) */}
+              <div>
+                <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.08em', marginBottom: 12 }}>OBSERVED STAGE SEQUENCES — ANALYST CODED CASES</div>
+                {topSeqs.length === 0 ? (
+                  <EmptyState message="Awaiting full sequence data." />
+                ) : (
+                  topSeqs.map((s, i) => <PathwayChain key={i} sequence={s.sequence} count={s.count} rank={i + 1} />)
+                )}
+                {bigrams.length > 0 && (
+                  <div style={{ marginTop: 14 }}>
+                    <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.08em', marginBottom: 10 }}>COMMON STAGE TRANSITIONS</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                      {bigrams.map((b, i) => {
+                        const parts = b.pattern.split(' → ');
+                        return (
+                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 10px', background: 'var(--surface-2)', borderRadius: 6 }}>
+                            <span style={{ fontSize: 10.5, color: 'var(--text-3)', fontFamily: 'Lora, serif', minWidth: 16 }}>{i + 1}.</span>
+                            {parts.map((p, j) => (
+                              <span key={j} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                {j > 0 && <ArrowRight size={9} style={{ color: 'var(--text-3)', flexShrink: 0 }} />}
+                                <span style={{ fontSize: 10.5, fontWeight: 600, padding: '2px 7px', borderRadius: 4, background: (STAGE_COLORS[p] || C.slate) + '18', color: STAGE_COLORS[p] || C.slate, border: `1px solid ${(STAGE_COLORS[p] || C.slate)}30`, whiteSpace: 'nowrap' }}>
+                                  {STAGE_LABELS[p] || p}
+                                </span>
+                              </span>
+                            ))}
+                            <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text-3)', fontWeight: 600 }}>{b.count}×</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Right: Stage frequency + visibility */}
+              <div>
+                <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.08em', marginBottom: 12 }}>STAGE FREQUENCY ACROSS ANALYST-STAGED REPORTS</div>
+                {d.analystStaged === 0 ? (
+                  <div style={{ fontSize: 11.5, color: 'var(--text-3)', fontStyle: 'italic' }}>No analyst-staged records yet — complete Stage Coding on coded cases.</div>
+                ) : stageFreq.map(s => {
+                  const lbl   = STAGE_LABELS[s.stage] || s.stage;
+                  const col   = STAGE_COLORS[s.stage]  || C.slate;
+                  const widPct = (s.count / maxStageFreq) * 100;
+                  return (
+                    <div key={s.stage} style={{ marginBottom: 9 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3, alignItems: 'center' }}>
+                        <span style={{ fontSize: 11.5, color: 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 7 }}>
+                          <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: col, flexShrink: 0 }} />
+                          {lbl}
+                        </span>
+                        <span style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 600 }}>{s.count}</span>
+                      </div>
+                      <div style={{ height: 5, borderRadius: 10, background: 'var(--surface-3)', overflow: 'hidden' }}>
+                        <div style={{ height: '100%', borderRadius: 10, background: col, width: `${widPct}%`, transition: 'width 0.7s ease' }} />
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {agg.codability && (
+                  <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+                    <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.08em', marginBottom: 12 }}>STAGE VISIBILITY (CODABILITY)</div>
+                    <ValDistPanel label="Initial contact visible"    vc={agg.codability.initial_contact_visible}    color={STAGE_COLORS.initial_contact}   total={d.coded} />
+                    <ValDistPanel label="Negotiation visible"        vc={agg.codability.negotiation_visible}        color={STAGE_COLORS.negotiation}        total={d.coded} />
+                    <ValDistPanel label="Movement visible"           vc={agg.codability.movement_visible}           color={STAGE_COLORS.movement_travel}    total={d.coded} />
+                    <ValDistPanel label="Violence / coercion visible" vc={agg.codability.violence_coercion_visible} color={STAGE_COLORS.violence_coercion}  total={d.coded} />
+                    <ValDistPanel label="Exit / aftermath visible"   vc={agg.codability.exit_aftermath_visible}     color={STAGE_COLORS.exit_escape}        total={d.coded} />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Initial Contact Stage Detail — sub-section within RQ1 */}
+            {agg.codability && (
+              <div style={{ marginTop: 20, paddingTop: 18, borderTop: '1px solid var(--border)' }}>
+                <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.08em', marginBottom: 6 }}>INITIAL CONTACT STAGE DETAIL</div>
+                <p style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 14, lineHeight: 1.55 }}>
+                  Breakdown of the initial contact stage where the report provides enough detail. These fields help describe how the encounter began but do not define a separate research question.
+                </p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
+                  <div>
+                    <ValDistPanel label="Approach method"       vc={agg.codability.approach_method as any}             color={C.blue}   total={d.coded} />
+                    <ValDistPanel label="Approach setting"      vc={agg.codability.approach_setting as any}            color={C.amber}  total={d.coded} />
+                    <ValDistPanel label="Mobility context"      vc={agg.codability.approach_mobility_context as any}   color={C.purple} total={d.coded} />
+                  </div>
+                  <div>
+                    <ValDistPanel label="Visibility at contact"   vc={agg.codability.initial_contact_visibility as any}   color={C.blue}  total={d.coded} />
+                    <ValDistPanel label="Guardianship at contact" vc={agg.codability.initial_contact_guardianship as any} color={C.green} total={d.coded} />
+                  </div>
+                  <div>
+                    <ValDistPanel label="Client known at contact" vc={agg.codability.client_known_at_contact as any} color={C.slate} total={d.coded} />
+                    <p style={{ fontSize: 10.5, color: 'var(--text-3)', marginTop: 10, lineHeight: 1.6 }}>
+                      Initial contact is coded as one stage in the encounter sequence. These fields support RQ1 by describing how the encounter began where the narrative makes this visible.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+            </>
+          )}
+        </div>
+
         {/* ═══ RQ2 — BEHAVIOURAL AND SITUATIONAL CONDITIONS ════════════════════ */}
         <div style={{ marginBottom: 20 }}>
           <SectionLabel text="RQ2 — Behavioural and Situational Conditions" icon={<Shield size={11} />} />
           <p style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 10, marginTop: -4 }}>
-            Situational and environmental conditions present across coded cases. Analyst-confirmed findings only; NLP signals shown separately as provisional.
+            Situational and environmental conditions present across analyst-coded cases.
             Based on {d.coded} analyst-coded report{d.coded !== 1 ? 's' : ''}.{d.coded < 5 ? ' Treat as highly preliminary.' : ''}
           </p>
 
@@ -622,18 +758,6 @@ export default function Analysis() {
                 )}
               </div>
 
-              {d.nlpTotal > 0 && (
-                <div style={{ paddingTop: 11, borderTop: '1px dashed var(--border)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 9 }}>
-                    <Badge label="NLP PROVISIONAL" variant="nlp" />
-                    <span style={{ fontSize: 10, color: 'var(--text-3)' }}>requires analyst confirmation</span>
-                  </div>
-                  {d.nlpCoercionSignals > 0 && <CountBar label="Coercion signal"         count={d.nlpCoercionSignals} max={d.total} color={C.amber} tag="NLP" barHeight={3} />}
-                  {d.nlpPhysSignals > 0     && <CountBar label="Physical signal"          count={d.nlpPhysSignals}     max={d.total} color={C.amber} tag="NLP" barHeight={3} />}
-                  {d.nlpSexSignals > 0      && <CountBar label="Sexual violence signal"   count={d.nlpSexSignals}      max={d.total} color={C.amber} tag="NLP" barHeight={3} />}
-                  {d.nlpMovSignals > 0      && <CountBar label="Movement signal"          count={d.nlpMovSignals}      max={d.total} color={C.amber} tag="NLP" barHeight={3} />}
-                </div>
-              )}
             </div>
 
             {/* Location / Setting Context */}
@@ -813,110 +937,6 @@ export default function Analysis() {
           </div>
         </div>
 
-        {/* ═══ RQ1 — STAGE VISIBILITY AND ENCOUNTER SEQUENCE ═══════════════════ */}
-        <div className="card" style={{ padding: '18px 20px', marginBottom: 20 }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 }}>
-            <div>
-              <h3 style={{ fontFamily: 'Lora, serif', fontSize: 16, fontWeight: 500, margin: '0 0 3px' }}>
-                RQ1 — Stage Visibility and Encounter Sequence
-              </h3>
-              <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: 0 }}>
-                Behavioural stages across violent client–sex worker encounters. Analyst-confirmed stage sequences only — not provisional NLP outputs.
-              </p>
-            </div>
-            <button className="btn-ghost" onClick={() => navigate('/research')} style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-              <ExternalLink size={10} /> Full Sequence Analysis
-            </button>
-          </div>
-
-          {d.analystStaged === 0 ? (
-            <div style={{ padding: '28px', textAlign: 'center', color: 'var(--text-3)', fontSize: 12, fontStyle: 'italic', background: 'var(--surface-2)', borderRadius: 7, border: '1px dashed var(--border)' }}>
-              Stage sequence visualization will populate once analyst-staged coding is completed.
-              <br /><span style={{ fontSize: 11, marginTop: 6, display: 'block' }}>Complete the Stages tab on coded reports to build observed encounter pathways.</span>
-            </div>
-          ) : (
-            <>
-            {d.analystStaged < 5 && (
-              <div style={{ fontSize: 11, color: C.amber, padding: '6px 10px', background: `${C.amber}10`, border: `1px solid ${C.amber}30`, borderRadius: 5, marginBottom: 14 }}>
-                Patterns reflect {d.analystStaged} analyst-coded case{d.analystStaged !== 1 ? 's' : ''} only — preliminary until coding coverage is sufficient.
-                Not causal inference. Observed coded pathways only.
-              </div>
-            )}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 22 }}>
-
-              {/* Left: Top pathway chains (main visual) */}
-              <div>
-                <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.08em', marginBottom: 12 }}>OBSERVED STAGE SEQUENCES — ANALYST CODED CASES</div>
-                {topSeqs.length === 0 ? (
-                  <EmptyState message="Awaiting full sequence data." />
-                ) : (
-                  topSeqs.map((s, i) => <PathwayChain key={i} sequence={s.sequence} count={s.count} rank={i + 1} />)
-                )}
-                {bigrams.length > 0 && (
-                  <div style={{ marginTop: 14 }}>
-                    <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.08em', marginBottom: 10 }}>COMMON STAGE TRANSITIONS</div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                      {bigrams.map((b, i) => {
-                        const parts = b.pattern.split(' → ');
-                        return (
-                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 10px', background: 'var(--surface-2)', borderRadius: 6 }}>
-                            <span style={{ fontSize: 10.5, color: 'var(--text-3)', fontFamily: 'Lora, serif', minWidth: 16 }}>{i + 1}.</span>
-                            {parts.map((p, j) => (
-                              <span key={j} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                {j > 0 && <ArrowRight size={9} style={{ color: 'var(--text-3)', flexShrink: 0 }} />}
-                                <span style={{ fontSize: 10.5, fontWeight: 600, padding: '2px 7px', borderRadius: 4, background: (STAGE_COLORS[p] || C.slate) + '18', color: STAGE_COLORS[p] || C.slate, border: `1px solid ${(STAGE_COLORS[p] || C.slate)}30`, whiteSpace: 'nowrap' }}>
-                                  {STAGE_LABELS[p] || p}
-                                </span>
-                              </span>
-                            ))}
-                            <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text-3)', fontWeight: 600 }}>{b.count}×</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Right: Stage frequency + visibility */}
-              <div>
-                <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.08em', marginBottom: 12 }}>STAGE FREQUENCY ACROSS CODED REPORTS</div>
-                {stageFreq.map(s => {
-                  const lbl   = STAGE_LABELS[s.stage] || s.stage;
-                  const col   = STAGE_COLORS[s.stage]  || C.slate;
-                  const widPct = (s.count / maxStageFreq) * 100;
-                  return (
-                    <div key={s.stage} style={{ marginBottom: 9 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3, alignItems: 'center' }}>
-                        <span style={{ fontSize: 11.5, color: 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 7 }}>
-                          <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: col, flexShrink: 0 }} />
-                          {lbl}
-                        </span>
-                        <span style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 600 }}>{s.count}</span>
-                      </div>
-                      <div style={{ height: 5, borderRadius: 10, background: 'var(--surface-3)', overflow: 'hidden' }}>
-                        <div style={{ height: '100%', borderRadius: 10, background: col, width: `${widPct}%`, transition: 'width 0.7s ease' }} />
-                      </div>
-                    </div>
-                  );
-                })}
-
-                {agg.codability && (
-                  <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
-                    <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.08em', marginBottom: 12 }}>STAGE VISIBILITY (CODABILITY)</div>
-                    <ValDistPanel label="Initial contact visible"    vc={agg.codability.initial_contact_visible}    color={STAGE_COLORS.initial_contact}   total={d.coded} />
-                    <ValDistPanel label="Negotiation visible"        vc={agg.codability.negotiation_visible}        color={STAGE_COLORS.negotiation}        total={d.coded} />
-                    <ValDistPanel label="Movement visible"           vc={agg.codability.movement_visible}           color={STAGE_COLORS.movement_travel}    total={d.coded} />
-                    <ValDistPanel label="Violence / coercion visible" vc={agg.codability.violence_coercion_visible} color={STAGE_COLORS.violence_coercion}  total={d.coded} />
-                    <ValDistPanel label="Exit / aftermath visible"   vc={agg.codability.exit_aftermath_visible}     color={STAGE_COLORS.exit_escape}        total={d.coded} />
-                  </div>
-                )}
-              </div>
-            </div>
-            </>
-          )}
-        </div>
-
         {/* ═══ CODABILITY / DATA QUALITY DISTRIBUTIONS ════════════════════════ */}
         {agg.codability && (
           <div style={{ marginBottom: 20 }}>
@@ -995,7 +1015,7 @@ export default function Analysis() {
                 Coding Gaps
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                <MetricCard label="NLP Signals"         value={d.nlpTotal}             sub="pending confirmation"   color={C.amber} tag="provisional" icon={<Zap size={11} />}           onClick={() => go({})} />
+                <MetricCard label="Analyst Review Needed" value={d.missingStages + d.locationNeedsGeocode} sub="unreviewed fields" color={C.amber} icon={<Zap size={11} />} onClick={() => go({})} />
                 <MetricCard label="Needs Geocode"        value={d.locationNeedsGeocode} sub="no coordinates"        color={C.slate} icon={<MapPin size={11} />}           onClick={() => go({ geocode_status: 'no' })} />
                 <MetricCard label="Repeat Flags"         value={d.repeatFlags}          sub="suspect / vehicle"     color={C.red}   icon={<AlertTriangle size={11} />}    onClick={() => go({})} />
                 <MetricCard label="Stage Coding Needed"  value={d.missingStages}        sub="coded, unstaged cases" color={C.purple} icon={<GitBranch size={11} />}       onClick={() => go({ coding_status: 'coded' })} />
@@ -1028,10 +1048,10 @@ export default function Analysis() {
         <div style={{ padding: '13px 16px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface-2)', borderLeft: `3px solid ${C.slate}` }}>
           <div style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.07em', marginBottom: 6 }}>METHODOLOGICAL NOTE</div>
           <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: 0, lineHeight: 1.75 }}>
-            All patterns and distributions shown here reflect analyst-coded and geocoded fields only. Sparse coding coverage should be treated as preliminary — patterns may shift as coding progresses.
-            NLP text-scan signals are provisional and are not counted as coded findings until reviewed and accepted by the analyst.
+            All patterns and distributions shown here reflect analyst-coded and geocoded fields only. Outputs reflect analyst-coded fields only.
+            Unreviewed imported or system-populated fields are not counted as coded findings until reviewed and confirmed by the analyst.
             Absence of a coded flag does not indicate absence in the original source report — it may indicate that the information was not present, not stated, or has not yet been coded.
-            This tool supports human-led qualitative coding; all outputs are analytical observations, not legal, investigative or clinical findings.
+            Sparse coding should be treated as preliminary. This tool supports human-led qualitative coding; all outputs are analytical observations, not legal, investigative or clinical findings.
           </p>
         </div>
 

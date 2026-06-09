@@ -283,6 +283,16 @@ class Report(Base):
     # GIS — mappable status
     mappable_status = Column(String, default="")  # mappable/approximate/not_mappable/withheld_sensitive/not_reviewed
 
+    # Initial Contact / Approach
+    approach_method              = Column(String, default="")  # street_approach/online_digital/referral/venue_based/unknown_unclear/other
+    approach_setting             = Column(String, default="")  # public_street/online_platform/venue/private_space/unknown/other
+    approach_mobility_context    = Column(String, default="")  # stationary/mobile_on_foot/mobile_in_vehicle/transitioning/unknown
+    client_known_at_contact      = Column(String, default="")  # yes_known/first_contact/unclear
+    initial_contact_visibility   = Column(String, default="")  # visible/limited_visibility/not_visible/unclear/not_stated
+    initial_contact_guardianship = Column(String, default="")  # present/limited_reduced/absent/unclear/not_stated
+    initial_contact_excerpt      = Column(Text,   default="")
+    initial_contact_notes        = Column(Text,   default="")
+
     # Audit / meta
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -601,6 +611,15 @@ def init_db():
         ("sequence_pattern",                    "VARCHAR DEFAULT ''"),
         # GIS
         ("mappable_status",                     "VARCHAR DEFAULT ''"),
+        # Initial Contact / Approach
+        ("approach_method",                     "VARCHAR DEFAULT ''"),
+        ("approach_setting",                    "VARCHAR DEFAULT ''"),
+        ("approach_mobility_context",           "VARCHAR DEFAULT ''"),
+        ("client_known_at_contact",             "VARCHAR DEFAULT ''"),
+        ("initial_contact_visibility",          "VARCHAR DEFAULT ''"),
+        ("initial_contact_guardianship",        "VARCHAR DEFAULT ''"),
+        ("initial_contact_excerpt",             "TEXT DEFAULT ''"),
+        ("initial_contact_notes",               "TEXT DEFAULT ''"),
     ]
     with engine.connect() as conn:
         for col_name, col_def in _new_columns:

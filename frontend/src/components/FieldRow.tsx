@@ -1,8 +1,10 @@
+import { formatLabel } from '../utils';
+
 type ProvenanceState = 'unset' | 'ai_suggested' | 'analyst_filled' | 'reviewed';
 
 const PROVENANCE_DOT: Record<ProvenanceState, { color: string; label: string } | null> = {
   unset:          null,
-  ai_suggested:   { color: '#D97706', label: 'AI' },
+  ai_suggested:   { color: '#D97706', label: 'unreviewed' },
   analyst_filled: { color: '#1E5A8F', label: 'Analyst' },
   reviewed:       { color: '#2F8F5B', label: 'Reviewed' },
 };
@@ -132,7 +134,7 @@ export default function FieldRow({
             onBlur={(e) => (e.target.style.borderColor = 'var(--border)')}
           >
             <option value="">—</option>
-            {options?.map((o) => <option key={o} value={o}>{o}</option>)}
+            {options?.map((o) => <option key={o} value={o}>{formatLabel(o)}</option>)}
           </select>
         ) : type === 'textarea' ? (
           <textarea
@@ -168,7 +170,7 @@ export default function FieldRow({
         {hasSuggestion && (
           <button
             onClick={onAcceptSuggestion}
-            title={`AI suggests: "${suggested}"`}
+            title={`Unreviewed suggestion: "${suggested}"`}
             style={{
               flexShrink: 0, padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 500,
               cursor: 'pointer', border: '1px solid var(--amber-border)',

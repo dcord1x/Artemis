@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Save, Sparkles, Download, Tag, X, GitCompare, Lock, ChevronLeft, ChevronRight, ExternalLink, FileText, ChevronDown, ScanSearch, Copy, Check } from 'lucide-react';
+import { Save, Download, Tag, X, GitCompare, Lock, ChevronLeft, ChevronRight, ExternalLink, FileText, ChevronDown, Copy, Check } from 'lucide-react';
 import { api } from '../api';
 import type { Report } from '../types';
 import FieldRow from '../components/FieldRow';
@@ -10,7 +10,7 @@ import SectionPanel from '../components/SectionPanel';
 import ParseViewer from '../components/ParseViewer';
 import GisMapModal from '../components/GisMapModal';
 import StageSequencer from '../components/StageSequencer';
-import { broadPos as _broadPos } from '../utils';
+import { broadPos as _broadPos, formatLabel } from '../utils';
 
 // ── NLP field badge ───────────────────────────────────────────────────────────
 
@@ -190,8 +190,8 @@ function EscalationArc({ esc }: { esc: Record<string, any> }) {
   return (
     <div style={{ margin: '6px 0 10px', borderRadius: 7, border: '1px solid var(--amber-border)', overflow: 'hidden' }}>
       <div style={{ padding: '5px 12px', background: 'var(--amber-pale)', borderBottom: '1px solid var(--amber-border)', display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--amber)' }}>NLP — Escalation Arc</span>
-        <span style={{ fontSize: 9.5, color: 'var(--amber)', opacity: 0.85 }}>Machine detection only · not analyst confirmed</span>
+        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--amber)' }}>Escalation Arc</span>
+        <span style={{ fontSize: 9.5, color: 'var(--amber)', opacity: 0.85 }}>System-detected only · not analyst confirmed</span>
       </div>
       <div style={{ padding: '8px 12px', background: 'var(--surface-2)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 0, flexWrap: 'wrap' }}>
@@ -495,7 +495,7 @@ function ProvenancePill({ p }: { p: 'coded' | 'provisional' | 'unset' }) {
     <span style={{ fontSize: 9.5, fontWeight: 600, padding: '1px 5px', borderRadius: 3,
       background: 'var(--amber-pale)', color: 'var(--amber)', border: '1px solid var(--amber-border)',
       marginLeft: 4, verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
-      provisional
+      not analyst-confirmed
     </span>
   );
   return null;
@@ -543,7 +543,7 @@ function SummaryKVRow({ label, value, prov }: {
     <div style={{ display: 'flex', gap: 8, fontSize: 12.5, lineHeight: 1.4, marginBottom: 4 }}>
       <span style={{ color: 'var(--text-3)', flexShrink: 0, minWidth: 130 }}>{label}</span>
       <span style={{ color: 'var(--text-1)', fontWeight: 500 }}>
-        {value}<ProvenancePill p={prov} />
+        {formatLabel(value)}<ProvenancePill p={prov} />
       </span>
     </div>
   );
@@ -622,10 +622,6 @@ function SummaryTab({ fields, analystName, analystSummary, tags, reportId }: {
     ['Movement',                'movement_present',             new Set(['yes'])],
     ['Environment shift: public→private',  'public_to_private_shift',  new Set(['yes'])],
     ['Environment shift: public→secluded', 'public_to_secluded_shift', new Set(['yes'])],
-    ['Physical force',          'physical_force',               new Set(['yes'])],
-    ['Sexual assault',          'sexual_assault',               new Set(['yes'])],
-    ['Stealthing',              'stealthing',                   new Set(['yes'])],
-    ['Robbery / theft',         'robbery_theft',                new Set(['yes'])],
   ];
 
   const approach = (fields.initial_approach_type || '').trim();
@@ -797,9 +793,9 @@ function SummaryTab({ fields, analystName, analystSummary, tags, reportId }: {
         }}>
           <span style={{ color: 'var(--amber)', fontWeight: 600, fontSize: 10 }}>⚠</span>
           <span>
-            Some stages in this summary are sourced from NLP analysis only and are marked
-            <strong style={{ fontWeight: 600, color: 'var(--amber)' }}> provisional</strong>.
-            These should be reviewed and confirmed by the analyst before use.
+            Some fields in this summary have not yet been analyst-confirmed and are marked
+            <strong style={{ fontWeight: 600, color: 'var(--amber)' }}> not analyst-confirmed</strong>.
+            These should be reviewed before use.
           </span>
         </div>
       )}
@@ -932,6 +928,28 @@ function SummaryTab({ fields, analystName, analystSummary, tags, reportId }: {
           </div>
         )}
       </div>
+
+      {/* Initial Contact / Approach */}
+      <SummarySectionBox title="Initial Contact / Approach">
+        {(() => {
+          const icFields: (keyof Report)[] = ['approach_method','approach_setting','approach_mobility_context','client_known_at_contact','initial_contact_visibility','initial_contact_guardianship'];
+          const icLabels: Record<string, string> = {
+            approach_method: 'Approach method', approach_setting: 'Approach setting',
+            approach_mobility_context: 'Mobility context', client_known_at_contact: 'Client known at contact',
+            initial_contact_visibility: 'Visibility', initial_contact_guardianship: 'Guardianship',
+          };
+          const hasAny = icFields.some(f => (fields[f] as string || '').trim());
+          if (!hasAny) return <EmptyState state={sectionDataState(icFields.map(f => fields[f] as string | undefined))} />;
+          return icFields.map(field => (
+            <SummaryKVRow key={field} label={icLabels[field]} value={String(fields[field] || '')} prov={_prov(fp, field)} />
+          ));
+        })()}
+        {(fields.initial_contact_excerpt as string || '').trim() && (
+          <div style={{ marginTop: 8, fontSize: 11.5, color: 'var(--text-2)', borderLeft: '2px solid var(--border)', paddingLeft: 8, fontStyle: 'italic' }}>
+            {(fields.initial_contact_excerpt as string).slice(0, 300)}{(fields.initial_contact_excerpt as string).length > 300 ? '…' : ''}
+          </div>
+        )}
+      </SummarySectionBox>
 
       {/* Encounter Sequence Output */}
       <SummarySectionBox title="Encounter Sequence Output">
@@ -1231,14 +1249,11 @@ export default function CodingScreen() {
   const [dateReceived, setDateReceived] = useState(new Date().toISOString().slice(0, 10));
   const [report, setReport] = useState<Report | null>(null);
   const [fields, setFields] = useState<Partial<Report>>({});
-  const [suggestions, setSuggestions] = useState<Record<string, string>>({});
+  const suggestions: Record<string, string> = {};
   const [flags, setFlags] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [loadingAI, setLoadingAI] = useState(false);
-  const [analyzingNlp, setAnalyzingNlp] = useState(false);
-  const [nlpError, setNlpError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<Section>('basics');
   const [showGisMap, setShowGisMap] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
@@ -1490,43 +1505,6 @@ export default function CodingScreen() {
     return v === null || v === undefined ? '' : String(v);
   };
 
-  const handleAISuggest = async () => {
-    if (!narrative.trim()) return;
-    setLoadingAI(true);
-    try {
-      const result = await api.suggest(narrative);
-      if (result.error) { alert('AI error: ' + result.error); return; }
-      const { flags: newFlags, ...fieldSuggestions } = result;
-      setSuggestions(fieldSuggestions);
-      setFlags(newFlags || []);
-      // Mark fields that have a suggestion as ai_suggested (only if not already filled by analyst)
-      setProvenance((p) => {
-        const updated = { ...p };
-        Object.keys(fieldSuggestions).forEach((k) => {
-          if (!updated[k] || updated[k] === 'unset') updated[k] = 'ai_suggested';
-        });
-        return updated;
-      });
-    } finally { setLoadingAI(false); }
-  };
-
-  const handleNlpAnalyze = async () => {
-    if (!report) return;
-    setAnalyzingNlp(true);
-    setNlpError(null);
-    try {
-      const result = await api.analyzeReport(report.report_id);
-      if (result.ai_suggestions?.nlp) setNlp(result.ai_suggestions.nlp);
-      if (result.ai_suggestions?.flags) setFlags(result.ai_suggestions.flags);
-      if (result.ai_suggestions?.weather) setWeather(result.ai_suggestions.weather);
-      const err = result.ai_suggestions?.error || result.ai_suggestions?.nlp?.error;
-      if (err) setNlpError(String(err));
-    } catch (e: any) {
-      setNlpError(e?.message || 'NLP analysis failed — check backend logs');
-    } finally {
-      setAnalyzingNlp(false);
-    }
-  };
 
   const addTag = () => {
     if (tagInput.trim() && !tags.includes(tagInput.trim())) {
@@ -1755,34 +1733,6 @@ export default function CodingScreen() {
             <option value="reviewed">Reviewed</option>
           </select>
 
-          <button
-            className="btn-ghost"
-            onClick={handleAISuggest}
-            disabled={loadingAI || !narrative.trim()}
-            style={{ fontSize: 12.5 }}
-          >
-            <Sparkles size={13} style={{ color: 'var(--amber)' }} />
-            {loadingAI ? 'Analysing…' : 'AI Suggest'}
-          </button>
-
-          {!isNew && report && (
-            <button
-              className="btn-ghost"
-              onClick={handleNlpAnalyze}
-              disabled={analyzingNlp}
-              title="Re-run spaCy NLP analysis on this narrative"
-              style={{ fontSize: 12.5 }}
-            >
-              <ScanSearch size={13} style={{ color: 'var(--blue)' }} />
-              {analyzingNlp ? 'Analysing…' : 'NLP Analyze'}
-            </button>
-          )}
-          {nlpError && (
-            <span style={{ fontSize: 11.5, color: 'var(--red, #c0392b)', background: 'var(--red-pale, #fdecea)', border: '1px solid var(--red, #c0392b)', borderRadius: 4, padding: '2px 7px', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={nlpError}>
-              NLP error: {nlpError}
-            </span>
-          )}
-
           {!isNew && report && (
             <button
               className="btn-ghost"
@@ -1919,7 +1869,7 @@ export default function CodingScreen() {
                 {!isNew && showNlpChips && (
                   <button
                     onClick={() => setShowNlpHighlights(v => !v)}
-                    title="Toggle NLP signal highlights — provisional, not saved"
+                    title="Toggle signal highlights — unreviewed, not saved"
                     style={{
                       fontSize: 9.5, padding: '1px 7px', borderRadius: 3, cursor: 'pointer',
                       border: '1px solid ' + (showNlpHighlights ? '#6366F1' : '#4B5563'),
@@ -1928,7 +1878,7 @@ export default function CodingScreen() {
                       fontWeight: 600, letterSpacing: '0.03em',
                     }}
                   >
-                    {showNlpHighlights ? '◈ NLP on' : '◈ NLP off'}
+                    {showNlpHighlights ? '◈ Highlights on' : '◈ Highlights off'}
                   </button>
                 )}
               </div>
@@ -1954,7 +1904,7 @@ export default function CodingScreen() {
                     {cat.label}
                   </button>
                 ))}
-                <span style={{ fontSize: 8.5, color: '#6B7280', fontStyle: 'italic', marginLeft: 2 }}>provisional</span>
+                <span style={{ fontSize: 8.5, color: '#6B7280', fontStyle: 'italic', marginLeft: 2 }}>unreviewed</span>
               </div>
             )}
           </div>
@@ -2345,7 +2295,7 @@ export default function CodingScreen() {
                         {/* NLP hint chip — only when field is empty and hint is clean */}
                         {showNlpChips && isPlausibleLocationHint(hint) && !fieldVal && (
                           <span title={`NLP extracted from current narrative: "${hint}" — click to accept`} onClick={() => set('initial_contact_location', hint)} style={{ flexShrink: 0, fontSize: 10.5, fontWeight: 600, padding: '1px 7px', borderRadius: 4, border: '1px solid var(--blue-border)', background: 'var(--blue-pale)', color: 'var(--blue)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                            ↳ NLP: {String(hint).slice(0, 26)}
+                            ↳ {String(hint).slice(0, 26)}
                           </span>
                         )}
                         {/* Sentence-fragment warning — value looks like narrative text */}
@@ -2375,15 +2325,15 @@ export default function CodingScreen() {
                             onClick={() => set('incident_location_primary', hint)}
                             style={{ flexShrink: 0, fontSize: 10.5, fontWeight: 600, padding: '1px 7px', borderRadius: 4, border: '1px solid var(--blue-border)', background: 'var(--blue-pale)', color: 'var(--blue)', cursor: 'pointer', whiteSpace: 'nowrap' }}
                           >
-                            ↳ NLP: {String(hint).slice(0, 26)}
+                            ↳ {String(hint).slice(0, 26)}
                           </span>
                         )}
                         {envSupported && (
                           <span
-                            title={`NLP environment type (provisional — not written to any field): ${locType}. Confirm before coding.`}
+                            title={`Unreviewed location type suggestion (not written to any field): ${locType}. Confirm before coding.`}
                             style={{ flexShrink: 0, fontSize: 10.5, fontWeight: 600, padding: '1px 7px', borderRadius: 4, border: '1px solid var(--amber-border)', background: 'var(--amber-pale)', color: 'var(--amber)', cursor: 'default', whiteSpace: 'nowrap' }}
                           >
-                            ⌂ {locType} · provisional
+                            ⌂ {locType} · unreviewed
                           </span>
                         )}
                         {looksLikeSentenceFragment(fieldVal) && (
@@ -2453,6 +2403,20 @@ export default function CodingScreen() {
                 <div style={{ marginBottom: 14, padding: '10px 14px', borderRadius: 6, background: 'var(--surface-2)', border: '1px solid var(--border)', fontSize: 12, color: 'var(--text-2)', lineHeight: 1.5 }}>
                   This tab records case-level indicators that appear anywhere in the report. Timing should be coded in Stage Coding where the narrative allows.
                 </div>
+
+                <SectionPanel title="Initial Contact / Approach" fieldKeys={['approach_method','approach_setting','approach_mobility_context','client_known_at_contact','initial_contact_visibility','initial_contact_guardianship','initial_contact_excerpt','initial_contact_notes']} fields={fields}>
+                  <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: '0 0 10px 0', lineHeight: 1.5 }}>
+                    Code how contact was first made and the situational conditions at the moment of first contact. This section is distinct from harm indicators and from stage-level coding. Code what the narrative describes; do not infer values that are not supported.
+                  </p>
+                  <FieldRow label="Approach method" value={f('approach_method')} onChange={(v) => set('approach_method', v)} type="select" options={['street_approach','online_digital','referral','venue_based','phone_text','vehicle_based','third_party_arranged','unknown_unclear','other']} provenance={prov('approach_method')} onMarkReviewed={() => markReviewed('approach_method')} helper="How did the client first make contact? Code the method described in the narrative." />
+                  <FieldRow label="Approach setting" value={f('approach_setting')} onChange={(v) => set('approach_setting', v)} type="select" options={['public_street','online_platform','venue_indoor','private_space','vehicle','unknown','other']} provenance={prov('approach_setting')} onMarkReviewed={() => markReviewed('approach_setting')} helper="The physical or digital setting where first contact occurred." />
+                  <FieldRow label="Approach mobility context" value={f('approach_mobility_context')} onChange={(v) => set('approach_mobility_context', v)} type="select" options={['stationary','mobile_on_foot','mobile_in_vehicle','transitioning','unknown']} provenance={prov('approach_mobility_context')} onMarkReviewed={() => markReviewed('approach_mobility_context')} helper="Whether the worker or client was stationary or in motion at the point of first contact." />
+                  <FieldRow label="Client known at contact" value={f('client_known_at_contact')} onChange={(v) => set('client_known_at_contact', v)} type="select" options={['yes_known','first_contact','unclear']} provenance={prov('client_known_at_contact')} onMarkReviewed={() => markReviewed('client_known_at_contact')} helper="Whether the client was previously known to the worker at the time of initial contact." />
+                  <FieldRow label="Initial contact visibility" value={f('initial_contact_visibility')} onChange={(v) => set('initial_contact_visibility', v)} type="select" options={['visible','limited_visibility','not_visible','unclear','not_stated']} provenance={prov('initial_contact_visibility')} onMarkReviewed={() => markReviewed('initial_contact_visibility')} helper="How observable was the contact to bystanders at the time it occurred? Code the situational conditions, not whether anyone actually witnessed it." />
+                  <FieldRow label="Initial contact guardianship" value={f('initial_contact_guardianship')} onChange={(v) => set('initial_contact_guardianship', v)} type="select" options={['present','limited_reduced','absent','unclear','not_stated']} provenance={prov('initial_contact_guardianship')} onMarkReviewed={() => markReviewed('initial_contact_guardianship')} helper="Whether capable guardianship (persons able to intervene) was present at the point of first contact." />
+                  <FieldRow label="Initial contact excerpt" value={f('initial_contact_excerpt')} onChange={(v) => set('initial_contact_excerpt', v)} type="textarea" placeholder="Paste the key excerpt from the narrative describing first contact." provenance={prov('initial_contact_excerpt')} onMarkReviewed={() => markReviewed('initial_contact_excerpt')} />
+                  <FieldRow label="Initial contact notes" value={f('initial_contact_notes')} onChange={(v) => set('initial_contact_notes', v)} type="textarea" placeholder="Analyst notes on approach context, uncertainty, or interpretive decisions." provenance={prov('initial_contact_notes')} onMarkReviewed={() => markReviewed('initial_contact_notes')} />
+                </SectionPanel>
 
                 <SectionPanel title="Incident Overview" fieldKeys={['primary_incident_type','overall_severity','overall_incident_summary','stage_coding_suitability','sequence_clarity']} fields={fields}>
                   <FieldRow label="Primary incident type" value={f('primary_incident_type')} onChange={(v) => set('primary_incident_type', v)} type="select" options={['suspicious / concerning behaviour','non-payment / payment dispute','coercion / intimidation','physical violence','sexual violence','robbery / theft','substance-facilitated harm','movement / relocation concern','multiple harms','other','unknown / unclear']} provenance={prov('primary_incident_type')} onMarkReviewed={() => markReviewed('primary_incident_type')} />
@@ -2716,9 +2680,9 @@ export default function CodingScreen() {
                   <FieldRow label="Uncertainty excerpt" value={f('uncertainty_excerpt')} onChange={(v) => set('uncertainty_excerpt', v)} type="textarea" placeholder="Verbatim text illustrating ambiguity or data limitation." provenance={prov('uncertainty_excerpt')} onMarkReviewed={() => markReviewed('uncertainty_excerpt')} />
                 </SectionPanel>
 
-                <SectionPanel title="Optional Text Scan / Analyst Support" fieldKeys={[]} fields={fields} defaultCollapsed>
+                <SectionPanel title="Analyst Support Tools" fieldKeys={[]} fields={fields} defaultCollapsed>
                   <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginBottom: 10, fontStyle: 'italic' }}>
-                    Text scan outputs are suggestions only. Coding decisions must be reviewed and confirmed by the analyst.
+                    System-populated suggestions only. All values must be reviewed and confirmed by the analyst before use.
                   </div>
                   <NlpSignalsPanel nlp={nlp} onSetField={(field, value) => set(field as keyof Report, value)} reportId={report?.report_id} getFieldValue={(field) => f(field as keyof Report)} />
                   <EscalationArc esc={nlp.escalation ?? {}} />

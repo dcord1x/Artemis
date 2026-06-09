@@ -9,8 +9,8 @@
  *   - Environmental pattern aggregation
  *   - Case summaries table
  *
- * Provenance note: any field sourced only from NLP (ai_suggested) is
- * labelled [provisional] throughout. Analyst-coded values are primary.
+ * Provenance note: analyst-confirmed values are primary. Fields not yet
+ * reviewed by the analyst are marked not analyst-confirmed.
  */
 
 import { useEffect, useState } from 'react';
@@ -18,6 +18,7 @@ import { useNavigate } from 'react-router-dom';
 import { Download, RefreshCw, AlertTriangle, ChevronDown, ChevronUp, Trash2, FileText } from 'lucide-react';
 import { GoogleMap, Marker, Polyline } from '@react-google-maps/api';
 import { api } from '../api';
+import { formatLabel } from '../utils';
 import type {
   ResearchAggregate,
   AggregateEncounter,
@@ -73,9 +74,9 @@ function ProvenanceNote() {
       <AlertTriangle size={13} style={{ flexShrink: 0, marginTop: 1, color: 'var(--amber)' }} />
       <span>
         Derived from analyst-coded fields.{' '}
-        <strong style={{ fontWeight: 600, color: 'var(--amber)' }}>[provisional]</strong>
-        {' '}markers indicate the field was NLP-suggested and not yet confirmed by an analyst —
-        treat these as signals for review, not confirmed findings.
+        <strong style={{ fontWeight: 600, color: 'var(--amber)' }}>[unreviewed]</strong>
+        {' '}markers indicate fields that have not yet been confirmed by the analyst —
+        treat these as unreviewed imports, not confirmed findings.
       </span>
     </div>
   );
@@ -99,7 +100,7 @@ function FreqBar({
           {label}
           {provisional && (
             <span style={{ marginLeft: 5, fontSize: 10, color: 'var(--amber)', fontWeight: 600 }}>
-              [provisional]
+              [unreviewed]
             </span>
           )}
           {sparse && <SparseBadge />}
@@ -165,7 +166,7 @@ function CellChip({ value, goodValues, warnValues, neutral }: {
   }
   return (
     <span style={{ fontSize: 10.5, fontWeight: 600, padding: '2px 6px', borderRadius: 3, background: bg, color, border: `1px solid ${border}`, whiteSpace: 'nowrap' }}>
-      {value}
+      {formatLabel(value)}
     </span>
   );
 }
@@ -635,10 +636,10 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'encounter_overview', label: 'Coded Case Overview' },
   { id: 'stage_patterns',     label: 'RQ1 — Stage Patterns' },
   { id: 'sequences',          label: 'RQ1 — Encounter Sequences' },
-  { id: 'mobility',           label: 'RQ3 — Mobility Pathways' },
   { id: 'environment',        label: 'RQ2 — Environmental Patterns' },
+  { id: 'mobility',           label: 'RQ3 — Mobility Pathways' },
+  { id: 'spatial',            label: 'RQ3 — Spatial Movement' },
   { id: 'filtered_groups',    label: 'Filtered Case Groups' },
-  { id: 'spatial',            label: 'Spatial Overview' },
   { id: 'linkage_view',       label: 'Case Comparison' },
   { id: 'caselist',           label: 'Case Sequence Table' },
   { id: 'vawg',               label: 'Supplementary Flags' },
@@ -671,6 +672,7 @@ export default function ResearchOutputs() {
 
   // Filtered case groups
   const [fgReports, setFgReports]           = useState<import('../types').Report[]>([]);
+  const [fgAllReports, setFgAllReports]     = useState<import('../types').Report[]>([]);
   const [fgLoading, setFgLoading]           = useState(false);
   const [fgPreset, setFgPreset]             = useState('');
 
@@ -1008,7 +1010,7 @@ export default function ResearchOutputs() {
           <SectionHeading>Incident-level harm and control indicators</SectionHeading>
           <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: '0 0 8px' }}>
             Count of cases where each indicator is coded yes, probable, or inferred.
-            Denominator: all {total} cases. Analyst-coded values only; NLP-provisional excluded.
+            Denominator: all {total} cases. Analyst-coded values only. Unreviewed imported or system-populated fields are not counted as findings.
           </p>
           <div style={{ fontSize: 11.5, color: 'var(--text-3)', padding: '6px 10px', background: 'var(--surface-2)', borderRadius: 5, border: '1px solid var(--border)', marginBottom: 12, lineHeight: 1.5 }}>
             <strong style={{ fontWeight: 600, color: 'var(--text-2)' }}>Note:</strong>{' '}
@@ -1183,6 +1185,73 @@ export default function ResearchOutputs() {
                 sparse={isSparse(row.count)} />
             ));
           })()}
+        </Panel>
+
+        {/* Initial Contact Stage Detail — sub-section within RQ1 */}
+        <Panel>
+          <SectionHeading>Initial Contact Stage Detail</SectionHeading>
+          <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 16, lineHeight: 1.65 }}>
+            Breakdown of the initial contact stage where the report provides enough detail. These fields help describe how the encounter began but do not define a separate research question.
+          </p>
+          <p style={{ fontSize: 11.5, color: 'var(--text-3)', marginBottom: 18, lineHeight: 1.65, borderLeft: '3px solid var(--border)', paddingLeft: 10 }}>
+            Initial contact is coded as one possible stage in the encounter sequence. These fields support RQ1 by describing the initial contact stage where it is visible, but they are not treated as a separate research question.
+          </p>
+          {data?.codability ? (() => {
+            const cod = data.codability as any;
+            const renderDist = (label: string, field: string, color: string) => {
+              const vc = cod[field];
+              if (!vc || !vc.total_coded) return null;
+              const entries = Object.entries(vc.counts as Record<string, number>).sort((a, b) => b[1] - a[1]);
+              const tot = vc.total_coded as number;
+              return (
+                <div style={{ marginBottom: 14 }}>
+                  <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--text-3)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</div>
+                  {entries.map(([val, count]) => {
+                    const pct = tot ? Math.round((count as number) / tot * 100) : 0;
+                    return (
+                      <div key={val} style={{ marginBottom: 4 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, marginBottom: 2 }}>
+                          <span style={{ color: 'var(--text-2)' }}>{formatLabel(val)}</span>
+                          <span style={{ color: 'var(--text-3)' }}>{count} ({pct}%)</span>
+                        </div>
+                        <div style={{ height: 5, borderRadius: 10, background: 'var(--surface-3)', overflow: 'hidden' }}>
+                          <div style={{ height: '100%', borderRadius: 10, background: color, width: `${pct}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 3 }}>n = {tot} coded</div>
+                </div>
+              );
+            };
+            return (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 18 }}>
+                <div>
+                  {renderDist('Approach method', 'approach_method', '#4A90D9')}
+                  {renderDist('Approach setting', 'approach_setting', '#F59E0B')}
+                  {renderDist('Mobility context at contact', 'approach_mobility_context', '#8B5CF6')}
+                </div>
+                <div>
+                  {renderDist('Visibility at contact', 'initial_contact_visibility', '#4A90D9')}
+                  {renderDist('Guardianship at contact', 'initial_contact_guardianship', '#22C55E')}
+                  {renderDist('Client known at contact', 'client_known_at_contact', '#94A3B8')}
+                </div>
+                <div>
+                  <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--text-3)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Coding Guidance</div>
+                  <p style={{ fontSize: 11.5, color: 'var(--text-3)', lineHeight: 1.65, marginBottom: 10 }}>
+                    Approach fields provide additional detail for the Initial Contact stage. They support stage reconstruction by recording how contact began when the narrative provides this information. They should not be interpreted as evidence of offender motive.
+                  </p>
+                  <p style={{ fontSize: 11.5, color: 'var(--text-3)', lineHeight: 1.65 }}>
+                    Code what the narrative describes. Do not infer approach method if the report does not describe how first contact was made. Use <em>unknown_unclear</em> where the narrative is ambiguous.
+                  </p>
+                </div>
+              </div>
+            );
+          })() : (
+            <p style={{ fontSize: 12, color: 'var(--text-3)', fontStyle: 'italic' }}>
+              Initial Contact stage detail will appear once approach fields are coded on individual cases.
+            </p>
+          )}
         </Panel>
 
       </div>
@@ -1727,39 +1796,72 @@ export default function ResearchOutputs() {
 
   // ── Filtered Case Groups tab ─────────────────────────────────────────────
 
-  const FG_PRESETS: { id: string; label: string; params: Record<string, string>; desc: string }[] = [
-    { id: 'high_detail',      label: 'High narrative detail',   params: { narrative_detail_level: 'high' },                desc: 'Reports coded as high narrative detail — best candidates for deep sequence analysis.' },
-    { id: 'seq_recon',        label: 'Sequence reconstructable', params: { sequence_reconstructable: 'yes' },              desc: 'Reports where the analyst marked the encounter sequence as reconstructable.' },
-    { id: 'stage_suitable',   label: 'Stage-coding suitable',   params: { stage_coding_suitability: 'yes' },               desc: 'Reports suitable for stage-level coding.' },
-    { id: 'with_movement',    label: 'Movement present',        params: { movement_present: 'yes' },                       desc: 'Reports where movement / relocation is recorded.' },
-    { id: 'mappable',         label: 'Mappable',                params: { mappable_status: 'mappable' },                   desc: 'Reports coded as spatially mappable.' },
-    { id: 'has_sequence_pattern', label: 'Has sequence pattern', params: { has_sequence_pattern: 'yes' },                  desc: 'Reports where the analyst has written a coded sequence pattern.' },
-    { id: 'coded',            label: 'All analyst-coded',       params: { coding_status: 'coded' },                        desc: 'All reports that have been analyst-reviewed and coded.' },
+  type FgPreset = { id: string; label: string; desc: string; filter: (r: import('../types').Report) => boolean };
+
+  const notBlank = (v: unknown) => typeof v === 'string' && v.trim() !== '' && v.trim() !== 'not_reviewed' && v.trim() !== 'uncoded';
+
+  const FG_PRESETS: FgPreset[] = [
+    { id: 'coded',            label: 'All analyst-coded',          desc: 'Reports that have been analyst-reviewed and coded.',
+      filter: r => ['coded','reviewed'].includes((r.coding_status || '').trim()) },
+    { id: 'high_detail',      label: 'High narrative detail',      desc: 'Reports coded as high narrative detail — best candidates for deep sequence analysis.',
+      filter: r => (r.narrative_detail_level || '').trim() === 'high' },
+    { id: 'seq_recon',        label: 'Sequence reconstructable',   desc: 'Reports where the encounter sequence is marked reconstructable.',
+      filter: r => ['yes','partial'].includes((r.sequence_reconstructable || '').trim()) },
+    { id: 'stage_suitable',   label: 'Stage-coding suitable',      desc: 'Reports suitable for stage-level coding.',
+      filter: r => (r.stage_coding_suitability || '').toLowerCase().startsWith('yes') || (r.stage_coding_suitability || '').toLowerCase().startsWith('partial') },
+    { id: 'with_movement',    label: 'Movement present',           desc: 'Reports where movement / relocation is coded.',
+      filter: r => ['yes','probable','inferred'].includes((r.movement_present || '').trim()) || (r.movement_visible || '').trim() === 'yes' },
+    { id: 'mappable',         label: 'Mappable',                   desc: 'Reports coded as spatially mappable.',
+      filter: r => (r.mappable_status || '').trim() === 'mappable' || (r.location_coding_suitability || '').trim() === 'mappable' },
+    { id: 'has_sequence_pattern', label: 'Has sequence pattern',   desc: 'Reports where the analyst has written a coded sequence pattern.',
+      filter: r => notBlank(r.sequence_pattern) },
+    { id: 'street_approach',  label: 'Street approach',            desc: 'Reports where initial contact was a street-based approach.',
+      filter: r => { const v = (r.approach_method || '').toLowerCase(); return v.includes('street') || v.includes('walk') || v.includes('in person') || v === 'street_approach'; } },
+    { id: 'online_approach',  label: 'Online / digital approach',  desc: 'Reports where initial contact was online or digital.',
+      filter: r => { const v = (r.approach_method || '').toLowerCase(); return v.includes('online') || v.includes('digital') || v.includes('app') || v.includes('website') || v === 'online_digital'; } },
+    { id: 'vehicle_approach', label: 'Vehicle-based approach',     desc: 'Reports where initial contact was vehicle-based.',
+      filter: r => { const v = (r.approach_method || '').toLowerCase(); return v.includes('vehicle') || v === 'vehicle_based'; } },
+    { id: 'known_client',     label: 'Known / repeat client',      desc: 'Reports where the client was known or identified as a repeat client at contact.',
+      filter: r => { const v = (r.client_known_at_contact || '').toLowerCase(); return v.includes('known') || v.includes('repeat') || v === 'yes_known'; } },
+    { id: 'third_party',      label: 'Third-party arranged',       desc: 'Reports where contact was arranged through a third party.',
+      filter: r => { const v = (r.approach_method || '').toLowerCase(); return v.includes('third') || v === 'third_party_arranged'; } },
+    { id: 'ic_low_visibility', label: 'Low visibility at contact', desc: 'Reports where initial contact occurred in low-visibility conditions.',
+      filter: r => { const v = (r.initial_contact_visibility || '').toLowerCase(); return v.includes('limited') || v.includes('not_visible') || v.includes('private') || v === 'not_visible'; } },
+    { id: 'ic_no_guardianship', label: 'No guardianship at contact', desc: 'Reports where no capable guardianship was present at initial contact.',
+      filter: r => (r.initial_contact_guardianship || '').trim() === 'absent' },
   ];
 
-  const loadFgReports = (params: Record<string, string>) => {
+  const loadFgReports = (preset: FgPreset) => {
     setFgLoading(true);
-    api.listReports(params)
-      .then(rs => { setFgReports(rs); setFgLoading(false); })
+    const source = fgAllReports.length > 0
+      ? Promise.resolve(fgAllReports)
+      : api.listReports({}).then(rs => { setFgAllReports(rs); return rs; });
+    source
+      .then(all => { setFgReports(all.filter(preset.filter)); setFgLoading(false); })
       .catch(() => setFgLoading(false));
   };
+
 
   const FilteredGroupsTab = () => {
     const preset = FG_PRESETS.find(p => p.id === fgPreset);
     return (
       <Panel>
         <SectionHeading>Filtered Case Groups</SectionHeading>
-        <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: '0 0 14px', lineHeight: 1.55 }}>
+        <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: '0 0 10px', lineHeight: 1.55 }}>
           Select a preset group to load matching cases. Each row shows codability-relevant fields for fast cross-case review.
           Click a case ID to open the coding workspace for that case.
         </p>
+        <div style={{ fontSize: 11.5, color: 'var(--text-3)', padding: '7px 11px', background: 'var(--surface-2)', borderRadius: 5, border: '1px solid var(--border)', marginBottom: 14, lineHeight: 1.5 }}>
+          Filtered groups include analyst-coded matches only. Blank or unreviewed fields are excluded from preset results.
+          Outputs reflect analyst-coded fields only.
+        </div>
 
         {/* Preset buttons */}
         <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginBottom: 16 }}>
           {FG_PRESETS.map(p => (
             <button
               key={p.id}
-              onClick={() => { setFgPreset(p.id); loadFgReports(p.params); }}
+              onClick={() => { setFgPreset(p.id); loadFgReports(p); }}
               style={{
                 padding: '6px 13px', fontSize: 12, border: `1px solid ${fgPreset === p.id ? 'var(--accent)' : 'var(--border)'}`,
                 borderRadius: 5, background: fgPreset === p.id ? 'var(--accent)' : 'var(--surface)',
@@ -1792,22 +1894,23 @@ export default function ResearchOutputs() {
 
         {!fgLoading && fgPreset && fgReports.length === 0 && (
           <div style={{ fontSize: 12.5, color: 'var(--text-3)', fontStyle: 'italic', padding: '20px 0', textAlign: 'center' }}>
-            No cases match this group yet — code the relevant fields to populate.
+            No analyst-coded cases match this filter yet.
           </div>
         )}
 
         {!fgLoading && fgReports.length > 0 && (
           <>
             <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginBottom: 10 }}>
-              {fgReports.length} case{fgReports.length !== 1 ? 's' : ''}
+              {fgReports.length} analyst-coded case{fgReports.length !== 1 ? 's' : ''} match this filter
             </div>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--border)' }}>
                     {[
-                      'Case ID', 'Narrative detail', 'Seq. reconstructable', 'Stage suitability',
-                      'Sequence pattern', 'Primary harm', 'Movement pattern', 'Mappable', 'Key excerpt',
+                      'Case ID', 'Approach method', 'Contact setting',
+                      'Sequence pattern', 'Movement pattern', 'Primary harm',
+                      'Stage suitability', 'Mappable', 'Key excerpt',
                     ].map(h => (
                       <th key={h} style={{ textAlign: 'left', padding: '6px 10px', fontSize: 10.5, color: 'var(--text-3)', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
                         {h}
@@ -1817,7 +1920,7 @@ export default function ResearchOutputs() {
                 </thead>
                 <tbody>
                   {fgReports.map(r => {
-                    const hasExcerpt = !!(r.stage_excerpt || r.behaviour_excerpt || r.environment_excerpt || r.movement_excerpt || r.key_supporting_excerpts);
+                    const hasExcerpt = !!(r.stage_excerpt || r.behaviour_excerpt || r.environment_excerpt || r.movement_excerpt || r.key_supporting_excerpts || r.initial_contact_excerpt);
                     return (
                       <tr
                         key={r.id}
@@ -1828,13 +1931,10 @@ export default function ResearchOutputs() {
                       >
                         <td style={{ padding: '7px 10px', fontFamily: 'monospace', fontSize: 11, color: 'var(--accent)', fontWeight: 700 }}>{r.report_id}</td>
                         <td style={{ padding: '7px 10px' }}>
-                          <CellChip value={r.narrative_detail_level} goodValues={['high']} warnValues={['medium']} />
+                          <CellChip value={r.approach_method} goodValues={[]} warnValues={[]} neutral />
                         </td>
                         <td style={{ padding: '7px 10px' }}>
-                          <CellChip value={r.sequence_reconstructable} goodValues={['yes']} warnValues={['partial']} />
-                        </td>
-                        <td style={{ padding: '7px 10px' }}>
-                          <CellChip value={r.stage_coding_suitability} goodValues={['yes']} warnValues={['partial']} />
+                          <CellChip value={r.approach_setting} goodValues={[]} warnValues={[]} neutral />
                         </td>
                         <td style={{ padding: '7px 10px', maxWidth: 200 }}>
                           {r.sequence_pattern ? (
@@ -1845,11 +1945,14 @@ export default function ResearchOutputs() {
                             <span style={{ fontSize: 11, color: 'var(--text-3)', fontStyle: 'italic' }}>—</span>
                           )}
                         </td>
+                        <td style={{ padding: '7px 10px' }}>
+                          <CellChip value={r.movement_pattern_type} goodValues={[]} warnValues={[]} neutral />
+                        </td>
                         <td style={{ padding: '7px 10px', fontSize: 11.5, color: 'var(--text-2)' }}>
                           {r.primary_harm || r.primary_incident_type || '—'}
                         </td>
                         <td style={{ padding: '7px 10px' }}>
-                          <CellChip value={r.movement_pattern_type} goodValues={[]} warnValues={[]} neutral />
+                          <CellChip value={r.stage_coding_suitability} goodValues={['yes']} warnValues={['partial']} />
                         </td>
                         <td style={{ padding: '7px 10px' }}>
                           <CellChip value={r.mappable_status} goodValues={['mappable']} warnValues={['partial']} />
@@ -2806,8 +2909,8 @@ export default function ResearchOutputs() {
         {tab === 'vawg'            && <VawgTab />}
         {tab === 'stage_patterns'  && <StagePatternsTab />}
         {tab === 'sequences'       && <SequencesTab />}
-        {tab === 'mobility'        && <MobilityTab />}
         {tab === 'environment'     && <EnvironmentTab />}
+        {tab === 'mobility'        && <MobilityTab />}
         {tab === 'spatial'         && <SpatialOverviewTab />}
         {tab === 'linkage_view'    && <LinkageViewTab />}
         {tab === 'filtered_groups' && <FilteredGroupsTab />}

@@ -276,6 +276,16 @@ class ReportUpdate(BaseModel):
     # GIS mappable status
     mappable_status: Optional[str] = None
 
+    # Initial Contact / Approach
+    approach_method:              Optional[str] = None
+    approach_setting:             Optional[str] = None
+    approach_mobility_context:    Optional[str] = None
+    client_known_at_contact:      Optional[str] = None
+    initial_contact_visibility:   Optional[str] = None
+    initial_contact_guardianship: Optional[str] = None
+    initial_contact_excerpt:      Optional[str] = None
+    initial_contact_notes:        Optional[str] = None
+
 
 class ReportOut(BaseModel):
     id: int
@@ -545,6 +555,16 @@ class ReportOut(BaseModel):
 
     # GIS mappable status
     mappable_status: str = ""
+
+    # Initial Contact / Approach
+    approach_method:              str = ""
+    approach_setting:             str = ""
+    approach_mobility_context:    str = ""
+    client_known_at_contact:      str = ""
+    initial_contact_visibility:   str = ""
+    initial_contact_guardianship: str = ""
+    initial_contact_excerpt:      str = ""
+    initial_contact_notes:        str = ""
 
     class Config:
         from_attributes = True

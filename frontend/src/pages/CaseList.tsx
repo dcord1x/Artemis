@@ -473,15 +473,15 @@ export default function CaseList() {
     try {
       const res = await api.batchAnalyze();
       if (!res.nlp_available) {
-        addToast('NLP unavailable — spaCy model not loaded on server. Run: python -m spacy download en_core_web_sm', 'error');
+        addToast('Auto-populate unavailable — text analysis model not loaded on server.', 'error');
       } else if (res.processed === 0) {
-        addToast('NLP All — all cases already have NLP data. Open a case and click "NLP Analyze" to re-run on a specific case.', 'info');
+        addToast('All cases already have system-populated values. Open a case to review and confirm fields.', 'info');
       } else {
-        addToast(`NLP complete — ${res.processed} case${res.processed !== 1 ? 's' : ''} analyzed. Open cases to review signals.`, 'success');
+        addToast(`Auto-populate complete — ${res.processed} case${res.processed !== 1 ? 's' : ''} processed. Open cases to review and confirm fields before use.`, 'success');
         load();
       }
     } catch {
-      addToast('NLP batch failed — check that the backend is running', 'error');
+      addToast('Auto-populate failed — check that the backend is running', 'error');
     } finally {
       setBatchAnalyzing(false);
     }
@@ -576,7 +576,7 @@ export default function CaseList() {
           </button>
           <button className="btn-ghost" onClick={handleBatchAnalyze} disabled={batchAnalyzing} style={{ fontSize: 12, flexShrink: 0 }}>
             <Sparkles size={12} style={{ color: 'var(--amber)' }} />
-            {batchAnalyzing ? 'Processing…' : 'NLP All'}
+            {batchAnalyzing ? 'Processing…' : 'Auto-populate'}
           </button>
           {reports.length > 0 && <>
             <div style={{ width: 1, height: 18, background: 'var(--border)', flexShrink: 0 }} />
@@ -652,7 +652,7 @@ export default function CaseList() {
           </button>
           <button onClick={handleBatchAnalyze} disabled={batchAnalyzing}
             style={{ fontSize: 12.5, display: 'flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 5, border: '1px solid var(--amber-border)', background: 'var(--amber-pale)', color: 'var(--amber)', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>
-            <Sparkles size={12} /> {batchAnalyzing ? 'Processing…' : 'Run NLP'}
+            <Sparkles size={12} /> {batchAnalyzing ? 'Processing…' : 'Auto-populate'}
           </button>
           <button onClick={handleDeleteSelected}
             style={{ fontSize: 12.5, display: 'flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 5, border: '1px solid var(--critical-red-border, #F5C6C6)', background: 'var(--critical-red-pale, #FDF2F2)', color: 'var(--critical-red, #A51F1F)', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>

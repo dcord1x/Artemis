@@ -23,6 +23,8 @@ import type { ReportStage } from '../types';
 const STAGE_TYPES = [
   { value: 'initial_contact',   label: 'Initial Contact',
     def: 'The first moment of interaction between the client and the worker.' },
+  { value: 'screening_recognition', label: 'Screening / Recognition',
+    def: 'Client or worker assessing or checking the other — identification, vetting, or recognition before engagement.' },
   { value: 'negotiation',       label: 'Negotiation',
     def: 'Discussion of terms, services, or payment; includes service refusal.' },
   { value: 'pickup_meeting',    label: 'Pickup / Meeting',
@@ -47,6 +49,7 @@ const STAGE_TYPES = [
 
 const STAGE_COLORS: Record<string, { bg: string; border: string; text: string }> = {
   initial_contact:   { bg: '#EFF6FF', border: '#BFDBFE', text: '#1D4ED8' },
+  screening_recognition: { bg: '#F5F3FF', border: '#DDD6FE', text: '#6D28D9' },
   negotiation:       { bg: '#F0FDF4', border: '#BBF7D0', text: '#15803D' },
   pickup_meeting:    { bg: '#FEFCE8', border: '#FDE68A', text: '#A16207' },
   movement_travel:   { bg: '#FFF7ED', border: '#FED7AA', text: '#C2410C' },

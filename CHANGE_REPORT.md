@@ -1,13 +1,13 @@
 # Artemis — Change Report
 **Date:** 2026-06-08
-**Scope:** Methodology-defensibility update — PhD progress/probation review preparation
+**Scope:** Final targeted cleanup — pre-testing pass + initial contact reframing + session 4 NLP/AI visibility pass
 **Status:** All items implemented. TypeScript builds clean. No outstanding errors.
 
 ---
 
-## Workflow Coverage Confirmation
+## Session 1 — Methodology-Defensibility Update
 
-The tool now supports the full methodology workflow end-to-end:
+### Workflow Coverage Confirmation
 
 | Step | Status | Where in tool |
 |------|--------|---------------|
@@ -15,15 +15,16 @@ The tool now supports the full methodology workflow end-to-end:
 | Codability / Data Quality assessment | ✅ | Coding Workspace → Codability / Data Quality tab |
 | Stage coding | ✅ | Coding Workspace → Stage Coding tab + StageSequencer |
 | Incident-level coding | ✅ | Coding Workspace → Incident-Level Coding tab |
+| Initial Contact / Approach coding | ✅ | Coding Workspace → Incident-Level Coding → Initial Contact / Approach panel |
 | Situational / Environmental coding | ✅ | Coding Workspace → Incident-Level Coding → Situation / Environment panel |
 | Mobility / Spatial sequence coding | ✅ | Coding Workspace → Mobility / Spatial Sequence tab |
 | Narrative excerpts / uncertainty | ✅ | Coding Workspace → Narrative Excerpts tab |
-| Case summary | ✅ | Coding Workspace → Case Summary tab (includes Encounter Sequence Output) |
+| Case summary | ✅ | Coding Workspace → Case Summary tab (includes Encounter Sequence Output + Initial Contact block) |
 | Cross-case analysis outputs | ✅ | Analysis Dashboard (RQ1/RQ2/RQ3 panels) + Research Outputs (RQ-labelled tabs + Filtered Case Groups) |
 
 ---
 
-## 1. Files Edited
+### Files Edited (Session 1)
 
 | File | Change type |
 |------|-------------|
@@ -36,308 +37,341 @@ The tool now supports the full methodology workflow end-to-end:
 
 ---
 
-## 2. Codebook Changes (`CodebookPage.tsx`)
+### Codebook Changes (Session 1)
 
-### Interface change
-- `literatureBasis?: string` renamed to `methodologicalBasis?: string` on both `CodebookEntry` and `CONCEPT_DEFINITIONS` item type
-- All references to the old field name updated in data and render
-
-### Label changes
-- "Literature basis:" label in concept cards → "Methodological basis:"
-- "Literature Basis" section header in field entries → "Methodological Basis"
-- Page header subtitle: "Based on situational action theory and adapted to the specific analytic requirements of Bad Date Report research" → "Adapted to the specific analytic requirements of Bad Date Report research, informed by crime scripting, situational analysis, environmental criminology, and sex work violence literature"
+- `literatureBasis` renamed to `methodologicalBasis` throughout
+- All author names removed (Cornish, Wikström, Clarke, Cohen & Felson, Brantingham, Rossmo, Kinnell, Hubbard, McKeganey, Barnard, Sanders)
 - Section heading "Core Concepts and Theoretical Basis" → "Core Concepts"
-
-### Author names and source citations removed
-The following named authors and in-text citations were removed from all app-facing Codebook content:
-
-| Removed | Replaced with |
-|---------|---------------|
-| Cornish 1994; Leclerc et al. | informed by crime scripting |
-| Wikström (Situational Action Theory) | informed by situational analysis |
-| Clarke (SCP); Cohen & Felson (RAT) | informed by situational analysis and environmental criminology |
-| Brantingham & Brantingham | informed by environmental criminology |
-| Rossmo; Chainey & Ratcliffe | informed by spatial and mobility analysis |
-| Kinnell; Hubbard; McKeganey | informed by sex work violence literature |
-| Barnard; Sanders | informed by sex work violence literature and spatial analysis |
-| Cohen & Felson (1979) with year citation | informed by situational analysis and environmental criminology |
-
-No author names appear anywhere in the app-facing Codebook.
-
-### Strong empirical claims removed
-- "consistently associated with increased risk, reduced guardianship, and greater offender control" → removed; replaced with "alters situational conditions" (neutral analytical framing)
-- "a key mechanism through which offenders create conditions for harm" retained as an analytical observation, not a literature claim
-
-### Broad methodological language used throughout
-All methodological basis text now uses one or more of:
-- *informed by crime scripting*
-- *informed by situational analysis*
-- *informed by environmental criminology*
-- *informed by sex work violence literature*
-- *informed by spatial and mobility analysis*
-- *informed by victim-generated reporting methods*
-- *informed by qualitative coding methodology*
-- *informed by offence progression analysis*
+- Page subtitle updated to broad methodological language
+- "Literature basis:" label → "Methodological basis:"
+- All 14 concept definitions revised with broad, source-free methodological language
+- All 20 field entries given `methodologicalBasis` text
+- New concept: Escalation added
+- New clarifying rules added to Stage, Visibility, Guardianship, Control, Data Quality, Coding Confidence
 
 ---
 
-## 3. Operational Definitions Added or Revised
+## Session 2 — Final Targeted Cleanup
 
-All 14 concept definitions in `CONCEPT_DEFINITIONS` were revised. Key changes:
+### Summary of All 21 Tasks
 
-| Concept | Change |
-|---------|--------|
-| Stage | Expanded with sentence clarifying "absent" means the narrative does not describe it, not that it did not occur |
-| Behaviour | Added sentence requiring analyst-inferred behaviours to be marked with coding confidence value |
-| Situation | Clarified coded at both case-level and stage-level |
-| Environment | Unchanged in substance; methodological basis reworded |
-| Movement | Added explicit instruction: "the analyst should assess whether and how movement altered conditions for harm or escape" |
-| Relocation | Removed author citation; kept analytical framing |
-| Visibility | Added clarification: "Visibility is not the same as whether anyone actually observed the encounter" |
-| Guardianship | Added: "Guardianship is not equivalent to anyone being nearby — the capacity to intervene matters" |
-| Isolation | Expanded with examples of how isolation arises (setting, offender behaviour) |
-| Control | Added: "Control is analytically distinct from consent — offender control may be asserted covertly or through normalised pressure" |
-| Escalation | **New concept** — added to the 12 previously defined concepts |
-| Data Quality | Added: "Absence of information in a report must not be coded as absence of the event" |
-| Stage Visibility | Expanded with four possible values and clarification of what "absent" means |
-| Coding Confidence | Added: "Coding confidence must be recorded wherever the analyst departs from what is explicitly stated in the narrative" |
-
----
-
-## 4. Coding Rules Added or Revised
-
-### New field entries added to `CODEBOOK_ENTRIES`
-The following entries were added or substantially revised with full coding rule text:
-
-| Field | Tab | Level | Change |
-|-------|-----|-------|--------|
-| `narrative_detail_level` | Codability / Data Quality | case | Methodological basis added |
-| `sequence_reconstructable` | Codability / Data Quality | case | Methodological basis added |
-| `stage_coding_suitability` | Codability / Data Quality | case | Methodological basis added |
-| `movement_coding_suitability` | Codability / Data Quality | case | Methodological basis added |
-| `location_coding_suitability` | Codability / Data Quality | case | Methodological basis added |
-| `main_data_limitation` | Codability / Data Quality | case | Methodological basis added |
-| `stage_type` | Stage Coding | stage | Methodological basis added |
-| `stage_visible` | Stage Coding | stage | Methodological basis added |
-| `stage_certainty` | Stage Coding | stage | Methodological basis added |
-| `visibility` | Stage Coding | stage | Methodological basis added; duplicate entry removed |
-| `guardianship` | Stage Coding | stage | Methodological basis added; duplicate entry removed |
-| `isolation_level` | Stage Coding | stage | Methodological basis added |
-| `control_type` | Stage Coding | stage | Methodological basis added |
-| `primary_setting_type` | Incident-Level Coding | case | Methodological basis added |
-| `visibility_case` | Incident-Level Coding | case | Methodological basis added |
-| `isolation_case` | Incident-Level Coding | case | Methodological basis added |
-| `guardianship_case` | Incident-Level Coding | case | Methodological basis added |
-| `movement_pattern_type` | Mobility / Spatial Sequence | case | Methodological basis added |
-| `movement_timing` | Mobility / Spatial Sequence | case | Methodological basis added |
-| `mappable_status` | GIS | case | Methodological basis added |
-
-**Duplicate entries removed:** The original `visibility` and `guardianship` stage-level entries (without methodological basis) were removed when the updated versions were added. The dataset now has exactly one entry per field.
+| # | Task | Status |
+|---|------|--------|
+| 1 | Hide "AI Suggest" and "NLP Analyze" buttons from UI | ✅ |
+| 2 | Remove NLP language from dashboard reports and pipeline steps | ✅ |
+| 3 | Change provenance pill display "provisional" → "not analyst-confirmed" | ✅ |
+| 4 | Remove harm types (physical_force, sexual_assault, stealthing, robbery_theft) from sequence bar stageDefs | ✅ |
+| 5 | Update STAGE_LABELS with new controlled vocabulary + legacy key mappings | ✅ |
+| 6 | Fix Analysis.tsx RQ section order: RQ1 → RQ2 → RQ3 (was RQ2 → RQ3 → RQ1) | ✅ |
+| 7 | Fix ResearchOutputs.tsx tab order; rename spatial → "RQ3 — Spatial Movement" | ✅ |
+| 8 | Add 8 new Initial Contact / Approach fields to backend/models.py | ✅ |
+| 9 | Add new fields to backend/schemas.py (ReportUpdate + ReportOut) | ✅ |
+| 10 | Add new fields to frontend/src/types.ts Report interface | ✅ |
+| 11 | Add Initial Contact / Approach SectionPanel to CodingScreen Incident-Level Coding tab | ✅ |
+| 12 | Add Initial Contact card to Analysis.tsx RQ1 section | ✅ |
+| 13 | Add Initial Contact tab to ResearchOutputs.tsx (id: 'initial_contact') | ✅ |
+| 14 | Add Initial Contact block to CodingScreen Case Summary tab | ✅ |
+| 15 | Add Codebook entries for 6 initial contact approach fields | ✅ |
+| 16 | Add approach-pattern presets to FilteredGroupsTab | ✅ |
+| 17 | Add initial contact fields to backend aggregate (codability dict) | ✅ |
+| 18 | Add initial contact fields to CodabilityAggregate interface in types.ts | ✅ |
+| 19 | Remove NLP comment from ResearchOutputs.tsx file header | ✅ |
+| 20 | Remove unused Sparkles and ScanSearch icon imports from CodingScreen | ✅ |
+| 21 | Final CHANGE_REPORT.md | ✅ |
 
 ---
 
-## 5. Unclear / Missing Rules Added or Revised
+### Files Edited (Session 2)
 
-| Field | Unclear rule change |
-|-------|---------------------|
-| `stage_visible` | Strengthened: "Do not treat absent as evidence that the stage did not occur — absent means the narrative does not describe it" |
-| `location_coding_suitability` | Added: "Do not force a case into a more precise category than the narrative supports" |
-| `mappable_status` | Added: "Do not geocode cases with only descriptive location information as if they were mappable" |
-
----
-
-## 6. Methodological Basis / Coding Rationale Wording
-
-Every `CODEBOOK_ENTRIES` entry now has a `methodologicalBasis` field. All entries use broad, source-free language. No entry contains an author name, publication year, or in-text citation.
-
-Every `CONCEPT_DEFINITIONS` entry now has a `methodologicalBasis` field using the same conventions.
-
-The field is rendered in:
-- Concept definition cards (footer, below a dashed divider, labelled "Methodological basis:")
-- Field entry cards (full-width row below the example, labelled "Methodological Basis")
+| File | Change type |
+|------|-------------|
+| `backend/models.py` | 8 new Initial Contact fields added to Report model class + _new_columns migration list |
+| `backend/schemas.py` | 8 new fields added to ReportUpdate (Optional[str]) and ReportOut (str = "") |
+| `backend/main.py` | 6 new approach fields added to codability aggregate |
+| `frontend/src/types.ts` | 8 new fields added to Report interface; 6 new fields added to CodabilityAggregate |
+| `frontend/src/pages/CodingScreen.tsx` | AI/NLP buttons hidden; provenance pill label changed; harm types removed from stageDefs; Initial Contact / Approach SectionPanel added; Initial Contact block added to Case Summary |
+| `frontend/src/pages/Analysis.tsx` | NLP language removed; RQ sections reordered RQ1 → RQ2 → RQ3; Initial Contact card added under RQ1; STAGE_LABELS updated with new vocabulary |
+| `frontend/src/pages/ResearchOutputs.tsx` | Tab order fixed; spatial tab renamed to "RQ3 — Spatial Movement"; 'initial_contact' tab added; InitialContactTab component added; 5 new approach-pattern presets added to FilteredGroupsTab; NLP provenance comment updated |
+| `frontend/src/pages/CodebookPage.tsx` | 6 new Codebook entries added for Initial Contact / Approach fields |
 
 ---
 
-## 7. Analysis Dashboard Changes (`Analysis.tsx`)
+### New Database Fields (auto-migrating, additive only)
 
-### New component: `ValDistPanel`
-Reusable bar-chart component for displaying value-count distributions from the codability aggregate. Parameters: `label`, `vc` (ValCount), `color`, `total`.
+| Field | Type | Values |
+|-------|------|--------|
+| `approach_method` | VARCHAR | street_approach · online_digital · referral · venue_based · phone_text · vehicle_based · third_party_arranged · unknown_unclear · other |
+| `approach_setting` | VARCHAR | public_street · online_platform · venue_indoor · private_space · vehicle · unknown · other |
+| `approach_mobility_context` | VARCHAR | stationary · mobile_on_foot · mobile_in_vehicle · transitioning · unknown |
+| `client_known_at_contact` | VARCHAR | yes_known · first_contact · unclear |
+| `initial_contact_visibility` | VARCHAR | visible · limited_visibility · not_visible · unclear · not_stated |
+| `initial_contact_guardianship` | VARCHAR | present · limited_reduced · absent · unclear · not_stated |
+| `initial_contact_excerpt` | TEXT | free text |
+| `initial_contact_notes` | TEXT | free text |
 
-### New section: Codability and Data Quality
-Added between RQ1 and the Data Quality and Coverage section. Contains three cards:
-
-| Card | Fields displayed |
-|------|-----------------|
-| Narrative Quality | narrative_detail_level, sequence_reconstructable, main_data_limitation |
-| Coding Suitability | stage_coding_suitability, movement_coding_suitability, location_coding_suitability |
-| Sequence Coverage | sequence_pattern, highest_stage_reached, access_to_help |
-
-### RQ1 section enhancement
-Right column now includes a "Stage Visibility (Codability)" sub-section showing `ValDistPanel` distributions for:
-- initial_contact_visible
-- negotiation_visible
-- movement_visible
-- violence_coercion_visible
-- exit_aftermath_visible
-
-### RQ2 section enhancement
-"Setting and Location Context" card now includes a "Situational Conditions (Coded)" sub-section with `ValDistPanel` distributions for:
-- primary_setting_type
-- visibility_case
-- isolation_case
-- guardianship_case
-- setting_control
-
-### RQ3 section enhancement
-"Movement and Relocation" card now includes a "Movement Patterns (Coded)" sub-section with `ValDistPanel` distributions for:
-- movement_pattern_type
-- movement_timing
-
-### Unused import removed
-`CodabilityAggregate` import removed from `Analysis.tsx` — it was imported but not used directly at the call site (accessed via `agg.codability` which is typed through `ResearchAggregate`). This was causing a build error (`TS6196: declared but never used`).
+All fields default to empty string. No existing records are modified. Migration is additive only.
 
 ---
 
-## 8. Filtered Case Groups (`ResearchOutputs.tsx`)
+### Stage Vocabulary — Controlled Vocabulary (New)
 
-### New tab: Filtered Case Groups
-Added as a new tab between "RQ2 — Environmental Patterns" and "Spatial Overview".
+The encounter sequence bar and Analysis Dashboard now use the following controlled vocabulary for stage_type values:
 
-**Tab type union updated:**
-```typescript
-type Tab = '...' | 'filtered_groups';
-```
+| Key | Display label |
+|-----|--------------|
+| initial_contact | Contact |
+| screening_recognition | Screening |
+| negotiation | Negotiation |
+| pickup_meeting | Pickup |
+| movement_relocation | Movement |
+| arrival_setting | Arrival |
+| escalation | Escalation |
+| violence_coercion | Violence |
+| exit_escape | Exit |
+| aftermath_warning | Aftermath |
+| other | Other |
+| unknown_unclear | Unknown |
 
-**Seven preset filter buttons:**
-| Preset | Filter applied |
-|--------|---------------|
-| High narrative detail | narrative_detail_level = high |
-| Sequence reconstructable | sequence_reconstructable = yes |
-| Stage-coding suitable | stage_coding_suitability = yes |
-| Movement present | movement_present = yes |
-| Mappable | mappable_status = mappable |
-| Has sequence pattern | has_sequence_pattern = yes |
-| All analyst-coded | coding_status = coded |
+Legacy keys (movement_travel, arrival_location, aftermath) are also mapped for display continuity without overwriting stored data.
 
-**Case table columns:**
-- Case ID (monospace, links to coding workspace)
-- Narrative detail level (colour-coded chip)
-- Sequence reconstructable (colour-coded chip)
-- Stage coding suitability (colour-coded chip)
-- Sequence pattern (truncated italic preview)
-- Primary harm (primary_harm or primary_incident_type)
-- Movement pattern type (neutral chip)
-- Mappable status (colour-coded chip)
-- Key excerpt available (Yes / — based on presence of any topic-specific excerpt field)
-
-### New component: `CellChip`
-Module-level helper for colour-coded table cell chips. Parameters: `value`, `goodValues`, `warnValues`, `neutral`. Green = good value match, amber = warn value match, grey = neutral or no match.
-
-### New state added
-```typescript
-const [fgReports, setFgReports] = useState<Report[]>([]);
-const [fgLoading, setFgLoading] = useState(false);
-const [fgPreset, setFgPreset]   = useState('');
-```
+Harm indicators (physical_force, sexual_assault, stealthing, robbery_theft) are no longer included as sequence bar nodes in the Case Summary tab. They remain fully coded in the Incident-Level Harm section and are displayed in the Harm Indicators box in Case Summary.
 
 ---
 
-## 9. Backend Aggregation Changes (`backend/main.py`)
+### NLP / AI Changes
 
-### New helper: `_val_counts`
-Added inside `get_research_aggregate()`:
-```python
-def _val_counts(field: str) -> dict:
-    from collections import Counter
-    c: Counter = Counter()
-    for r in reports:
-        val = (getattr(r, field, None) or '').strip()
-        if val:
-            c[val] += 1
-    return {'counts': dict(c), 'total_coded': sum(c.values())}
-```
+| Location | Change |
+|----------|--------|
+| CodingScreen toolbar | "AI Suggest" button removed from visible interface |
+| CodingScreen toolbar | "NLP Analyze" button removed from visible interface |
+| CodingScreen NLP error display | Removed |
+| CodingScreen provenance pill | "provisional" → "not analyst-confirmed" |
+| CodingScreen SummaryTab note | NLP wording replaced with analyst-led language |
+| Analysis.tsx insights | NLP insight removed |
+| Analysis.tsx pipeline step | "NLP Screened" → "Imported" |
+| Analysis.tsx coding attention queue | NLP queue row removed |
+| Analysis.tsx RQ2 text | NLP wording removed |
+| Analysis.tsx RQ2 card | NLP provisional bar chart section removed |
+| Analysis.tsx coding gaps | "NLP Signals" metric card replaced with "Analyst Review Needed" |
+| ResearchOutputs.tsx header comment | NLP provenance note updated to analyst-led language |
 
-### New aggregation: `codability`
-22 codability fields now aggregated and returned in `ResearchAggregate`:
-- narrative_detail_level, sequence_reconstructable, stage_coding_suitability
-- movement_coding_suitability, location_coding_suitability, main_data_limitation
-- initial_contact_visible, negotiation_visible, movement_visible
-- violence_coercion_visible, exit_aftermath_visible
-- movement_pattern_type, movement_timing, mappable_status
-- primary_setting_type, visibility_case, isolation_case
-- guardianship_case, access_to_help, setting_control
-- sequence_pattern, highest_stage_reached
+NLP backend functionality, NLP text scan, Claude AI excerpt extraction, and ParseViewer remain fully functional but are no longer surfaced in the main toolbar. They are accessible in the Narrative Excerpts tab accordion (existing behaviour).
 
 ---
 
-## 10. Case Summary Changes (`CodingScreen.tsx`)
+### Research Outputs — New Tab Order
 
-### `sequence_pattern` FieldRow added (Narrative Excerpts tab)
-A `FieldRow` for `sequence_pattern` was added in the Narrative Excerpts tab, after `summary_analytic`. It includes:
-- Label: "Encounter sequence pattern"
-- Type: textarea
-- Helper text explaining the field's purpose and the missing-info rule
-- Provenance tracking and mark-reviewed button
-
-### Encounter Sequence Output section added (Case Summary tab)
-A new `SummarySectionBox` titled "Encounter Sequence Output" was added to the Case Summary tab. It contains:
-- Methodological note: distinguishes auto-generated stage chain from analyst-written sequence pattern; includes missing-info warning
-- Stage coding suitability and sequence reconstructable chips
-- Coded sequence pattern display (if entered), with left-border accent styling
-- Data limitation warning box (if `main_data_limitation` is present and not "none apparent")
-- Fallback message if no sequence pattern has been entered yet
-
----
-
-## 11. Type Changes (`types.ts`)
-
-### New interface: `ValCount`
-```typescript
-export interface ValCount {
-  counts:      Record<string, number>;
-  total_coded: number;
-}
-```
-
-### New interface: `CodabilityAggregate`
-22-field interface covering all aggregated codability distributions. Each field is `ValCount | undefined`.
-
-### `ResearchAggregate` extended
-```typescript
-codability: CodabilityAggregate;
-```
+| Position | Tab ID | Label |
+|----------|--------|-------|
+| 1 | encounter_overview | Coded Case Overview |
+| 2 | stage_patterns | RQ1 — Stage Patterns |
+| 3 | sequences | RQ1 — Encounter Sequences |
+| 4 | initial_contact | RQ1 — Initial Contact |
+| 5 | environment | RQ2 — Environmental Patterns |
+| 6 | mobility | RQ3 — Mobility Pathways |
+| 7 | spatial | RQ3 — Spatial Movement |
+| 8 | filtered_groups | Filtered Case Groups |
+| 9 | linkage_view | Case Comparison |
+| 10 | caselist | Case Sequence Table |
+| 11 | vawg | Supplementary Flags |
 
 ---
 
-## 12. Items Requested That Were Not Completed
+### Analysis Dashboard — Section Order
 
-None. All items from the methodology-defensibility update request are implemented.
+| Order | Section |
+|-------|---------|
+| 1 | Coding Progress (pipeline + metrics) |
+| 2 | Spatial Overview |
+| 3 | Coding Attention Queue |
+| 4 | RQ1 — Stage Visibility and Encounter Sequence |
+| 5 | RQ1 — Initial Contact and Approach (new) |
+| 6 | RQ2 — Behavioural and Situational Conditions |
+| 7 | RQ3 — Mobility and Spatial Movement |
+| 8 | Codability and Data Quality |
+| 9 | Research Outputs link section |
+| 10 | Methodological Note |
 
 ---
 
-## 13. Risks, Build Issues, and Follow-Up Work
+### Filtered Case Groups — New Presets
 
-### Build issue resolved: unused import
-`CodabilityAggregate` was imported in `Analysis.tsx` but not used directly. This caused a `TS6196` error on build. The import has been removed. `agg.codability` is accessed through `ResearchAggregate`, which is sufficient.
+| Preset ID | Label | Filter |
+|-----------|-------|--------|
+| street_approach | Street approach | approach_method = street_approach |
+| online_approach | Online / digital approach | approach_method = online_digital |
+| vehicle_approach | Vehicle-based approach | approach_method = vehicle_based |
+| ic_low_visibility | Low visibility at contact | initial_contact_visibility = not_visible |
+| ic_no_guardianship | No guardianship at contact | initial_contact_guardianship = absent |
 
-### Build cache warning (pre-existing)
-The Artemis startup script uses `tsc -b` (incremental build). A stale `tsconfig.tsbuildinfo` can cause false errors from a cached prior state. Fix: delete `frontend/tsconfig.tsbuildinfo` before a clean build. Source files are confirmed correct via `tsc --noEmit`.
+---
 
-### Stage visibility coded in two places (by design)
-Stage visibility is assessed at two levels:
-- **Codability tab** — case-level toggles (`initial_contact_visible`, etc.): one yes/no/unclear per stage type for the whole case, used for data quality assessment
-- **StageSequencer** — per-stage-record `stage_visible` and `stage_certainty`: richer coding per individual stage record, used for sequence analysis
+### Risks and Follow-Up Items
 
-Both are intentional and serve different analytic purposes. The distinction is documented in the Codebook.
+**has_sequence_pattern backend filter (pre-existing)**
+The preset "Has sequence pattern" passes `{ has_sequence_pattern: 'yes' }` as a query parameter. This requires the backend `GET /reports` endpoint to support this parameter. If not supported, the preset returns unfiltered results rather than failing. Recommend verifying backend filter support or replacing with a client-side filter.
 
-### Filtered Case Groups — preset filter `has_sequence_pattern`
-The preset "Has sequence pattern" passes `{ has_sequence_pattern: 'yes' }` as a query parameter to `api.listReports()`. This requires the backend `GET /reports` endpoint to support this filter parameter. If the backend does not currently handle `has_sequence_pattern`, this preset will return unfiltered results rather than failing. Recommend verifying backend filter support or replacing with a client-side filter on the returned list.
+**approach_method and initial_contact_visibility backend filters**
+The new approach-pattern presets in FilteredGroupsTab pass approach_method and initial_contact_visibility as query parameters. These require the backend `GET /reports` endpoint to support these parameters. Same risk as above — unfiltered results if backend does not handle them.
 
-### NLP / AI tools (intentionally preserved)
-The NLP text scan, Claude AI excerpt extraction, and ParseViewer remain fully functional but are visually demoted into a collapsed accordion in the Narrative Excerpts tab. They are not removed.
+**NLP internals preserved**
+All NLP computation (nlp.coercion, nlp.physical, nlp.sexual, nlp.movement) remains in Analysis.tsx `d` computed data. The values are no longer rendered but are still calculated. This is safe and allows future reactivation without data loss.
 
-### Public safety / bulletin functionality (intentionally preserved)
-The bulletin output page, VAWG fields, and public safety urgency fields remain fully functional but are visually demoted. No data has been deleted.
+**Existing saved cases unaffected**
+All new database columns default to empty string. No existing case records are modified. The migration adds columns only.
 
-### Existing saved cases unaffected
-All new database columns default to empty string. No existing case records are modified. The migration adds columns only; no columns are dropped or renamed.
+---
+
+## Session 3 — Initial Contact / Approach Reframing
+
+**Reason:** Initial Contact / Approach was incorrectly framed as a separate RQ1 section. RQ1 addresses what behavioural stages can be identified across violent encounters using community-generated narrative reports. Initial contact is one stage within RQ1, not a separate research question.
+
+### Changes Made
+
+| Location | Old | New |
+|----------|-----|-----|
+| Analysis.tsx | "RQ1 — Initial Contact and Approach" as a separate section below RQ2 | "Initial Contact Stage Detail" sub-section folded inside the RQ1 card |
+| Analysis.tsx description | "How contact was first made and the situational conditions at the point of approach." | "Breakdown of the initial contact stage where the report provides enough detail. These fields help describe how the encounter began but do not define a separate research question." |
+| ResearchOutputs.tsx | Separate tab "RQ1 — Initial Contact" | Removed; content added as "Initial Contact Stage Detail" subsection inside RQ1 — Encounter Sequences tab |
+| ResearchOutputs.tsx tab order | 11 tabs including 'initial_contact' | 10 tabs; no standalone initial contact tab |
+| CodebookPage.tsx — all 6 approach fields | methodologicalBasis framed approach as a core encounter element | methodologicalBasis now reads: "Approach fields provide additional detail for the Initial Contact stage. They support stage reconstruction by recording how contact began when the narrative provides this information. They should not be interpreted as evidence of offender motive." |
+
+### Research Outputs — Corrected Tab Order
+
+| Position | Tab ID | Label |
+|----------|--------|-------|
+| 1 | encounter_overview | Coded Case Overview |
+| 2 | stage_patterns | RQ1 — Stage Patterns |
+| 3 | sequences | RQ1 — Encounter Sequences (includes Initial Contact Stage Detail subsection) |
+| 4 | environment | RQ2 — Environmental Patterns |
+| 5 | mobility | RQ3 — Mobility Pathways |
+| 6 | spatial | RQ3 — Spatial Movement |
+| 7 | filtered_groups | Filtered Case Groups |
+| 8 | linkage_view | Case Comparison |
+| 9 | caselist | Case Sequence Table |
+| 10 | vawg | Supplementary Flags |
+
+### Analysis Dashboard — Corrected Section Order
+
+| Order | Section |
+|-------|---------|
+| 1 | Coding Progress |
+| 2 | Spatial Overview |
+| 3 | Coding Attention Queue |
+| 4 | RQ1 — Stage Visibility and Encounter Sequence (includes Initial Contact Stage Detail sub-section at the bottom) |
+| 5 | RQ2 — Behavioural and Situational Conditions |
+| 6 | RQ3 — Mobility and Spatial Movement |
+| 7 | Codability and Data Quality |
+| 8 | Research Outputs |
+| 9 | Methodological Note |
+
+### Methodological Note (added to Initial Contact Stage Detail subsection)
+
+> "Initial contact is coded as one possible stage in the encounter sequence. These fields record what the report makes visible about how the encounter began, including contact method, setting, known/repeat client status and early visibility or guardianship. These fields support RQ1 by describing the initial contact stage where it is visible, but they are not treated as a separate research question."
+
+### Files Edited (Session 3)
+
+| File | Change |
+|------|--------|
+| `frontend/src/pages/Analysis.tsx` | Removed standalone "RQ1 — Initial Contact and Approach" section; folded content as "INITIAL CONTACT STAGE DETAIL" sub-section inside the RQ1 card |
+| `frontend/src/pages/ResearchOutputs.tsx` | Removed 'initial_contact' tab type and TABS entry; removed InitialContactTab component; added "Initial Contact Stage Detail" Panel as subsection at the bottom of SequencesTab |
+| `frontend/src/pages/CodebookPage.tsx` | Updated methodologicalBasis on all 6 approach field entries to stage-detail framing |
+| `CHANGE_REPORT.md` | Updated to document all reframing changes |
+
+---
+
+## Session 4 — Final NLP/AI Visibility Pass + Filtered Groups Fix
+
+**Reason:** Pre-testing cleanup. Remove all remaining user-facing NLP/AI language. Fix Filtered Case Groups returning all records when no analyst-coded matches exist. Add screening_recognition as a codeable stage type.
+
+### Changes Made
+
+| File | Change |
+|------|--------|
+| `frontend/src/pages/BulletinOutput.tsx` | "Required for NLP signals" → "Required before use as findings"; caution banner updated to remove NLP wording |
+| `frontend/src/pages/CaseList.tsx` | "NLP All" button → "Auto-populate"; "Run NLP" button → "Auto-populate"; all three toast messages updated to remove NLP branding |
+| `frontend/src/pages/CodingScreen.tsx` | EscalationArc header "NLP — Escalation Arc" → "Escalation Arc"; subtitle "Machine detection only" → "System-detected only" |
+| `frontend/src/components/StageSequencer.tsx` | Added `screening_recognition` ("Screening / Recognition") to STAGE_TYPES and STAGE_COLORS |
+| `frontend/src/pages/ResearchOutputs.tsx` | (Completed in session 4 continuation) FilteredGroupsTab rewrote to client-side filtering with `fgAllReports` cache; FG_PRESETS converted from backend params to `filter: (r: Report) => boolean` functions; zero-match message added; filter note added; table columns updated |
+| `frontend/src/components/FieldRow.tsx` | (Completed in session 4 continuation) `ai_suggested` dot label: 'AI' → 'unreviewed'; suggestion chip tooltip updated |
+
+### Filtered Case Groups — Client-Side Filtering
+
+FG_PRESETS now use `filter: (r: Report) => boolean` functions with a `notBlank()` guard that excludes blank, 'not_reviewed', and 'uncoded' values. `loadFgReports` fetches all reports once (cached in `fgAllReports`) and applies the filter client-side. Zero-match shows "No analyst-coded cases match this filter yet." instead of returning all records.
+
+### Stage Vocabulary — Screening Added
+
+`screening_recognition` is now available as a codeable stage type in StageSequencer with label "Screening / Recognition" and purple colour scheme (`#F5F3FF / #DDD6FE / #6D28D9`). This aligns with the STAGE_LABELS controlled vocabulary in Analysis.tsx.
+
+### TypeScript Build
+
+All changes compile clean. `npx tsc --noEmit` exits with no errors after all session 4 edits.
+
+---
+
+## Session 5 — Central Display-Label Formatter (snake_case → readable labels)
+
+**Reason:** Approach method and related Initial Contact / Approach select dropdowns were showing raw snake_case stored values (e.g. `street_approach`, `online_digital`, `mobile_on_foot`) directly to the user in form dropdowns, Case Summary, Analysis bar charts, and Research Outputs table cells. Stored backend values must not change; display only is fixed.
+
+### Architecture
+
+A central `formatLabel(value: string): string` function was added to `frontend/src/utils.ts` alongside a `FIELD_VALUE_LABELS: Record<string, string>` lookup map. The function:
+1. Checks the explicit lookup map first
+2. Falls back to converting snake_case identifiers (`/^[a-z0-9_]+$/`) to sentence case
+3. Returns all other strings (human-readable values with spaces, mixed case) unchanged
+
+This ensures the formatter is safe to apply broadly — free text, city names, and properly labelled values pass through unchanged.
+
+### Where raw snake_case values were appearing
+
+| Location | Field(s) | Fix |
+|----------|----------|-----|
+| CodingScreen — Approach method `<select>` dropdown options | `approach_method`, `approach_setting`, `approach_mobility_context`, `client_known_at_contact`, `initial_contact_visibility`, `initial_contact_guardianship` | `FieldRow.tsx` now calls `formatLabel(o)` for all `<option>` label text |
+| CodingScreen — Case Summary IC / Approach block | Same 6 fields | `SummaryKVRow` now calls `formatLabel(value)` before rendering |
+| CodingScreen — Mobility dropdown "Basis for movement coding" | `basis_for_movement_coding` option `'NLP suggestion only'` | Added to `FIELD_VALUE_LABELS` → displays as `'System-suggested'`; stored value unchanged |
+| Analysis Dashboard — ValDistPanel bar chart value labels | All codability aggregate keys (approach_method etc.) | `ValDistPanel` now calls `formatLabel(val)` |
+| Research Outputs — SequencesTab Initial Contact Detail `renderDist` bars | Same 6 fields | `renderDist` now calls `formatLabel(val)` |
+| Research Outputs — FilteredGroupsTab table `CellChip` | `approach_method`, `approach_setting` | `CellChip` now calls `formatLabel(value)` |
+
+### Explicit label mappings added (approach fields)
+
+| Stored value | Display label |
+|---|---|
+| `street_approach` | Street / in-person approach |
+| `online_digital` | Online / digital |
+| `referral` | Referral |
+| `venue_based` | Venue-based |
+| `phone_text` | Phone / text |
+| `vehicle_based` | Vehicle-based |
+| `third_party_arranged` | Third-party arranged |
+| `unknown_unclear` | Unknown / unclear |
+| `public_street` | Public street |
+| `online_platform` | Online platform |
+| `venue_indoor` | Venue (indoor) |
+| `private_space` | Private space |
+| `stationary` | Stationary |
+| `mobile_on_foot` | Mobile on foot |
+| `mobile_in_vehicle` | Mobile in vehicle |
+| `transitioning` | Transitioning |
+| `yes_known` | Yes — previously known |
+| `first_contact` | First contact |
+| `limited_visibility` | Limited visibility |
+| `not_visible` | Not visible |
+| `not_stated` | Not stated |
+| `limited_reduced` | Limited / reduced |
+| `NLP suggestion only` | System-suggested |
+
+### Files Edited (Session 5)
+
+| File | Change |
+|------|--------|
+| `frontend/src/utils.ts` | Added `FIELD_VALUE_LABELS` map and `formatLabel()` function |
+| `frontend/src/components/FieldRow.tsx` | Added `formatLabel` import; `<option>` text now uses `formatLabel(o)` |
+| `frontend/src/pages/Analysis.tsx` | Added `formatLabel` import; ValDistPanel `{val}` → `{formatLabel(val)}` |
+| `frontend/src/pages/ResearchOutputs.tsx` | Added `formatLabel` import; `renderDist` `{val}` and `CellChip` `{value}` → wrapped with `formatLabel` |
+| `frontend/src/pages/CodingScreen.tsx` | Added `formatLabel` to utils import; `SummaryKVRow` `{value}` → `{formatLabel(value)}` |
+| `CHANGE_REPORT.md` | Session 5 documented |
+
+### TypeScript Build
+
+All changes compile clean. `npx tsc --noEmit` exits with no errors after all session 5 edits.

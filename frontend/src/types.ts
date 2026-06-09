@@ -267,6 +267,16 @@ export interface Report {
 
   // GIS — mappable status
   mappable_status: string;
+
+  // Initial Contact / Approach
+  approach_method:              string;
+  approach_setting:             string;
+  approach_mobility_context:    string;
+  client_known_at_contact:      string;
+  initial_contact_visibility:   string;
+  initial_contact_guardianship: string;
+  initial_contact_excerpt:      string;
+  initial_contact_notes:        string;
 }
 
 export interface ReportStage {
@@ -660,6 +670,12 @@ export interface CodabilityAggregate {
   setting_control:             ValCount;
   sequence_pattern:            ValCount;
   highest_stage_reached:       ValCount;
+  approach_method:             ValCount | undefined;
+  approach_setting:            ValCount | undefined;
+  approach_mobility_context:   ValCount | undefined;
+  client_known_at_contact:     ValCount | undefined;
+  initial_contact_visibility:  ValCount | undefined;
+  initial_contact_guardianship: ValCount | undefined;
 }
 
 export interface ResearchAggregate {
