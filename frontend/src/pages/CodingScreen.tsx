@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Save, Download, Tag, X, GitCompare, Lock, ChevronLeft, ChevronRight, ExternalLink, FileText, ChevronDown, Copy, Check } from 'lucide-react';
 import { api } from '../api';
-import type { Report } from '../types';
+import type { Report, ReportStage } from '../types';
 import FieldRow from '../components/FieldRow';
 import TimelineStrip from '../components/TimelineStrip';
 import { useToast } from '../components/Toast';
@@ -291,25 +291,6 @@ function MultiCheckboxField({ label, value, onChange, options }: {
   );
 }
 
-// Returns the appropriate "data absent" label for a summary section based on coded field values.
-// Precedence: no → no-indicator; unclear/not-stated → insufficient; unknown → unknown; else → not-coded
-function sectionDataState(fieldVals: (string | undefined)[]): 'not-coded' | 'no-indicator' | 'insufficient' | 'unknown' {
-  const vals = fieldVals.map(v => (v || '').trim().toLowerCase());
-  if (vals.some(v => v === 'no' || v === 'not coded')) return 'no-indicator';
-  if (vals.some(v => v === 'unclear' || v === 'unclear / not stated' || v === 'insufficient information')) return 'insufficient';
-  if (vals.some(v => v === 'unknown' || v === 'unknown / unclear')) return 'unknown';
-  return 'not-coded';
-}
-
-function EmptyState({ state }: { state: 'not-coded' | 'no-indicator' | 'insufficient' | 'unknown' }) {
-  const map = {
-    'not-coded':    '— Not coded',
-    'no-indicator': '— No indicator in report',
-    'insufficient': '— Insufficient information',
-    'unknown':      '— Unknown',
-  };
-  return <div style={{ fontSize: 12, color: 'var(--text-3)', fontStyle: 'italic' }}>{map[state]}</div>;
-}
 
 function _prov(fp: Record<string, string> | undefined, field: string): 'coded' | 'provisional' | 'unset' {
   const state = fp?.[field] ?? 'unset';
@@ -411,616 +392,275 @@ function GisAddressBlock({ heading, raw, normalized, precision, source, confiden
   );
 }
 
-function SummaryTab({ fields, analystName, analystSummary, tags, reportId }: {
+function SummaryTab({ fields, analystName, analystSummary, tags, reportId, stages }: {
   fields: Partial<Report>;
   analystName?: string;
   analystSummary?: string;
   tags?: string[];
   reportId?: string;
+  stages: ReportStage[];
 }) {
   const fp = (fields.field_provenance as Record<string, string>) ?? {};
+  const v = (field: keyof Report) => (fields[field] as string || '').trim();
+  const [suspectOpen, setSuspectOpen] = useState(false);
 
-  // ── Coding completeness ────────────────────────────────────────────────────
-  const _v = (field: keyof Report) => (fields[field] as string || '').trim();
-  const completeness: { label: string; status: 'complete' | 'partial' | 'not-coded' }[] = [
-    { label: 'Basics',    status: (_v('incident_date') && _v('city') && _v('source_organization')) ? 'complete' : (_v('incident_date') || _v('city')) ? 'partial' : 'not-coded' },
-    { label: 'Stages',    status: _v('highest_stage_reached') ? 'complete' : 'not-coded' },
-    { label: 'Encounter', status: (_v('initial_approach_type') && _v('exit_type')) ? 'complete' : (_v('initial_approach_type') || _v('negotiation_present')) ? 'partial' : 'not-coded' },
-    { label: 'Mobility',  status: _v('movement_present') ? 'complete' : 'not-coded' },
-    { label: 'Suspect',   status: (_v('suspect_gender') && _v('suspect_age_estimate')) ? 'complete' : (_v('suspect_count') || _v('suspect_gender')) ? 'partial' : 'not-coded' },
-    { label: 'Vehicle',   status: _v('vehicle_present') ? 'complete' : 'not-coded' },
-    { label: 'Narrative', status: _v('summary_analytic') ? 'complete' : (_v('key_quotes') || _v('coder_notes')) ? 'partial' : 'not-coded' },
-    { label: 'GIS',       status: (fields.lat_initial != null || fields.lat_incident != null) ? 'complete' : (_v('initial_contact_address_raw') || _v('incident_address_raw')) ? 'partial' : 'not-coded' },
-    { label: 'Flags',     status: (['concern_trafficking','concern_third_party_control','concern_grooming','concern_organized_offending','concern_repeat_suspect','concern_repeat_vehicle'] as (keyof Report)[]).some(f => _v(f) !== '') ? 'complete' : 'not-coded' },
+  // Ordered stages from Stage Coding tab
+  const orderedStages = [...stages].sort((a, b) => a.stage_order - b.stage_order);
+
+  // Confirmed harms — only broadPos values
+  const HARM_FIELDS: [keyof Report, string][] = [
+    ['sexual_assault',          'Sexual violence'],
+    ['physical_force',          'Physical violence / physical force'],
+    ['coercion_present',        'Coercion / control'],
+    ['non_consensual_substance','Non-consensual substance administration'],
+    ['loss_of_consciousness',   'Loss of consciousness / memory gap'],
+    ['forced_movement_dragging','Forced movement / dragging'],
+    ['choking_strangulation',   'Choking / strangulation'],
+    ['prevented_exit',          'Prevented exit / blocked escape'],
+    ['weapon_present_used',     'Weapon present or used'],
+    ['restraint_confinement',   'Restraint / confinement'],
+    ['robbery_theft',           'Robbery / theft'],
+    ['threats_present',         'Threats'],
+    ['stealthing',              'Stealthing'],
   ];
+  const confirmedHarms = HARM_FIELDS.filter(([f]) => _broadPos(v(f)));
 
-  // ── Encounter sequence ───────────────────────────────────────────────────
-  type StageDef = [string, string, Set<string> | null];
-  const stageDefs: StageDef[] = [
-    ['Negotiation',             'negotiation_present',          new Set(['yes'])],
-    ['Service discussed',       'service_discussed',            new Set(['yes'])],
-    ['Refusal',                 'refusal_present',              new Set(['yes'])],
-    ['Pressure after refusal',  'pressure_after_refusal',       new Set(['yes'])],
-    ['Repeated pressure',       'repeated_pressure',            new Set(['yes'])],
-    ['Coercion',                'coercion_present',             new Set(['yes'])],
-    ['Intimidation',            'intimidation_present',         new Set(['yes'])],
-    ['Threats',                 'threats_present',              new Set(['yes'])],
-    ['Verbal abuse',            'verbal_abuse',                 new Set(['yes'])],
-    ['Abrupt tone change',      'abrupt_tone_change',           new Set(['yes'])],
-    ['Movement',                'movement_present',             new Set(['yes'])],
-    ['Environment shift: public→private',  'public_to_private_shift',  new Set(['yes'])],
-    ['Environment shift: public→secluded', 'public_to_secluded_shift', new Set(['yes'])],
-  ];
-
-  const approach = (fields.initial_approach_type || '').trim();
-  const contactLabel = approach ? `Contact (${approach})` : 'Contact';
-  const contactProv = approach ? _prov(fp, 'initial_approach_type') : 'unset';
-
-  type SeqStage = { label: string; prov: 'coded' | 'provisional' | 'unset' };
-  const seqStages: SeqStage[] = [{ label: contactLabel, prov: contactProv }];
-
-  for (const [label, field, positiveVals] of stageDefs) {
-    const val = (fields[field as keyof Report] as string || '').trim();
-    if (!val) continue;
-    if (positiveVals === null || positiveVals.has(val)) {
-      seqStages.push({ label, prov: _prov(fp, field) });
-    }
-  }
-
-  const exitType = (fields.exit_type || '').trim();
-  if (exitType) {
-    const exitLabels: Record<string, string> = {
-      completed: 'Exit — completed', escaped: 'Exit — escaped',
-      abandoned: 'Exit — abandoned', interrupted: 'Exit — interrupted',
-      unknown: 'Exit — unknown',
-    };
-    seqStages.push({ label: exitLabels[exitType] ?? `Exit (${exitType})`, prov: _prov(fp, 'exit_type') });
-  }
-
-  const hasProvisional = seqStages.some(s => s.prov === 'provisional');
-
-  // ── Mobility items ────────────────────────────────────────────────────────
-  type SItem = { text: string; prov: 'coded' | 'provisional' | 'unset' };
-  const mobItems: SItem[] = [];
-
-  const addMob = (text: string, field: string) =>
-    mobItems.push({ text, prov: _prov(fp, field) });
-
-  if (fields.movement_present === 'yes')    addMob('Movement present', 'movement_present');
-  if (fields.movement_attempted === 'yes' && fields.movement_completed !== 'yes')
-    addMob('Movement attempted (not completed)', 'movement_attempted');
-  if (fields.movement_completed === 'yes') addMob('Movement completed', 'movement_completed');
-  if (fields.entered_vehicle === 'yes')    addMob('Entered vehicle', 'entered_vehicle');
-  const mode = (fields.mode_of_movement || '').trim();
-  if (mode)                                addMob(`Mode: ${mode}`, 'mode_of_movement');
-  if (fields.public_to_private_shift === 'yes')  addMob('Public → private shift', 'public_to_private_shift');
-  if (fields.public_to_secluded_shift === 'yes') addMob('Public → secluded shift', 'public_to_secluded_shift');
-  if (fields.cross_neighbourhood === 'yes')      addMob('Cross-neighbourhood movement', 'cross_neighbourhood');
-  if (fields.cross_municipality === 'yes')       addMob('Cross-municipality movement', 'cross_municipality');
-  if (fields.cross_city_movement === 'yes')      addMob('Cross-city movement', 'cross_city_movement');
-  const ctrl = (fields.offender_control_over_movement || '').trim();
-  if (ctrl) addMob(`Movement control: ${ctrl}`, 'offender_control_over_movement');
-  const whoCtrl = (fields.who_controlled_movement || '').trim();
-  if (whoCtrl) addMob(`Movement controlled by: ${whoCtrl}`, 'who_controlled_movement');
-  const startLoc = (fields.start_location_type || '').trim();
-  const destLoc  = (fields.destination_location_type || '').trim();
-  if (startLoc && destLoc) mobItems.push({ text: `Route: ${startLoc} → ${destLoc}`, prov: 'coded' });
-  else if (startLoc)       mobItems.push({ text: `Start: ${startLoc}`, prov: 'coded' });
-  else if (destLoc)        mobItems.push({ text: `Destination: ${destLoc}`, prov: 'coded' });
-  const movConf = (fields.movement_confidence || '').trim();
-  if (movConf) addMob(`Movement confidence: ${movConf}`, 'movement_confidence');
-  const movNotes = (fields.movement_notes || '').trim();
-  if (movNotes) addMob(`Notes: ${movNotes.slice(0, 120)}`, 'movement_notes');
-  if (fields.unexplained_relocation === 'yes') addMob('Unexplained relocation', 'unexplained_relocation');
-
-  // ── Environment items ─────────────────────────────────────────────────────
-  const envItems: SItem[] = [];
-  const io = (fields.indoor_outdoor || '').trim();
-  if (io)  envItems.push({ text: io.charAt(0).toUpperCase() + io.slice(1), prov: _prov(fp, 'indoor_outdoor') });
-  const pp = (fields.public_private || '').trim();
-  if (pp)  envItems.push({ text: pp.replace(/_/g, ' ').replace(/^./, s => s.toUpperCase()), prov: _prov(fp, 'public_private') });
-  const des = (fields.deserted || '').trim();
-  if (des) envItems.push({ text: des.replace(/_/g, ' ').replace(/^./, s => s.toUpperCase()), prov: _prov(fp, 'deserted') });
-  const icLoc = (fields.initial_contact_location || '').trim();
-  if (icLoc)  envItems.push({ text: `Contact location: ${icLoc}`, prov: 'coded' });
-  const pLoc  = (fields.incident_location_primary || '').trim();
-  if (pLoc)   envItems.push({ text: `Primary incident: ${pLoc}`, prov: 'coded' });
-  const sLoc  = (fields.incident_location_secondary || '').trim();
-  if (sLoc)   envItems.push({ text: `Secondary: ${sLoc}`, prov: 'coded' });
-
-  // ── Harm items ─────────────────────────────────────────────────────────────
-  const harmItems: SItem[] = [];
-  const primaryHarm = (fields.primary_harm as string || '').trim();
-  if (primaryHarm) harmItems.push({ text: `Primary harm: ${primaryHarm}`, prov: _prov(fp, 'primary_harm') });
-  if (fields.multi_harm_flag === 'yes') harmItems.push({ text: 'Multi-harm case flagged', prov: _prov(fp, 'multi_harm_flag') });
-  const harmFields: [string, string][] = [
-    ['coercion_present', 'Coercion'], ['threats_present', 'Threats'],
-    ['intimidation_present', 'Intimidation'], ['verbal_abuse', 'Verbal abuse'],
-    ['verbal_abuse_before_violence', 'Verbal abuse before violence'],
-    ['physical_force', 'Physical force'], ['sexual_assault', 'Sexual assault'],
-    ['stealthing', 'Stealthing'], ['robbery_theft', 'Robbery / theft'],
-  ];
-  for (const [field, label] of harmFields) {
-    if (fields[field as keyof Report] === 'yes')
-      harmItems.push({ text: label, prov: _prov(fp, field) });
-  }
-  const trigger = (fields.escalation_trigger || '').trim();
-  if (trigger) harmItems.push({ text: `Escalation trigger: ${trigger.slice(0, 100)}`, prov: 'coded' });
-  const escPt   = (fields.escalation_point || '').trim();
-  if (escPt)   harmItems.push({ text: `Escalation point: ${escPt}`, prov: 'coded' });
-  const tPoint  = (fields.turning_point || '').trim();
-  if (tPoint)  harmItems.push({ text: `Turning point: ${tPoint}`, prov: _prov(fp, 'turning_point') });
-  const newHarmFields: [string, string][] = [
-    ['loss_of_consciousness',    'Loss of consciousness'],
-    ['non_consensual_substance', 'Non-consensual substance'],
-    ['forced_movement_dragging', 'Forced movement / dragging'],
-    ['restraint_confinement',    'Restraint / confinement'],
-    ['weapon_present_used',      'Weapon present or used'],
-    ['choking_strangulation',    'Choking / strangulation'],
-    ['prevented_exit',           'Exit prevented'],
-  ];
-  for (const [field, label] of newHarmFields) {
-    if (fields[field as keyof Report] === 'yes')
-      harmItems.push({ text: label, prov: _prov(fp, field) });
-  }
-  const subNotes = (fields.substance_administration_notes || '').trim();
-  if (subNotes) harmItems.push({ text: `Substance notes: ${subNotes.slice(0, 120)}`, prov: _prov(fp, 'substance_administration_notes') });
-
-  const boundaryVal = (fields.boundary_issue_present || '') as string;
-  if (_broadPos(boundaryVal)) harmItems.push({ text: `Boundary issue present (${boundaryVal})`, prov: _prov(fp, 'boundary_issue_present') });
-  const movRelVal = (fields.movement_relocation_present || '') as string;
-  if (_broadPos(movRelVal)) harmItems.push({ text: `Movement / relocation present (${movRelVal})`, prov: _prov(fp, 'movement_relocation_present') });
-
-  // Early escalation cues (intimidation_present and verbal_abuse_before_violence already in harmFields)
-  const escCueFields: [string, string][] = [
-    ['repeated_pressure', 'Repeated pressure'],
-    ['abrupt_tone_change', 'Abrupt tone change'],
-  ];
-  for (const [field, label] of escCueFields) {
-    if (fields[field as keyof Report] === 'yes')
-      harmItems.push({ text: label, prov: _prov(fp, field) });
-  }
-
-  const keyExcerpts = (fields.key_supporting_excerpts || '').trim();
-  if (keyExcerpts) harmItems.push({ text: `Supporting excerpt: ${keyExcerpts.slice(0, 200)}`, prov: _prov(fp, 'key_supporting_excerpts') });
-
-  // ── Exit items ────────────────────────────────────────────────────────────
-  const exitItems: SItem[] = [];
-  if (exitType) {
-    const exitLabels: Record<string, string> = {
-      completed: 'Incident completed (no disruption)', escaped: 'Victim escaped',
-      abandoned: 'Incident abandoned', interrupted: 'Incident interrupted',
-      unknown: 'Exit outcome unknown',
-    };
-    exitItems.push({ text: exitLabels[exitType] ?? `Exit: ${exitType}`, prov: _prov(fp, 'exit_type') });
-  }
-  const resEndpoint = (fields.resolution_endpoint || '').trim();
-  if (resEndpoint) exitItems.push({ text: `Resolution: ${resEndpoint}`, prov: _prov(fp, 'resolution_endpoint') });
-
-  const bulletList = (items: SItem[]) => (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      {items.map((item, i) => (
-        <div key={i} style={{ display: 'flex', alignItems: 'flex-start', fontSize: 12.5, color: 'var(--text-2)', lineHeight: 1.4 }}>
-          <span style={{ marginRight: 6, color: 'var(--text-3)', flexShrink: 0 }}>·</span>
-          <span>{item.text}<ProvenancePill p={item.prov} /></span>
-        </div>
-      ))}
-    </div>
+  // Style helpers
+  const subLabel = (s: string) => (
+    <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-3)', marginBottom: 5, marginTop: 12 }}>{s}</div>
   );
 
+  const inlineKV = (label: string, value: string, field?: string) => {
+    if (!value) return null;
+    const p = field ? _prov(fp, field) : 'coded';
+    return (
+      <div style={{ display: 'flex', gap: 8, fontSize: 12.5, lineHeight: 1.45, marginBottom: 4 }}>
+        <span style={{ color: 'var(--text-3)', flexShrink: 0, minWidth: 160 }}>{label}</span>
+        <span style={{ color: 'var(--text-1)' }}>{formatLabel(value)}<ProvenancePill p={p} /></span>
+      </div>
+    );
+  };
+
   return (
-    <div style={{ padding: '20px 24px', maxWidth: 920 }}>
+    <div style={{ padding: '20px 24px', maxWidth: 900 }}>
 
-      {/* Provenance note */}
-      {hasProvisional && (
-        <div style={{
-          display: 'flex', alignItems: 'flex-start', gap: 7, fontSize: 11.5,
-          color: 'var(--text-3)', padding: '8px 12px',
-          background: 'var(--amber-pale)', borderRadius: 6,
-          border: '1px solid var(--amber-border)', marginBottom: 18,
-        }}>
-          <span style={{ color: 'var(--amber)', fontWeight: 600, fontSize: 10 }}>⚠</span>
-          <span>
-            Some fields in this summary have not yet been analyst-confirmed and are marked
-            <strong style={{ fontWeight: 600, color: 'var(--amber)' }}> not analyst-confirmed</strong>.
-            These should be reviewed before use.
-          </span>
+      {/* ── A. Case overview ─────────────────────────────────────────────── */}
+      <div style={{ marginBottom: 20, padding: '12px 16px', borderRadius: 7, background: 'var(--surface)', border: '1px solid var(--border)' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+          {reportId && <span style={{ fontFamily: 'monospace', fontSize: 12.5, fontWeight: 700, color: 'var(--text-1)' }}>{reportId}</span>}
+          {(() => {
+            const status = v('coding_status') || 'uncoded';
+            const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.uncoded;
+            return <span style={{ padding: '2px 10px', borderRadius: 20, fontSize: 11, fontWeight: 600, color: cfg.color, background: cfg.bg, border: `1px solid ${cfg.border}` }}>{cfg.label}</span>;
+          })()}
+          {v('confidence_level') && <span style={{ fontSize: 11.5, color: 'var(--text-2)' }}>Confidence: <strong style={{ color: 'var(--text-1)' }}>{formatLabel(v('confidence_level'))}</strong></span>}
+          <span style={{ borderLeft: '1px solid var(--border)', alignSelf: 'stretch' }} />
+          {v('incident_date') && <span style={{ fontSize: 11.5, color: 'var(--text-2)' }}>{v('incident_date')}{v('day_of_week') && <span style={{ color: 'var(--text-3)', marginLeft: 4 }}>({v('day_of_week')})</span>}</span>}
+          {v('city') && <span style={{ fontSize: 11.5, color: 'var(--text-2)' }}>{v('city')}{v('neighbourhood') ? `, ${v('neighbourhood')}` : ''}</span>}
+          {analystName && <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>Analyst: {analystName}</span>}
         </div>
-      )}
-
-      {/* Case header */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10,
-        marginBottom: 20, padding: '10px 14px', borderRadius: 7,
-        background: 'var(--surface)', border: '1px solid var(--border)' }}>
-        {reportId && <span style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: 'var(--text-1)' }}>{reportId}</span>}
-        {(() => {
-          const status = (fields.coding_status || 'uncoded') as string;
-          const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.uncoded;
-          return <span style={{ padding: '2px 10px', borderRadius: 20, fontSize: 11, fontWeight: 600,
-            color: cfg.color, background: cfg.bg, border: `1px solid ${cfg.border}` }}>{cfg.label}</span>;
-        })()}
-        {fields.confidence_level && (
-          <span style={{ fontSize: 11.5, color: 'var(--text-2)' }}>Confidence: <strong style={{ color: 'var(--text-1)' }}>{fields.confidence_level}</strong></span>
-        )}
-        {analystName && (
-          <span style={{ fontSize: 11.5, color: 'var(--text-2)' }}>Analyst: <strong style={{ color: 'var(--text-1)' }}>{analystName}</strong></span>
-        )}
-        <span style={{ borderLeft: '1px solid var(--border)', alignSelf: 'stretch', margin: '0 2px' }} />
-        {fields.incident_date && (
-          <span style={{ fontSize: 11.5, color: 'var(--text-2)' }}>
-            {fields.incident_date}
-            {fields.day_of_week && <span style={{ color: 'var(--text-3)', marginLeft: 4 }}>({fields.day_of_week})</span>}
-          </span>
-        )}
-        {fields.city && (
-          <span style={{ fontSize: 11.5, color: 'var(--text-2)' }}>
-            {fields.city}{fields.neighbourhood ? `, ${fields.neighbourhood}` : ''}
-          </span>
+        {v('main_data_limitation') && v('main_data_limitation') !== 'none apparent' && (
+          <div style={{ marginTop: 6, fontSize: 11.5, color: 'var(--amber)', borderLeft: '2px solid var(--amber-border)', paddingLeft: 8 }}>
+            <strong style={{ fontWeight: 600 }}>Main data limitation:</strong> {v('main_data_limitation')}
+          </div>
         )}
       </div>
 
-      {/* Coding completeness chips */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 18 }}>
-        {completeness.map(({ label, status }) => {
-          const cfg = status === 'complete'
-            ? { color: 'var(--green)', bg: 'var(--green-pale)', border: 'var(--green-border)', dot: '●' }
-            : status === 'partial'
-            ? { color: 'var(--amber)', bg: 'var(--amber-pale)', border: 'var(--amber-border)', dot: '◐' }
-            : { color: 'var(--text-3)', bg: 'var(--surface-2)', border: 'var(--border)', dot: '○' };
-          return (
-            <span key={label} style={{
-              display: 'inline-flex', alignItems: 'center', gap: 4,
-              padding: '2px 9px', borderRadius: 20, fontSize: 11, fontWeight: 500,
-              color: cfg.color, background: cfg.bg, border: `1px solid ${cfg.border}`,
-            }}>
-              <span style={{ fontSize: 9, lineHeight: 1 }}>{cfg.dot}</span>
-              {label}
-            </span>
-          );
-        })}
-      </div>
-
-      {/* Incident Overview */}
-      {(fields.primary_incident_type || fields.overall_severity || fields.overall_incident_summary || fields.stage_coding_suitability || fields.sequence_clarity) && (
-        <div style={{ marginBottom: 20, padding: '12px 14px', borderRadius: 7, background: 'var(--surface)', border: '1px solid var(--border)' }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>Incident Overview</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: (fields.overall_incident_summary || fields.stage_coding_suitability || fields.sequence_clarity) ? 10 : 0 }}>
-            {fields.primary_incident_type && (
-              <span style={{ fontSize: 12.5, fontWeight: 600, padding: '3px 10px', borderRadius: 5, background: 'var(--accent-pale)', color: 'var(--accent)', border: '1px solid var(--accent-border)' }}>
-                {fields.primary_incident_type as string}
-              </span>
-            )}
-            {fields.overall_severity && (() => {
-              const sev = fields.overall_severity as string;
-              const isCritical = sev.includes('severe') || sev.includes('high risk');
-              const isHigh = sev.includes('high concern');
-              const color = isCritical ? '#A51F1F' : isHigh ? 'var(--amber)' : 'var(--green)';
-              const bg = isCritical ? '#FDECEA' : isHigh ? 'var(--amber-pale)' : 'var(--green-pale)';
-              const border = isCritical ? '#FBBBB0' : isHigh ? 'var(--amber-border)' : 'var(--green-border)';
-              return (
-                <span style={{ fontSize: 12.5, fontWeight: 600, padding: '3px 10px', borderRadius: 5, background: bg, color, border: `1px solid ${border}` }}>
-                  {sev}
-                </span>
-              );
-            })()}
-          </div>
-          {fields.overall_incident_summary && (
-            <div style={{ fontSize: 12.5, color: 'var(--text-2)', lineHeight: 1.55, fontStyle: 'italic', marginBottom: 8, borderLeft: '2px solid var(--gold, #B38B59)', paddingLeft: 10 }}>
-              {fields.overall_incident_summary as string}
-            </div>
-          )}
-          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-            {fields.stage_coding_suitability && (
-              <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>Stage suitability: <strong style={{ color: 'var(--text-2)' }}>{fields.stage_coding_suitability as string}</strong></span>
-            )}
-            {fields.sequence_clarity && (
-              <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>Sequence clarity: <strong style={{ color: 'var(--text-2)' }}>{fields.sequence_clarity as string}</strong></span>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Encounter sequence */}
-      <div style={{ marginBottom: 24 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 10, flexWrap: 'wrap' }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>Encounter progression</div>
-          {(fields.highest_stage_reached) && (
-            String(fields.highest_stage_reached).split('|').filter(Boolean).map(stage => (
-              <span key={stage} style={{ fontSize: 11.5, fontWeight: 700, padding: '3px 10px', borderRadius: 5,
-                background: 'var(--accent-pale)', color: 'var(--accent)', border: '1px solid var(--accent-border)' }}>
-                {stage.trim()}
-              </span>
-            ))
-          )}
-          {(fields.turning_point) && (
-            <span style={{ fontSize: 11.5, fontWeight: 600, padding: '3px 10px', borderRadius: 5,
-              background: 'var(--amber-pale)', color: 'var(--amber)', border: '1px solid var(--amber-border)' }}>
-              Turning point: {fields.turning_point as string}
-            </span>
-          )}
-        </div>
-        {seqStages.length <= 1 ? (
-          <div style={{ fontSize: 12.5, color: 'var(--text-3)', fontStyle: 'italic' }}>
-            — code encounter fields to generate sequence
-          </div>
-        ) : (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 0, flexWrap: 'wrap', rowGap: 6 }}>
-            {seqStages.map((s, i) => (
-              <span key={i} style={{ display: 'inline-flex', alignItems: 'center' }}>
-                <SequenceChip label={s.label} prov={s.prov} />
-                {i < seqStages.length - 1 && (
-                  <span style={{ color: 'var(--text-3)', fontSize: 14, margin: '0 2px' }}>→</span>
-                )}
+      {/* ── B. Coded encounter sequence ──────────────────────────────────── */}
+      <SummarySectionBox title="Coded Encounter Sequence">
+        {orderedStages.length > 0 ? (
+          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', rowGap: 6, gap: 0, marginBottom: 12 }}>
+            {orderedStages.map((s, i) => (
+              <span key={s.id} style={{ display: 'inline-flex', alignItems: 'center' }}>
+                <SequenceChip label={formatLabel(s.stage_type)} prov="coded" />
+                {i < orderedStages.length - 1 && <span style={{ color: 'var(--text-3)', fontSize: 13, margin: '0 3px' }}>→</span>}
               </span>
             ))}
           </div>
-        )}
-      </div>
-
-      {/* Initial Contact / Approach */}
-      <SummarySectionBox title="Initial Contact / Approach">
-        {(() => {
-          const icFields: (keyof Report)[] = ['approach_method','approach_setting','approach_mobility_context','client_known_at_contact','initial_contact_visibility','initial_contact_guardianship'];
-          const icLabels: Record<string, string> = {
-            approach_method: 'Approach method', approach_setting: 'Approach setting',
-            approach_mobility_context: 'Mobility context', client_known_at_contact: 'Client known at contact',
-            initial_contact_visibility: 'Visibility', initial_contact_guardianship: 'Guardianship',
-          };
-          const hasAny = icFields.some(f => (fields[f] as string || '').trim());
-          if (!hasAny) return <EmptyState state={sectionDataState(icFields.map(f => fields[f] as string | undefined))} />;
-          return icFields.map(field => (
-            <SummaryKVRow key={field} label={icLabels[field]} value={String(fields[field] || '')} prov={_prov(fp, field)} />
-          ));
-        })()}
-        {(fields.initial_contact_excerpt as string || '').trim() && (
-          <div style={{ marginTop: 8, fontSize: 11.5, color: 'var(--text-2)', borderLeft: '2px solid var(--border)', paddingLeft: 8, fontStyle: 'italic' }}>
-            {(fields.initial_contact_excerpt as string).slice(0, 300)}{(fields.initial_contact_excerpt as string).length > 300 ? '…' : ''}
-          </div>
-        )}
-      </SummarySectionBox>
-
-      {/* Encounter Sequence Output */}
-      <SummarySectionBox title="Encounter Sequence Output">
-        <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 10, lineHeight: 1.55, borderLeft: '2px solid var(--border)', paddingLeft: 8 }}>
-          This section shows what the case becomes after coding. The auto-generated chain is derived from encounter fields.
-          The sequence pattern is the analyst-written summary of the full coded sequence.
-          Missing or unclear stages do not mean those stages did not occur — use the coding limitations field to document what the report could not support.
-        </div>
-        {/* Stage coding suitability + reconstructability */}
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
-          {fields.stage_coding_suitability && (
-            <span style={{ fontSize: 11.5, fontWeight: 600, padding: '2px 9px', borderRadius: 5,
-              background: 'var(--surface-2)', color: 'var(--text-2)', border: '1px solid var(--border)' }}>
-              Stage coding: {fields.stage_coding_suitability as string}
-            </span>
-          )}
-          {fields.sequence_reconstructable && (
-            <span style={{ fontSize: 11.5, fontWeight: 600, padding: '2px 9px', borderRadius: 5,
-              background: 'var(--surface-2)', color: 'var(--text-2)', border: '1px solid var(--border)' }}>
-              Sequence reconstructable: {fields.sequence_reconstructable as string}
-            </span>
-          )}
-          {fields.narrative_detail_level && (
-            <span style={{ fontSize: 11.5, fontWeight: 600, padding: '2px 9px', borderRadius: 5,
-              background: 'var(--surface-2)', color: 'var(--text-2)', border: '1px solid var(--border)' }}>
-              Narrative detail: {fields.narrative_detail_level as string}
-            </span>
-          )}
-        </div>
-        {/* Analyst-written sequence pattern */}
-        {fields.sequence_pattern ? (
-          <div style={{ marginBottom: 10 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-3)', marginBottom: 4 }}>Coded sequence pattern</div>
-            <div style={{ fontSize: 12.5, color: 'var(--text-1)', lineHeight: 1.55, whiteSpace: 'pre-wrap', borderLeft: '2px solid var(--accent, #3B82F6)', paddingLeft: 10 }}>
-              {fields.sequence_pattern as string}
-            </div>
-          </div>
         ) : (
-          <div style={{ fontSize: 12, color: 'var(--text-3)', fontStyle: 'italic', marginBottom: 8 }}>
-            No sequence pattern entered yet — add in the Narrative Excerpts tab.
+          <div style={{ fontSize: 12.5, color: 'var(--text-3)', fontStyle: 'italic', marginBottom: 10 }}>
+            No stages coded yet — add stages in the Stage Coding tab.
           </div>
         )}
-        {/* Coding limitations */}
-        {fields.main_data_limitation && (fields.main_data_limitation as string) !== 'none apparent' && (
-          <div style={{ padding: '6px 10px', borderRadius: 5, background: 'var(--amber-pale)', border: '1px solid var(--amber-border)', fontSize: 11.5, color: 'var(--amber)', marginTop: 4 }}>
-            <strong style={{ fontWeight: 600 }}>Coding limitation:</strong> {fields.main_data_limitation as string}
-            {fields.data_quality_notes && <span style={{ marginLeft: 6, color: 'var(--text-3)' }}>— {(fields.data_quality_notes as string).slice(0, 200)}</span>}
-          </div>
-        )}
-      </SummarySectionBox>
-
-      {/* Row A: Harm | Suspect + Vehicle */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
-        <SummarySectionBox title="Harm Indicators">
-          {harmItems.length > 0
-            ? bulletList(harmItems)
-            : <EmptyState state={sectionDataState([
-                'coercion_present','threats_present','intimidation_present','verbal_abuse',
-                'physical_force','sexual_assault','stealthing','robbery_theft',
-                'loss_of_consciousness','non_consensual_substance','forced_movement_dragging',
-                'restraint_confinement','weapon_present_used','choking_strangulation','prevented_exit',
-              ].map(f => fields[f as keyof Report] as string | undefined))} />}
-        </SummarySectionBox>
-        <div>
-          <SummarySectionBox title="Suspect">
-            {(() => {
-              const suspectFields: (keyof Report)[] = ['suspect_count','suspect_gender','suspect_age_estimate','suspect_race_ethnicity','suspect_description_text'];
-              const labels: Record<string, string> = {
-                suspect_count: 'Count', suspect_gender: 'Gender', suspect_age_estimate: 'Age estimate',
-                suspect_race_ethnicity: 'Race / ethnicity', suspect_description_text: 'Description',
-              };
-              const rows = suspectFields.map((field) => {
-                const raw = String(fields[field] || '');
-                const val = field === 'suspect_description_text' && raw.length > 200 ? raw.slice(0, 200) + '…' : raw;
-                return <SummaryKVRow key={field} label={labels[field]} value={val} prov={_prov(fp, field)} />;
-              });
-              const hasAny = suspectFields.some(f => (fields[f] as string || '').trim());
-              return hasAny ? rows : <EmptyState state={sectionDataState(suspectFields.map(f => fields[f] as string | undefined))} />;
-            })()}
-          </SummarySectionBox>
-          <SummarySectionBox title="Vehicle">
-            {(() => {
-              const vehicleFields: (keyof Report)[] = ['vehicle_present','vehicle_make','vehicle_model','vehicle_colour','plate_partial','vehicle_driver_role'];
-              const labels: Record<string, string> = {
-                vehicle_present: 'Present', vehicle_make: 'Make', vehicle_model: 'Model',
-                vehicle_colour: 'Colour', plate_partial: 'Plate (partial)', vehicle_driver_role: 'Driver role',
-              };
-              const rows = vehicleFields.map((field) =>
-                <SummaryKVRow key={field} label={labels[field]} value={String(fields[field] || '')} prov={_prov(fp, field)} />
-              );
-              const hasAny = vehicleFields.some(f => (fields[f] as string || '').trim());
-              const repeatFlags = (
-                <>
-                  {fields.repeat_suspect_flag === 'yes' && (
-                    <div style={{ marginTop: 6, fontSize: 12, color: 'var(--amber)', fontWeight: 600 }}>⚑ Repeat suspect flagged</div>
-                  )}
-                  {fields.repeat_vehicle_flag === 'yes' && (
-                    <div style={{ marginTop: 4, fontSize: 12, color: 'var(--amber)', fontWeight: 600 }}>⚑ Repeat vehicle flagged</div>
-                  )}
-                </>
-              );
-              return hasAny
-                ? <>{rows}{repeatFlags}</>
-                : <><EmptyState state={sectionDataState(['vehicle_present'].map(f => fields[f as keyof Report] as string | undefined))} />{repeatFlags}</>;
-            })()}
-          </SummarySectionBox>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          {v('stage_coding_suitability') && <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>Suitability: <strong style={{ color: 'var(--text-2)' }}>{formatLabel(v('stage_coding_suitability'))}</strong></span>}
+          {v('sequence_reconstructable') && <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>Reconstructable: <strong style={{ color: 'var(--text-2)' }}>{formatLabel(v('sequence_reconstructable'))}</strong></span>}
+          {v('narrative_detail_level') && <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>Narrative detail: <strong style={{ color: 'var(--text-2)' }}>{formatLabel(v('narrative_detail_level'))}</strong></span>}
         </div>
-      </div>
-
-      {/* Row B: Exit/Outcome | Mobility */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
-        <SummarySectionBox title="Exit / Outcome">
-          {exitItems.length > 0
-            ? bulletList(exitItems)
-            : <EmptyState state={sectionDataState([fields.exit_type as string | undefined])} />}
-        </SummarySectionBox>
-        <SummarySectionBox title="Mobility Pathway">
-          {mobItems.length > 0
-            ? bulletList(mobItems)
-            : <EmptyState state={sectionDataState([fields.movement_present as string | undefined])} />}
-        </SummarySectionBox>
-      </div>
-
-      {/* Row C: Environment | VAWG flags */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
-        <SummarySectionBox title="Environment Context">
-          {envItems.length > 0
-            ? bulletList(envItems)
-            : <EmptyState state={sectionDataState([fields.indoor_outdoor as string | undefined, fields.public_private as string | undefined])} />}
-        </SummarySectionBox>
-        <SummarySectionBox title="Concern & Exploitation Flags">
-          {(() => {
-            const flagItems: SItem[] = [];
-            // New structured concern flags (Suspect/Vehicle tab)
-            const concernFields: [keyof Report, string][] = [
-              ['concern_trafficking',        'Trafficking / exploitation concern'],
-              ['concern_third_party_control','Third-party control'],
-              ['concern_grooming',           'Grooming / recruitment concern'],
-              ['concern_organized_offending','Organized / group offending'],
-              ['concern_repeat_suspect',     'Repeat suspect concern'],
-              ['concern_repeat_vehicle',     'Repeat vehicle concern'],
-              ['concern_urgent_public_safety','Urgent public safety concern'],
-              ['concern_bulletin_suitable',  'Bulletin suitable'],
-            ];
-            for (const [field, label] of concernFields) {
-              const val = _v(field as keyof Report);
-              if (val && val !== '') flagItems.push({ text: `${label} — ${val}`, prov: _prov(fp, field as string) });
-            }
-            const rationale = (fields.concern_flag_rationale || '').trim();
-            if (rationale) flagItems.push({ text: `Rationale: ${rationale.slice(0, 180)}`, prov: _prov(fp, 'concern_flag_rationale') });
-            // Legacy VAWG fields from Encounter tab (still captured)
-            const vawgFlagFields: [keyof Report, string][] = [
-              ['trafficking_exploitation_concern',    'Trafficking concern (encounter)'],
-              ['third_party_control_indicated',       'Third-party control (encounter)'],
-              ['worker_appears_controlled',           'Worker appears controlled'],
-              ['client_connected_to_controller',      'Client connected to controller'],
-              ['movement_to_unknown_unsafe_location', 'Movement to unknown / unsafe location'],
-              ['worker_unaware_how_arrived',          'Worker unaware how arrived'],
-              ['grooming_recruitment_concern',        'Grooming concern (encounter)'],
-              ['repeat_targeting_concern',            'Repeat targeting concern'],
-              ['multiple_women_referenced',           'Multiple women referenced'],
-              ['organized_group_offending_concern',   'Organized offending concern (encounter)'],
-            ];
-            for (const [field, label] of vawgFlagFields) {
-              if (_broadPos(fields[field] as string | undefined))
-                flagItems.push({ text: `${label} (${fields[field]})`, prov: _prov(fp, field as string) });
-            }
-            const bull = (fields.public_safety_bulletin_suitability || '') as string;
-            const urg = (fields.public_safety_urgency_level || '') as string;
-            if (bull && bull !== 'not coded') flagItems.push({ text: `Bulletin: ${bull}`, prov: _prov(fp, 'public_safety_bulletin_suitability') });
-            if (urg && urg !== 'not coded') flagItems.push({ text: `Urgency: ${urg}`, prov: _prov(fp, 'public_safety_urgency_level') });
-            const excerpt = (fields.vawg_key_excerpts || '').trim();
-            if (excerpt) flagItems.push({ text: `Excerpt: ${excerpt.slice(0, 160)}`, prov: _prov(fp, 'vawg_key_excerpts') });
-            return flagItems.length > 0
-              ? bulletList(flagItems)
-              : <EmptyState state={sectionDataState(
-                  (['concern_trafficking','concern_third_party_control','concern_grooming','concern_organized_offending',
-                    'concern_repeat_suspect','concern_repeat_vehicle','concern_urgent_public_safety','concern_bulletin_suitable'] as (keyof Report)[])
-                    .map(f => fields[f] as string | undefined)
-                )} />;
-          })()}
-        </SummarySectionBox>
-      </div>
-
-      {/* Analyst Notes — full width */}
-      <SummarySectionBox title="Analyst Notes" accent>
-        {analystSummary && (
-          <div style={{ marginBottom: 10 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-3)', marginBottom: 4 }}>Analyst summary</div>
-            <div style={{ fontSize: 13, color: 'var(--text-1)', lineHeight: 1.55, whiteSpace: 'pre-wrap', borderLeft: '2px solid var(--gold, #B38B59)', paddingLeft: 10 }}>{analystSummary}</div>
+        {v('main_data_limitation') && v('main_data_limitation') !== 'none apparent' && (
+          <div style={{ marginTop: 10, padding: '5px 10px', borderRadius: 5, background: 'var(--amber-pale)', border: '1px solid var(--amber-border)', fontSize: 11.5, color: 'var(--amber)' }}>
+            <strong style={{ fontWeight: 600 }}>Coding limitation:</strong> {v('main_data_limitation')}
           </div>
-        )}
-        {fields.summary_analytic && (
-          <div style={{ marginBottom: 10 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-3)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
-              Summary analytic
-              {(() => {
-                const state = fp?.['summary_analytic'] ?? 'unset';
-                const isAnalyst = state === 'analyst_filled' || state === 'reviewed';
-                const label = isAnalyst ? 'Analyst entered' : state === 'ai_suggested' ? 'System generated' : 'Source unknown';
-                const color = isAnalyst ? 'var(--green)' : 'var(--amber)';
-                const bg = isAnalyst ? 'var(--green-pale)' : 'var(--amber-pale)';
-                const border = isAnalyst ? 'var(--green-border)' : 'var(--amber-border)';
-                return <span style={{ fontSize: 9.5, fontWeight: 600, padding: '1px 5px', borderRadius: 3, background: bg, color, border: `1px solid ${border}`, textTransform: 'none', letterSpacing: 0 }}>{label}</span>;
-              })()}
-            </div>
-            <div style={{ fontSize: 12.5, color: 'var(--text-2)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{fields.summary_analytic}</div>
-          </div>
-        )}
-        {fields.key_quotes && (
-          <div style={{ marginBottom: 10 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-3)', marginBottom: 4 }}>Key quotes</div>
-            <div style={{ fontSize: 12.5, color: 'var(--text-2)', lineHeight: 1.5, fontStyle: 'italic', whiteSpace: 'pre-wrap', borderLeft: '2px solid var(--border)', paddingLeft: 10 }}>{fields.key_quotes}</div>
-          </div>
-        )}
-        {(fields.coder_notes || fields.uncertainty_notes) && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
-            {fields.coder_notes && (
-              <div>
-                <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-3)', marginBottom: 4 }}>Coder notes</div>
-                <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.45, whiteSpace: 'pre-wrap' }}>{fields.coder_notes}</div>
-              </div>
-            )}
-            {fields.uncertainty_notes && (
-              <div>
-                <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-3)', marginBottom: 4 }}>Uncertainty notes</div>
-                <div style={{ fontSize: 12, color: 'var(--amber)', lineHeight: 1.45, whiteSpace: 'pre-wrap' }}>{fields.uncertainty_notes}</div>
-              </div>
-            )}
-          </div>
-        )}
-        {!analystSummary && !fields.summary_analytic && !fields.key_quotes &&
-          !fields.coder_notes && !fields.uncertainty_notes && (
-          <EmptyState state="not-coded" />
         )}
       </SummarySectionBox>
 
-      {/* GIS Summary — full width */}
+      {/* ── C. Main harms and control indicators ────────────────────────── */}
+      <SummarySectionBox title="Main Harms and Control Indicators">
+        {confirmedHarms.length > 0 ? (
+          <>
+            {v('primary_harm') && (
+              <div style={{ marginBottom: 8, fontSize: 12.5, color: 'var(--text-2)' }}>
+                Primary harm: <strong style={{ color: 'var(--text-1)' }}>{formatLabel(v('primary_harm'))}</strong>
+                <ProvenancePill p={_prov(fp, 'primary_harm')} />
+              </div>
+            )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              {confirmedHarms.map(([field, label]) => (
+                <div key={String(field)} style={{ display: 'flex', alignItems: 'baseline', gap: 6, fontSize: 12.5, color: 'var(--text-2)', lineHeight: 1.4 }}>
+                  <span style={{ color: 'var(--text-3)', flexShrink: 0 }}>·</span>
+                  <span>{label} <span style={{ fontSize: 11, color: 'var(--text-3)' }}>({formatLabel(v(field))})</span><ProvenancePill p={_prov(fp, String(field))} /></span>
+                </div>
+              ))}
+            </div>
+            {v('substance_administration_notes') && (
+              <div style={{ marginTop: 8, fontSize: 11.5, color: 'var(--text-2)', borderLeft: '2px solid var(--border)', paddingLeft: 8 }}>
+                Substance notes: {v('substance_administration_notes')}
+              </div>
+            )}
+          </>
+        ) : (
+          <div style={{ fontSize: 12.5, color: 'var(--text-3)', fontStyle: 'italic' }}>No harms coded as confirmed yet.</div>
+        )}
+      </SummarySectionBox>
+
+      {/* ── D. Mobility pathway ──────────────────────────────────────────── */}
+      <SummarySectionBox title="Mobility Pathway">
+        {!v('movement_present') && !v('entered_vehicle') ? (
+          <div style={{ fontSize: 12.5, color: 'var(--text-3)', fontStyle: 'italic' }}>Movement not yet coded.</div>
+        ) : (
+          <>
+            {inlineKV('Movement present', v('movement_present'), 'movement_present')}
+            {inlineKV('Entered vehicle', v('entered_vehicle'), 'entered_vehicle')}
+            {inlineKV('Movement mode', v('mode_of_movement'), 'mode_of_movement')}
+            {inlineKV('Movement control', v('offender_control_over_movement'), 'offender_control_over_movement')}
+            {inlineKV('Movement controlled by', v('who_controlled_movement'), 'who_controlled_movement')}
+            {(() => {
+              const start = v('start_location_type');
+              const dest = v('destination_location_type');
+              if (start && dest) return inlineKV('Route / pathway', `${formatLabel(start)} → ${formatLabel(dest)}`);
+              if (start) return inlineKV('Start location type', start, 'start_location_type');
+              if (dest) return inlineKV('Destination type', dest, 'destination_location_type');
+              return null;
+            })()}
+            {v('public_to_private_shift') === 'yes' && <div style={{ fontSize: 12.5, color: 'var(--text-2)', marginBottom: 4 }}>· Public → private shift</div>}
+            {v('public_to_secluded_shift') === 'yes' && <div style={{ fontSize: 12.5, color: 'var(--text-2)', marginBottom: 4 }}>· Public → secluded shift</div>}
+            {v('cross_neighbourhood') === 'yes' && <div style={{ fontSize: 12.5, color: 'var(--text-2)', marginBottom: 4 }}>· Cross-neighbourhood movement</div>}
+            {v('cross_municipality') === 'yes' && <div style={{ fontSize: 12.5, color: 'var(--text-2)', marginBottom: 4 }}>· Cross-municipality movement</div>}
+            {v('cross_city_movement') === 'yes' && <div style={{ fontSize: 12.5, color: 'var(--text-2)', marginBottom: 4 }}>· Cross-city movement</div>}
+            {v('unexplained_relocation') === 'yes' && <div style={{ fontSize: 12.5, color: 'var(--amber)', marginBottom: 4 }}>· Unexplained relocation</div>}
+            {inlineKV('Movement confidence', v('movement_confidence'), 'movement_confidence')}
+            {v('movement_notes') && (
+              <div style={{ marginTop: 6, fontSize: 11.5, color: 'var(--text-2)', borderLeft: '2px solid var(--border)', paddingLeft: 8 }}>
+                {v('movement_notes')}
+              </div>
+            )}
+          </>
+        )}
+      </SummarySectionBox>
+
+      {/* ── E. Environment / context ─────────────────────────────────────── */}
+      <SummarySectionBox title="Environment / Context">
+        {['primary_setting_type','specific_setting_type','visibility_case','isolation_case',
+          'guardianship_case','access_to_help','setting_control','other_people_nearby',
+          'security_or_business_nearby'].every(f => !v(f as keyof Report)) ? (
+          <div style={{ fontSize: 12.5, color: 'var(--text-3)', fontStyle: 'italic' }}>Environment not yet coded.</div>
+        ) : (
+          <>
+            {inlineKV('Primary setting type', v('primary_setting_type'), 'primary_setting_type')}
+            {inlineKV('Specific setting type', v('specific_setting_type'), 'specific_setting_type')}
+            {inlineKV('Visibility', v('visibility_case'), 'visibility_case')}
+            {inlineKV('Isolation', v('isolation_case'), 'isolation_case')}
+            {inlineKV('Guardianship', v('guardianship_case'), 'guardianship_case')}
+            {inlineKV('Access to help', v('access_to_help'), 'access_to_help')}
+            {inlineKV('Setting control', v('setting_control'), 'setting_control')}
+            {inlineKV('Other people nearby', v('other_people_nearby'), 'other_people_nearby')}
+            {inlineKV('Security / business nearby', v('security_or_business_nearby'), 'security_or_business_nearby')}
+            {v('environment_notes') && (
+              <div style={{ marginTop: 6, fontSize: 11.5, color: 'var(--text-2)', borderLeft: '2px solid var(--border)', paddingLeft: 8 }}>
+                {v('environment_notes')}
+              </div>
+            )}
+          </>
+        )}
+        {/* Initial contact approach fields — only if coded */}
+        {['approach_method','approach_setting','approach_mobility_context','client_known_at_contact',
+          'initial_contact_visibility','initial_contact_guardianship'].some(f => v(f as keyof Report)) && (
+          <>
+            {subLabel('Initial contact / approach')}
+            {inlineKV('Approach method', v('approach_method'), 'approach_method')}
+            {inlineKV('Approach setting', v('approach_setting'), 'approach_setting')}
+            {inlineKV('Mobility context', v('approach_mobility_context'), 'approach_mobility_context')}
+            {inlineKV('Client known at contact', v('client_known_at_contact'), 'client_known_at_contact')}
+            {inlineKV('Visibility at contact', v('initial_contact_visibility'), 'initial_contact_visibility')}
+            {inlineKV('Guardianship at contact', v('initial_contact_guardianship'), 'initial_contact_guardianship')}
+            {v('initial_contact_excerpt') && (
+              <div style={{ marginTop: 6, fontSize: 11.5, color: 'var(--text-2)', borderLeft: '2px solid var(--border)', paddingLeft: 8, fontStyle: 'italic' }}>
+                {v('initial_contact_excerpt')}
+              </div>
+            )}
+          </>
+        )}
+      </SummarySectionBox>
+
+      {/* ── F. Analyst notes and limitations ────────────────────────────── */}
+      <SummarySectionBox title="Analyst Notes and Limitations" accent>
+        {(() => {
+          const state = fp?.['summary_analytic'] ?? 'unset';
+          const isAnalyst = state === 'analyst_filled' || state === 'reviewed';
+          const sourceLabel = isAnalyst ? 'Analyst-written summary' : state === 'ai_suggested' ? 'Derived from confirmed coding' : 'Analytic summary';
+          const srcColor = isAnalyst ? 'var(--green)' : 'var(--text-3)';
+          const srcBg = isAnalyst ? 'var(--green-pale)' : 'var(--surface-2)';
+          const srcBorder = isAnalyst ? 'var(--green-border)' : 'var(--border)';
+          return (
+            <>
+              {(analystSummary || fields.summary_analytic) && (
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
+                    {subLabel('Analytic summary')}
+                    <span style={{ fontSize: 9.5, fontWeight: 600, padding: '1px 6px', borderRadius: 3, background: srcBg, color: srcColor, border: `1px solid ${srcBorder}`, marginTop: -4 }}>{sourceLabel}</span>
+                  </div>
+                  {analystSummary && <div style={{ fontSize: 13, color: 'var(--text-1)', lineHeight: 1.55, whiteSpace: 'pre-wrap', borderLeft: '2px solid var(--gold, #B38B59)', paddingLeft: 10, marginBottom: 6 }}>{analystSummary}</div>}
+                  {fields.summary_analytic && <div style={{ fontSize: 12.5, color: 'var(--text-2)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{fields.summary_analytic as string}</div>}
+                </div>
+              )}
+            </>
+          );
+        })()}
+        {fields.key_quotes && (
+          <div style={{ marginBottom: 12 }}>
+            {subLabel('Key quotes')}
+            <div style={{ fontSize: 12.5, color: 'var(--text-2)', lineHeight: 1.5, fontStyle: 'italic', whiteSpace: 'pre-wrap', borderLeft: '2px solid var(--border)', paddingLeft: 10 }}>{fields.key_quotes as string}</div>
+          </div>
+        )}
+        {fields.coder_notes && (
+          <div style={{ marginBottom: 12 }}>
+            {subLabel('Coder notes')}
+            <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.45, whiteSpace: 'pre-wrap' }}>{fields.coder_notes as string}</div>
+          </div>
+        )}
+        {fields.uncertainty_notes && (
+          <div style={{ marginBottom: 12 }}>
+            {subLabel('Uncertainty notes')}
+            <div style={{ fontSize: 12, color: 'var(--amber)', lineHeight: 1.45, whiteSpace: 'pre-wrap' }}>{fields.uncertainty_notes as string}</div>
+          </div>
+        )}
+        {v('data_quality_notes') && (
+          <div style={{ marginBottom: 8 }}>
+            {subLabel('Data quality notes')}
+            <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.45, whiteSpace: 'pre-wrap' }}>{v('data_quality_notes')}</div>
+          </div>
+        )}
+        {!analystSummary && !fields.summary_analytic && !fields.key_quotes && !fields.coder_notes && !fields.uncertainty_notes && (
+          <div style={{ fontSize: 12.5, color: 'var(--text-3)', fontStyle: 'italic' }}>No analyst notes entered yet.</div>
+        )}
+      </SummarySectionBox>
+
+      {/* ── G. GIS / address summary ─────────────────────────────────────── */}
       <SummarySectionBox title="GIS — Address Summary">
-        {fields.geocode_status && (
+        {v('geocode_status') && (
           <div style={{ marginBottom: 10, fontSize: 11.5 }}>
             <span style={{ color: 'var(--text-3)', marginRight: 6 }}>Geocode status:</span>
-            <span style={{ fontWeight: 600, color: fields.geocode_status === 'complete' ? 'var(--green)' : fields.geocode_status === 'partial' ? 'var(--amber)' : 'var(--text-2)' }}>{fields.geocode_status}</span>
+            <span style={{ fontWeight: 600, color: v('geocode_status') === 'complete' ? 'var(--green)' : v('geocode_status') === 'partial' ? 'var(--amber)' : 'var(--text-2)' }}>{v('geocode_status')}</span>
           </div>
         )}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '0 16px' }}>
@@ -1039,16 +679,47 @@ function SummaryTab({ fields, analystName, analystSummary, tags, reportId }: {
         </div>
       </SummarySectionBox>
 
+      {/* ── H. Suspect / Vehicle (collapsible) ──────────────────────────── */}
+      <div style={{ marginBottom: 16, borderRadius: 7, border: '1px solid var(--border)', background: 'var(--surface)', overflow: 'hidden' }}>
+        <button
+          type="button"
+          onClick={() => setSuspectOpen(o => !o)}
+          style={{ width: '100%', padding: '7px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            background: 'var(--surface-2)', border: 'none', borderBottom: suspectOpen ? '1px solid var(--border)' : 'none',
+            cursor: 'pointer', fontSize: 10, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-3)' }}
+        >
+          <span>Suspect and Vehicle</span>
+          <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{suspectOpen ? '▲' : '▼'}</span>
+        </button>
+        {suspectOpen && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px', padding: '10px 12px' }}>
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-3)', marginBottom: 6 }}>Suspect</div>
+              {(['suspect_count','suspect_gender','suspect_age_estimate','suspect_race_ethnicity'] as (keyof Report)[]).map(field => (
+                <SummaryKVRow key={String(field)} label={String(field).replace(/_/g, ' ').replace(/^./, c => c.toUpperCase())} value={v(field)} prov={_prov(fp, String(field))} />
+              ))}
+              {v('suspect_description_text') && (
+                <div style={{ marginTop: 4, fontSize: 12, color: 'var(--text-2)', lineHeight: 1.4 }}>{v('suspect_description_text')}</div>
+              )}
+              {fields.repeat_suspect_flag === 'yes' && <div style={{ marginTop: 6, fontSize: 12, color: 'var(--amber)', fontWeight: 600 }}>⚑ Repeat suspect flagged</div>}
+            </div>
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-3)', marginBottom: 6 }}>Vehicle</div>
+              {(['vehicle_present','vehicle_make','vehicle_model','vehicle_colour','plate_partial','vehicle_driver_role'] as (keyof Report)[]).map(field => (
+                <SummaryKVRow key={String(field)} label={String(field).replace(/_/g, ' ').replace(/^./, c => c.toUpperCase())} value={v(field)} prov={_prov(fp, String(field))} />
+              ))}
+              {fields.repeat_vehicle_flag === 'yes' && <div style={{ marginTop: 6, fontSize: 12, color: 'var(--amber)', fontWeight: 600 }}>⚑ Repeat vehicle flagged</div>}
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Tags */}
       {tags && tags.length > 0 && (
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center',
-          paddingTop: 14, marginTop: 6, borderTop: '1px solid var(--border)' }}>
-          <span style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase',
-            letterSpacing: '0.05em', color: 'var(--text-3)', marginRight: 4 }}>Tags</span>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', paddingTop: 12, marginTop: 4, borderTop: '1px solid var(--border)' }}>
+          <span style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-3)', marginRight: 4 }}>Tags</span>
           {tags.map((t) => (
-            <span key={t} style={{ padding: '2px 9px', borderRadius: 20,
-              border: '1px solid var(--border)', background: 'var(--surface-2)',
-              color: 'var(--text-2)', fontSize: 11.5 }}>{t}</span>
+            <span key={t} style={{ padding: '2px 9px', borderRadius: 20, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-2)', fontSize: 11.5 }}>{t}</span>
           ))}
         </div>
       )}
@@ -1096,6 +767,7 @@ export default function CodingScreen() {
   const [cleanedNarrative, setCleanedNarrative] = useState('');
   const [showCleaned, setShowCleaned] = useState(false);
   const [showBulletinText, setShowBulletinText] = useState(false);
+  const [summaryStages, setSummaryStages] = useState<ReportStage[]>([]);
   const [nlp, setNlp] = useState<Record<string, any>>({});
   const [weather, setWeather] = useState<Record<string, any>>({});
   const [provenance, setProvenance] = useState<Record<string, string>>({});
@@ -1301,6 +973,13 @@ export default function CodingScreen() {
 
   // Keep the ref pointing at the latest handleSave after every render
   useEffect(() => { handleSaveRef.current = handleSave; });
+
+  // Fetch stages when Case Summary tab is opened
+  useEffect(() => {
+    if (activeTab === 'summary' && reportId) {
+      api.getStages(reportId).then(setSummaryStages).catch(() => setSummaryStages([]));
+    }
+  }, [activeTab, reportId]);
 
   // ── Autosave: debounce 2s after last field change (existing reports only) ───
   // Uses handleSaveRef so the timer always calls the freshest save function,
@@ -2654,6 +2333,7 @@ export default function CodingScreen() {
                 analystSummary={analystSummary}
                 tags={tags}
                 reportId={report?.report_id}
+                stages={summaryStages}
               />
             )}
           </div>

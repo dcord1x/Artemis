@@ -323,6 +323,8 @@ export interface StagePatterns {
   response_frequency:        { value: string; count: number }[];
   escalation_frequency:      { value: string; count: number }[];
   movement_impact_frequency: { value: string; count: number }[];
+  behavior_by_stage:         Record<string, { value: string; count: number }[]>;
+  response_by_stage:         Record<string, { value: string; count: number }[]>;
   matching_cases:            string[];
   sequence_frequency:        { value: string; count: number }[];
   total_stages:              number;

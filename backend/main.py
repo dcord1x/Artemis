@@ -1480,6 +1480,8 @@ def get_stage_patterns(
     response_freq: Counter = Counter()
     escalation_freq: Counter = Counter()
     movement_impact_freq: Counter = Counter()
+    behavior_by_stage: dict = defaultdict(Counter)
+    response_by_stage: dict = defaultdict(Counter)
     matching_cases: set = set()
 
     for s in stages:
@@ -1492,8 +1494,10 @@ def get_stage_patterns(
         if s.movement_type_to_here: move_by_stage[t][s.movement_type_to_here] += 1
         for b in (s.client_behaviors or []):
             behavior_freq[b] += 1
+            behavior_by_stage[t][b] += 1
         for r in (s.victim_responses or []):
             response_freq[r] += 1
+            response_by_stage[t][r] += 1
         if getattr(s, 'escalation_level', None):
             escalation_freq[s.escalation_level] += 1
         if getattr(s, 'movement_impact', None):
@@ -1524,6 +1528,8 @@ def get_stage_patterns(
         "response_frequency":        _counter_to_list(response_freq),
         "escalation_frequency":      _counter_to_list(escalation_freq),
         "movement_impact_frequency": _counter_to_list(movement_impact_freq),
+        "behavior_by_stage":         _nested_to_dict(behavior_by_stage),
+        "response_by_stage":         _nested_to_dict(response_by_stage),
         "matching_cases":            sorted(matching_cases),
         "sequence_frequency":        _counter_to_list(seq_strings),
         "total_stages":              len(stages),
