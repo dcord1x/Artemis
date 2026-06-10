@@ -58,7 +58,6 @@ export const FIELD_VALUE_LABELS: Record<string, string> = {
   aftermath:                 'Aftermath / warning',
   aftermath_warning:         'Aftermath / warning',
   exit_aftermath:            'Exit / aftermath',
-  unknown_unclear:           'Unknown / unclear',
 
   // Harm indicators (stored snake_case → display)
   physical_force:            'Physical force',
