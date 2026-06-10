@@ -17,6 +17,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { ChevronDown, ChevronUp, Plus, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 import { api } from '../api';
 import type { ReportStage } from '../types';
+import { formatLabel } from '../utils';
 
 // ── Option definitions ────────────────────────────────────────────────────────
 
@@ -29,9 +30,9 @@ const STAGE_TYPES = [
     def: 'Discussion of terms, services, or payment; includes service refusal.' },
   { value: 'pickup_meeting',    label: 'Pickup / Meeting',
     def: 'The client and worker meet in person; may involve entering a vehicle.' },
-  { value: 'movement_travel',   label: 'Movement / Travel',
+  { value: 'movement_travel',   label: 'Movement / relocation',
     def: 'Physical relocation from one place to another.' },
-  { value: 'arrival_location',  label: 'Arrival at Location',
+  { value: 'arrival_location',  label: 'Arrival / setting',
     def: 'The worker arrives at the location where the encounter takes place.' },
   { value: 'escalation',        label: 'Escalation',
     def: 'Shift toward coercion, threats, control, or violence.' },
@@ -39,8 +40,8 @@ const STAGE_TYPES = [
     def: 'Physical or sexual violence, or non-physical coercion controlling the worker.' },
   { value: 'exit_escape',       label: 'Exit / Escape',
     def: 'The worker exits, escapes, or the encounter ends.' },
-  { value: 'aftermath',         label: 'Aftermath',
-    def: 'Events occurring after the main encounter — reporting, care, relocation.' },
+  { value: 'aftermath',         label: 'Aftermath / warning',
+    def: 'Events occurring after the main encounter — reporting, care, relocation, warning.' },
   { value: 'other',             label: 'Other',
     def: 'Stage type not captured by the categories above.' },
   { value: 'unknown_unclear',   label: 'Unknown / unclear',
@@ -1136,7 +1137,7 @@ export default function StageSequencer({ reportId }: { reportId: string }) {
           </span>
           {stages.map((s, i) => {
             const colors = STAGE_COLORS[s.stage_type];
-            const label = STAGE_TYPES.find((t) => t.value === s.stage_type)?.label ?? s.stage_type;
+            const label = STAGE_TYPES.find((t) => t.value === s.stage_type)?.label ?? formatLabel(s.stage_type);
             return (
               <span key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                 <span style={{

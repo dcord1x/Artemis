@@ -1549,7 +1549,9 @@ export default function CodingScreen() {
 
   const nlpSourceId = nlp._source_report_id as string | undefined;
   const nlpBelongsHere = !nlpSourceId || !report?.report_id || nlpSourceId === report.report_id;
-  const showNlpChips = Object.keys(nlp).length > 0 && nlpBelongsHere;
+  // NLP chips and highlights are hidden from the research-facing interface.
+  // Backend data is preserved internally; toggle via dev flag if needed.
+  const showNlpChips = false;
 
   // ── NLP source highlighting ─────────────────────────────────────────────────
   const NLP_HL_CATS = [
@@ -2277,7 +2279,7 @@ export default function CodingScreen() {
                   />
                   <FieldRow label="Destination known" value={f('destination_known')} onChange={(v) => set('destination_known', v)} type="yesno-extended" provenance={prov('destination_known')} onMarkReviewed={() => markReviewed('destination_known')} />
                   <FieldRow label="Location certainty" value={f('location_certainty')} onChange={(v) => set('location_certainty', v)} type="select" options={['high','medium','low','unknown']} provenance={prov('location_certainty')} onMarkReviewed={() => markReviewed('location_certainty')} />
-                  <FieldRow label="Confidence level" value={f('confidence_level')} onChange={(v) => set('confidence_level', v)} type="select" options={['low','medium','high']} />
+                  <FieldRow label="Confidence level" value={f('confidence_level')} onChange={(v) => set('confidence_level', v)} type="select" options={['high','medium','low']} />
                 </SectionPanel>
 
                 {/* ── Location summary — brief spatial overview; detail in Stages/Mobility/GIS ── */}
@@ -2422,7 +2424,7 @@ export default function CodingScreen() {
                   <FieldRow label="Primary incident type" value={f('primary_incident_type')} onChange={(v) => set('primary_incident_type', v)} type="select" options={['suspicious / concerning behaviour','non-payment / payment dispute','coercion / intimidation','physical violence','sexual violence','robbery / theft','substance-facilitated harm','movement / relocation concern','multiple harms','other','unknown / unclear']} provenance={prov('primary_incident_type')} onMarkReviewed={() => markReviewed('primary_incident_type')} />
                   <FieldRow label="Overall severity" value={f('overall_severity')} onChange={(v) => set('overall_severity', v)} type="select" options={['low concern','moderate concern','high concern','severe violence / high risk','unknown / unclear']} provenance={prov('overall_severity')} onMarkReviewed={() => markReviewed('overall_severity')} />
                   <FieldRow label="Overall incident summary" value={f('overall_incident_summary')} onChange={(v) => set('overall_incident_summary', v)} type="textarea" placeholder="Briefly summarize the incident in 2 to 3 sentences." provenance={prov('overall_incident_summary')} onMarkReviewed={() => markReviewed('overall_incident_summary')} />
-                  <FieldRow label="Stage coding suitability" value={f('stage_coding_suitability')} onChange={(v) => set('stage_coding_suitability', v)} type="select" options={['yes, sufficient narrative detail for staged coding','partial, some stages can be coded','no, incident-level coding only','unknown / not reviewed']} provenance={prov('stage_coding_suitability')} onMarkReviewed={() => markReviewed('stage_coding_suitability')} />
+                  <FieldRow label="Stage coding suitability" value={f('stage_coding_suitability')} onChange={(v) => set('stage_coding_suitability', v)} type="select" options={['full staged coding','partial staged coding','incident-level coding only','not suitable','not reviewed']} provenance={prov('stage_coding_suitability')} onMarkReviewed={() => markReviewed('stage_coding_suitability')} />
                   <FieldRow label="Sequence clarity" value={f('sequence_clarity')} onChange={(v) => set('sequence_clarity', v)} type="select" options={['clear chronological sequence','mostly clear sequence','partial / fragmented sequence','sequence unclear','not applicable']} provenance={prov('sequence_clarity')} onMarkReviewed={() => markReviewed('sequence_clarity')} />
                 </SectionPanel>
 
@@ -2680,12 +2682,10 @@ export default function CodingScreen() {
                   <FieldRow label="Uncertainty excerpt" value={f('uncertainty_excerpt')} onChange={(v) => set('uncertainty_excerpt', v)} type="textarea" placeholder="Verbatim text illustrating ambiguity or data limitation." provenance={prov('uncertainty_excerpt')} onMarkReviewed={() => markReviewed('uncertainty_excerpt')} />
                 </SectionPanel>
 
-                <SectionPanel title="Analyst Support Tools" fieldKeys={[]} fields={fields} defaultCollapsed>
+                <SectionPanel title="Reference Tools" fieldKeys={[]} fields={fields} defaultCollapsed>
                   <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginBottom: 10, fontStyle: 'italic' }}>
-                    System-populated suggestions only. All values must be reviewed and confirmed by the analyst before use.
+                    Supplementary contextual data. Not for use as coding evidence.
                   </div>
-                  <NlpSignalsPanel nlp={nlp} onSetField={(field, value) => set(field as keyof Report, value)} reportId={report?.report_id} getFieldValue={(field) => f(field as keyof Report)} />
-                  <EscalationArc esc={nlp.escalation ?? {}} />
                   <WeatherCard w={weather} />
                   {!isNew && (
                     <ParseViewer narrative={narrative} reportId={report?.report_id} />

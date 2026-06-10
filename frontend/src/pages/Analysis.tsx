@@ -284,7 +284,7 @@ function PathwayChain({ sequence, count, rank }: { sequence: string; count: numb
       <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4, rowGap: 4 }}>
         <span style={{ fontSize: 10.5, color: 'var(--text-3)', fontFamily: 'Lora, serif', marginRight: 2, flexShrink: 0 }}>{rank}.</span>
         {stages.map((s, i) => {
-          const lbl = STAGE_LABELS[s] || s;
+          const lbl = STAGE_LABELS[s] || formatLabel(s);
           const col = STAGE_COLORS[s] || C.slate;
           return (
             <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
@@ -640,7 +640,7 @@ export default function Analysis() {
                               <span key={j} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                                 {j > 0 && <ArrowRight size={9} style={{ color: 'var(--text-3)', flexShrink: 0 }} />}
                                 <span style={{ fontSize: 10.5, fontWeight: 600, padding: '2px 7px', borderRadius: 4, background: (STAGE_COLORS[p] || C.slate) + '18', color: STAGE_COLORS[p] || C.slate, border: `1px solid ${(STAGE_COLORS[p] || C.slate)}30`, whiteSpace: 'nowrap' }}>
-                                  {STAGE_LABELS[p] || p}
+                                  {STAGE_LABELS[p] || formatLabel(p)}
                                 </span>
                               </span>
                             ))}

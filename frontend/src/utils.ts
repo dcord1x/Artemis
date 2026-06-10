@@ -42,6 +42,74 @@ export const FIELD_VALUE_LABELS: Record<string, string> = {
 
   // basis_for_movement_coding — display-only remap, stored value unchanged
   'NLP suggestion only':     'System-suggested',
+
+  // Stage type keys (stored values → display labels)
+  initial_contact:           'Initial contact',
+  screening_recognition:     'Screening / recognition',
+  negotiation:               'Negotiation',
+  pickup_meeting:            'Pickup / meeting',
+  movement_travel:           'Movement / relocation',
+  movement_relocation:       'Movement / relocation',
+  arrival_location:          'Arrival / setting',
+  arrival_setting:           'Arrival / setting',
+  escalation:                'Escalation',
+  violence_coercion:         'Violence / coercion',
+  exit_escape:               'Exit / escape',
+  aftermath:                 'Aftermath / warning',
+  aftermath_warning:         'Aftermath / warning',
+  exit_aftermath:            'Exit / aftermath',
+  unknown_unclear:           'Unknown / unclear',
+
+  // Harm indicators (stored snake_case → display)
+  physical_force:            'Physical force',
+  sexual_assault:            'Sexual assault',
+  robbery_theft:             'Robbery / theft',
+  coercion_present:          'Coercion present',
+  threats_present:           'Threats present',
+  choking_strangulation:     'Choking / strangulation',
+  forced_movement_dragging:  'Forced movement',
+  restraint_confinement:     'Restraint / confinement',
+  weapon_present_used:       'Weapon present / used',
+  non_consensual_substance:  'Non-consensual substance',
+  prevented_exit:            'Prevented exit',
+
+  // Movement impact (StageSequencer stored values)
+  no_change:                 'No meaningful change',
+  reduced_visibility:        'Reduced visibility',
+  increased_isolation:       'Increased isolation',
+  reduced_ability_leave:     'Reduced ability to leave',
+  increased_control:         'Increased client control',
+  changed_location:          'Changed agreed location',
+
+  // Spatial / location precision
+  exact_address:             'Exact address',
+  intersection:              'Intersection',
+  landmark:                  'Landmark / business',
+  neighbourhood:             'Neighbourhood',
+  approximate:               'Approximate area',
+  municipality_only:         'City / municipality',
+  not_mappable:              'Not mappable',
+
+  // Common coded values
+  not_applicable:            'Not applicable',
+  not_enough_information:    'Not enough information',
+  not_reviewed:              'Not reviewed',
+  not_coded:                 'Not coded',
+  worker_controlled:         'Worker-controlled',
+  client_controlled:         'Client-controlled',
+  shared:                    'Shared',
+  high:                      'High',
+  medium:                    'Medium',
+  low:                       'Low',
+
+  // Blank/unknown sentinels — explicit display
+  unknown:                   'Unknown',
+  unclear:                   'Unclear',
+  other:                     'Other',
+  present:                   'Present',
+  absent:                    'Absent',
+  visible:                   'Visible',
+  vehicle:                   'Vehicle',
 };
 
 /**

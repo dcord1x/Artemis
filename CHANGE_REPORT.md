@@ -375,3 +375,88 @@ This ensures the formatter is safe to apply broadly — free text, city names, a
 ### TypeScript Build
 
 All changes compile clean. `npx tsc --noEmit` exits with no errors after all session 5 edits.
+
+---
+
+## Session 6 — Methodology-Facing Cleanup (30-item pass)
+
+**Reason:** Final pre-testing and pre-screenshot cleanup. Remove all remaining AI/NLP/automated language from the research-facing interface. Standardise scales, labels, stage vocabulary, and display values. Ensure the tool presents analyst-led PhD research coding only with no AI/NLP language visible in research outputs.
+
+**Constraint:** Do not redesign the workflow. Do not change GIS functionality. Do not remove existing coded data. Terminology, visibility, dropdown-scale, output and methodology-defensibility cleanup only.
+
+### NLP / AI Visibility — Items 1–5
+
+| Change | File | Detail |
+|--------|------|--------|
+| `showNlpChips = false` (hardcoded) | `CodingScreen.tsx` | Hides all NLP category chips (Coercion, Threats, Movement, Harm, Location, Payment), the "Toggle signal highlights" button, and all NlpBadge instances. `showNlpHighlights` is now unreachable so `buildHighlightedNarrative` always returns plain text. |
+| Location hint badge hidden | `CodingScreen.tsx` | `↳ {hint}` chip beside location fields gated by `showNlpChips` — hidden. |
+| Environment location badge hidden | `CodingScreen.tsx` | `⌂ {locType} · unreviewed` amber badge gated by `showNlpChips && envSupported` — hidden. |
+| NlpSignalsPanel removed | `CodingScreen.tsx` | Removed from "Analyst Support Tools" accordion panel JSX. |
+| EscalationArc removed | `CodingScreen.tsx` | Removed from "Analyst Support Tools" accordion panel JSX. |
+| Panel renamed | `CodingScreen.tsx` | "Analyst Support Tools" → "Reference Tools"; subtitle updated to analyst-led language. |
+
+NlpBadge component and all NLP type definitions remain in the codebase for internal provenance tracking. They do not render.
+
+### Scale Standardisation — Items 6–11
+
+| Field | Fix | File |
+|-------|-----|------|
+| `stage_coding_suitability` | Duplicate option arrays removed — Case Summary area now matches Codability tab: `['full staged coding','partial staged coding','incident-level coding only','not suitable','not reviewed']` | `CodingScreen.tsx` |
+| `confidence_level` | Order corrected from `['low','medium','high']` to `['high','medium','low']` to match high → low convention | `CodingScreen.tsx` |
+
+### Stage Vocabulary — Items 13–15
+
+| Stage key | Old label | New label | File |
+|-----------|-----------|-----------|------|
+| `movement_travel` | Movement / Travel | Movement / relocation | `StageSequencer.tsx` |
+| `arrival_location` | Arrival at Location | Arrival / setting | `StageSequencer.tsx` |
+| `aftermath` | Aftermath | Aftermath / warning | `StageSequencer.tsx` |
+
+Definition for `aftermath` updated to include "warning" in StageSequencer STAGE_TYPES.
+
+Sequence summary strip fallback: `?? s.stage_type` → `?? formatLabel(s.stage_type)` to prevent raw snake_case appearing when a stage_type key has no explicit STAGE_TYPES entry.
+
+### formatLabel Expansion — Items 15–16
+
+The `FIELD_VALUE_LABELS` map in `utils.ts` was expanded with explicit entries for:
+
+- **Stage type keys**: initial_contact, screening_recognition, negotiation, pickup_meeting, movement_travel, movement_relocation, arrival_location, arrival_setting, escalation, violence_coercion, exit_escape, aftermath, aftermath_warning, exit_aftermath, unknown_unclear
+- **Harm indicators**: physical_force, sexual_assault, robbery_theft, coercion_present, threats_present, choking_strangulation, forced_movement_dragging, restraint_confinement, weapon_present_used, non_consensual_substance, prevented_exit
+- **Movement impact**: no_change, reduced_visibility, increased_isolation, reduced_ability_leave, increased_control, changed_location
+- **Location precision**: exact_address, intersection, landmark, neighbourhood, approximate, municipality_only, not_mappable
+- **Common coded values**: not_applicable, not_enough_information, not_reviewed, not_coded, worker_controlled, client_controlled, shared, high, medium, low, unknown, unclear, other, present, absent, visible, vehicle
+
+`formatLabel` fallback in `Analysis.tsx` stage label lookups updated:
+- `STAGE_LABELS[s] || s` → `STAGE_LABELS[s] || formatLabel(s)`
+- `STAGE_LABELS[p] || p` → `STAGE_LABELS[p] || formatLabel(p)`
+
+### Codebook — Items 27, 29
+
+| Change | Detail |
+|--------|--------|
+| Methodology note added | New note block added above "Anti-over-inference note" in CodebookPage.tsx explaining: analyst-led coding, structured fields for comparability, uncertainty fields, missing information policy, unreviewed fields excluded from findings, stage/behaviour separation, case-level vs stage-level distinction, Initial Contact as stage detail. |
+| `stage_type` entry updated | `allowedValues` updated to show display labels (not snake_case). `codingRule` updated with explicit note separating stage types from harm indicators. `example` added with pickup → movement → arrival sequence. `methodologicalBasis` updated to reference stage/harm separation. |
+
+### Confirmed Unchanged / Already Gated
+
+| Item | Status |
+|------|--------|
+| Location hints in narrative panel (item 11) | Confirmed gated by `showNlpChips` at line 2320 and 2324 of CodingScreen.tsx — not visible. |
+| NLP internal type definitions (`ai_suggestions`, `nlp_available`, `nlp_violence`, etc.) | Internal only — no UI rendering. Safe. |
+| GIS functionality | Unchanged. |
+| All existing coded data | Unchanged. Stored backend values not modified. |
+
+### Files Edited (Session 6)
+
+| File | Change |
+|------|--------|
+| `frontend/src/pages/CodingScreen.tsx` | `showNlpChips = false`; NlpSignalsPanel and EscalationArc removed from panel JSX; panel renamed to "Reference Tools"; `stage_coding_suitability` options deduplicated; `confidence_level` order corrected |
+| `frontend/src/components/StageSequencer.tsx` | movement_travel, arrival_location, aftermath labels updated; aftermath definition updated; sequence strip fallback uses `formatLabel` |
+| `frontend/src/utils.ts` | `FIELD_VALUE_LABELS` expanded with stage, harm, movement, precision, and common coded value entries |
+| `frontend/src/pages/Analysis.tsx` | Stage label fallbacks updated to use `formatLabel` |
+| `frontend/src/pages/CodebookPage.tsx` | Methodology note block added; `stage_type` entry updated with display labels, coding rule, example, and methodological basis |
+| `CHANGE_REPORT.md` | Session 6 documented |
+
+### TypeScript Build
+
+All changes compile clean. `npx tsc --noEmit` exits with no errors after all session 6 edits.

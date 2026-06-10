@@ -147,12 +147,13 @@ const CODEBOOK_ENTRIES: CodebookEntry[] = [
   // ── Stage-level fields
   {
     field: 'stage_type', label: 'Stage Type',
-    definition: 'The type of encounter phase represented by this stage. Defines what activity or dynamic characterises this moment in the encounter.',
+    definition: 'The type of encounter phase represented by this stage. Defines what activity or dynamic characterises this moment in the encounter. Stages are encounter phases only — behaviours and harm indicators are coded separately within each stage.',
     tab: 'Stage Coding', level: 'stage', type: 'select',
-    allowedValues: 'initial_contact · negotiation · pickup_meeting · movement_travel · arrival_location · escalation · violence_coercion · exit_escape · aftermath · other · unknown_unclear',
-    codingRule: 'Code the type that best describes the dominant activity or dynamic at this stage. Each stage should represent a distinct phase.',
-    unclearRule: 'Use unknown_unclear if the narrative describes events at this point but the stage type cannot be determined.',
-    methodologicalBasis: 'Informed by crime scripting. Stage types correspond to encounter script nodes. The standardised taxonomy allows cross-case comparison of which stages are present, compressed, or absent across the dataset.',
+    allowedValues: 'Initial contact · Screening / recognition · Negotiation · Pickup / meeting · Movement / relocation · Arrival / setting · Escalation · Violence / coercion · Exit / escape · Aftermath / warning · Other · Unknown / unclear',
+    codingRule: 'Code the type that best describes the dominant activity or dynamic at this stage. Each stage should represent a distinct phase. Do not use harm types (physical force, sexual assault, etc.) as stage types — code these in the Client Behaviour and Escalation Level fields within the stage.',
+    unclearRule: 'Use Unknown / unclear if the narrative describes events at this point but the stage type cannot be determined.',
+    example: 'A report describing a car encounter that moved from a public street to a private residence: stages would be Initial contact → Pickup / meeting → Movement / relocation → Arrival / setting. The harm or violence is coded within the relevant stages, not as a separate stage type.',
+    methodologicalBasis: 'Informed by crime scripting. Stage types correspond to encounter script nodes. The standardised taxonomy allows cross-case comparison of which phases are present, compressed, or absent across the dataset. Stages and harms are coded separately to allow independent analysis of encounter structure and harm type.',
   },
   {
     field: 'stage_visible', label: 'Stage Visible in Report',
@@ -402,6 +403,18 @@ export default function CodebookPage() {
       </div>
 
       <div style={{ flex: 1, overflow: 'auto', padding: '16px 24px' }}>
+
+        {/* Methodology note */}
+        <div style={{ padding: '10px 14px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface-2)', marginBottom: 14, lineHeight: 1.65, fontSize: 12, color: 'var(--text-2)' }}>
+          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Methodological Note</span>
+          Coding is analyst-led. Structured fields are used to make narrative reports comparable across cases, while supporting excerpts and uncertainty fields preserve the context and limits of the original report.
+          Missing or unclear information is not treated as evidence that a behaviour, stage or condition did not occur.
+          Unreviewed or system-populated fields are not counted as coded findings — they must be reviewed and confirmed by the analyst.
+          <br /><br />
+          <strong>Stages</strong> are encounter phases (Initial contact → Negotiation → Movement → Escalation → Violence / coercion → Exit). <strong>Behaviours and harm indicators</strong> are coded separately within or across stages and are not stage types.
+          <strong>Case-level fields</strong> record what appears anywhere in the report. <strong>Stage-level fields</strong> record where and how conditions appear within the encounter sequence.
+          <strong>Initial contact fields</strong> provide additional detail for the Initial Contact stage. They support stage reconstruction but do not form a separate research question.
+        </div>
 
         {/* Anti-over-inference note */}
         <div style={{ padding: '10px 14px', borderRadius: 6, borderLeft: '3px solid #F59E0B', background: '#F59E0B0a', border: '1px solid #F59E0B30', marginBottom: 18 }}>
