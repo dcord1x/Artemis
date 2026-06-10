@@ -2199,6 +2199,34 @@ export default function ResearchOutputs() {
     const maxRespCount = Math.max(...sd.response_frequency.map(r => r.count), 1);
     const maxSeqCount  = Math.max(...sd.sequence_frequency.map(r => r.count), 1);
 
+    const conditionStageKeys = Array.from(new Set([
+      ...Object.keys(sd.visibility_by_stage),
+      ...Object.keys(sd.guardianship_by_stage),
+      ...Object.keys(sd.isolation_by_stage),
+      ...Object.keys(sd.control_by_stage),
+    ]));
+
+    const RqChip = ({ label, color }: { label: string; color: string }) => (
+      <span style={{
+        display: 'inline-block', padding: '1px 7px', borderRadius: 3,
+        fontSize: 10, fontWeight: 700, letterSpacing: '0.06em',
+        background: color + '22', color, border: `1px solid ${color}55`,
+        marginLeft: 8, verticalAlign: 'middle',
+      }}>{label}</span>
+    );
+
+    const BlockHeading = ({ children }: { children: React.ReactNode }) => (
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8,
+        fontSize: 11, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase',
+        color: 'var(--text-3)', marginBottom: 14, marginTop: 4,
+      }}>
+        <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+        <span>{children}</span>
+        <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+      </div>
+    );
+
     return (
       <div>
         {/* Summary counts */}
@@ -2317,21 +2345,63 @@ export default function ResearchOutputs() {
           )}
         </Panel>
 
+        {/* ── DESCRIPTIVE SUMMARIES ─────────────────────────────────────────── */}
+        <BlockHeading>Descriptive summaries</BlockHeading>
+
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
 
           {/* Stage type frequency */}
           <Panel>
             <SectionHeading>Stage Type Frequency</SectionHeading>
+            <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginBottom: 10 }}>
+              Counts from Stage Coding records across all cases.
+            </div>
             {sd.stage_type_frequency.length === 0 ? (
               <div style={{ fontSize: 12.5, color: 'var(--text-3)', fontStyle: 'italic' }}>No stages coded yet.</div>
             ) : sd.stage_type_frequency.map(r => (
-              <FreqBar key={r.value} label={fmtLabel(r.value)} count={r.count} max={maxTypeCount} />
+              <FreqBar key={r.value} label={formatLabel(r.value)} count={r.count} max={maxTypeCount} />
             ))}
           </Panel>
 
-          {/* Sequence frequency */}
+          {/* Client behaviours */}
           <Panel>
-            <SectionHeading>Stage Sequences</SectionHeading>
+            <SectionHeading>Client Behaviour by Coded Stage</SectionHeading>
+            <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginBottom: 10 }}>
+              Counts from Stage Coding records across all cases.
+            </div>
+            {sd.behavior_frequency.length === 0 ? (
+              <div style={{ fontSize: 12.5, color: 'var(--text-3)', fontStyle: 'italic' }}>No behaviours coded yet.</div>
+            ) : sd.behavior_frequency.map(r => (
+              <FreqBar key={r.value} label={formatLabel(r.value)} count={r.count} max={maxBehCount} color="var(--red, #DC2626)" />
+            ))}
+          </Panel>
+
+          {/* Worker responses */}
+          <Panel>
+            <SectionHeading>Worker Response Frequency</SectionHeading>
+            <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginBottom: 10 }}>
+              Counts from Stage Coding records across all cases.
+            </div>
+            {sd.response_frequency.length === 0 ? (
+              <div style={{ fontSize: 12.5, color: 'var(--text-3)', fontStyle: 'italic' }}>No responses coded yet.</div>
+            ) : sd.response_frequency.map(r => (
+              <FreqBar key={r.value} label={formatLabel(r.value)} count={r.count} max={maxRespCount} color="var(--green)" />
+            ))}
+          </Panel>
+
+        </div>
+
+        {/* ── ANALYTIC PATTERNS ────────────────────────────────────────────── */}
+        <BlockHeading>Analytic patterns</BlockHeading>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+
+          {/* Common encounter sequences */}
+          <Panel>
+            <SectionHeading>
+              Common Encounter Sequences
+              <RqChip label="RQ1" color="var(--accent, #4F8EF7)" />
+            </SectionHeading>
             <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginBottom: 10 }}>
               Observed analyst-coded stage orderings across cases.
             </div>
@@ -2342,41 +2412,72 @@ export default function ResearchOutputs() {
             ))}
           </Panel>
 
-          {/* Client behaviours */}
+          {/* Client behaviour by stage type */}
           <Panel>
-            <SectionHeading>Client Behaviour Frequency</SectionHeading>
+            <SectionHeading>
+              Client Behaviour by Stage Type
+              <RqChip label="RQ1" color="var(--accent, #4F8EF7)" />
+            </SectionHeading>
             <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginBottom: 10 }}>
-              Across all coded stages (all cases combined).
+              Top coded behaviours grouped by encounter stage.
             </div>
-            {sd.behavior_frequency.length === 0 ? (
-              <div style={{ fontSize: 12.5, color: 'var(--text-3)', fontStyle: 'italic' }}>No behaviours coded yet.</div>
-            ) : sd.behavior_frequency.map(r => (
-              <FreqBar key={r.value} label={fmtLabel(r.value)} count={r.count} max={maxBehCount} color="var(--red, #DC2626)" />
-            ))}
+            {Object.keys(sd.behavior_by_stage).length === 0 ? (
+              <div style={{ fontSize: 12.5, color: 'var(--text-3)', fontStyle: 'italic' }}>No stage behaviour data yet.</div>
+            ) : Object.entries(sd.behavior_by_stage).map(([stageKey, rows]) => {
+              const stageMax = Math.max(...rows.map(r => r.count), 1);
+              return (
+                <div key={stageKey} style={{ marginBottom: 14 }}>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-3)',
+                    textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5 }}>
+                    {formatLabel(stageKey)}
+                  </div>
+                  {rows.slice(0, 5).map(r => (
+                    <FreqBar key={r.value} label={formatLabel(r.value)} count={r.count} max={stageMax} color="var(--red, #DC2626)" />
+                  ))}
+                </div>
+              );
+            })}
           </Panel>
 
-          {/* Victim responses */}
+          {/* Worker response by stage type */}
           <Panel>
-            <SectionHeading>Victim Response Frequency</SectionHeading>
+            <SectionHeading>
+              Worker Response by Stage Type
+              <RqChip label="RQ1" color="var(--accent, #4F8EF7)" />
+            </SectionHeading>
             <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginBottom: 10 }}>
-              Across all coded stages (all cases combined).
+              Top coded worker responses grouped by encounter stage.
             </div>
-            {sd.response_frequency.length === 0 ? (
-              <div style={{ fontSize: 12.5, color: 'var(--text-3)', fontStyle: 'italic' }}>No responses coded yet.</div>
-            ) : sd.response_frequency.map(r => (
-              <FreqBar key={r.value} label={fmtLabel(r.value)} count={r.count} max={maxRespCount} color="var(--green)" />
-            ))}
+            {Object.keys(sd.response_by_stage).length === 0 ? (
+              <div style={{ fontSize: 12.5, color: 'var(--text-3)', fontStyle: 'italic' }}>No stage response data yet.</div>
+            ) : Object.entries(sd.response_by_stage).map(([stageKey, rows]) => {
+              const stageMax = Math.max(...rows.map(r => r.count), 1);
+              return (
+                <div key={stageKey} style={{ marginBottom: 14 }}>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-3)',
+                    textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5 }}>
+                    {formatLabel(stageKey)}
+                  </div>
+                  {rows.slice(0, 5).map(r => (
+                    <FreqBar key={r.value} label={formatLabel(r.value)} count={r.count} max={stageMax} color="var(--green)" />
+                  ))}
+                </div>
+              );
+            })}
           </Panel>
 
         </div>
 
         {/* Conditions by stage type */}
         <Panel>
-          <SectionHeading>Conditions by Stage Type</SectionHeading>
+          <SectionHeading>
+            Situational Conditions by Stage Type
+            <RqChip label="RQ2" color="var(--amber, #D97706)" />
+          </SectionHeading>
           <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginBottom: 14 }}>
-            Distribution of situational conditions at each stage type.
+            Distribution of situational conditions at each coded stage type.
           </div>
-          {Object.keys(sd.visibility_by_stage).length === 0 ? (
+          {conditionStageKeys.length === 0 ? (
             <div style={{ fontSize: 12.5, color: 'var(--text-3)', fontStyle: 'italic' }}>No conditions coded yet.</div>
           ) : (
             <div style={{ overflowX: 'auto' }}>
@@ -2401,7 +2502,7 @@ export default function ResearchOutputs() {
                   </tr>
                 </thead>
                 <tbody>
-                  {['initial_contact','negotiation','movement','escalation','outcome'].map(stype => {
+                  {conditionStageKeys.map(stype => {
                     const vis  = sd.visibility_by_stage[stype]?.[0];
                     const grd  = sd.guardianship_by_stage[stype]?.[0];
                     const iso  = sd.isolation_by_stage[stype]?.[0];
@@ -2410,19 +2511,19 @@ export default function ResearchOutputs() {
                     return (
                       <tr key={stype} style={{ borderBottom: '1px solid var(--border)' }}>
                         <td style={{ padding: '8px 10px', fontWeight: 600, color: 'var(--text-1)', fontSize: 12.5 }}>
-                          {fmtLabel(stype)}
+                          {formatLabel(stype)}
                         </td>
                         <td style={{ padding: '8px 10px', color: 'var(--text-2)', fontSize: 12.5 }}>
-                          {vis ? `${fmtLabel(vis.value)} (${vis.count})` : '—'}
+                          {vis ? `${formatLabel(vis.value)} (${vis.count})` : '—'}
                         </td>
                         <td style={{ padding: '8px 10px', color: 'var(--text-2)', fontSize: 12.5 }}>
-                          {grd ? `${fmtLabel(grd.value)} (${grd.count})` : '—'}
+                          {grd ? `${formatLabel(grd.value)} (${grd.count})` : '—'}
                         </td>
                         <td style={{ padding: '8px 10px', color: 'var(--text-2)', fontSize: 12.5 }}>
-                          {iso ? `${fmtLabel(iso.value)} (${iso.count})` : '—'}
+                          {iso ? `${formatLabel(iso.value)} (${iso.count})` : '—'}
                         </td>
                         <td style={{ padding: '8px 10px', color: 'var(--text-2)', fontSize: 12.5 }}>
-                          {ctrl ? `${fmtLabel(ctrl.value)} (${ctrl.count})` : '—'}
+                          {ctrl ? `${formatLabel(ctrl.value)} (${ctrl.count})` : '—'}
                         </td>
                       </tr>
                     );

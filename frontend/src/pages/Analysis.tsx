@@ -27,22 +27,22 @@ const C = {
 };
 
 const STAGE_LABELS: Record<string, string> = {
-  initial_contact:          'Contact',
-  screening_recognition:    'Screening',
+  initial_contact:          'Initial contact',
+  screening_recognition:    'Screening / recognition',
   negotiation:              'Negotiation',
-  pickup_meeting:           'Pickup',
-  movement_relocation:      'Movement',
-  movement_travel:          'Movement',
-  arrival_setting:          'Arrival',
-  arrival_location:         'Arrival',
+  pickup_meeting:           'Pickup / meeting',
+  movement_relocation:      'Movement / relocation',
+  movement_travel:          'Movement / relocation',
+  arrival_setting:          'Arrival / setting',
+  arrival_location:         'Arrival / setting',
   escalation:               'Escalation',
-  violence_coercion:        'Violence',
-  exit_escape:              'Exit',
-  exit_aftermath:           'Aftermath',
-  aftermath:                'Aftermath',
-  aftermath_warning:        'Aftermath',
+  violence_coercion:        'Violence / coercion',
+  exit_escape:              'Exit / escape',
+  exit_aftermath:           'Exit / aftermath',
+  aftermath:                'Aftermath / warning',
+  aftermath_warning:        'Aftermath / warning',
   other:                    'Other',
-  unknown_unclear:          'Unknown',
+  unknown_unclear:          'Unknown / unclear',
 };
 
 const STAGE_COLORS: Record<string, string> = {
@@ -787,11 +787,13 @@ export default function Analysis() {
               {agg.codability && (
                 <div style={{ marginTop: 10, paddingTop: 9, borderTop: '1px solid var(--border)' }}>
                   <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', marginBottom: 10, letterSpacing: '0.07em' }}>SITUATIONAL CONDITIONS (CODED)</div>
-                  <ValDistPanel label="Primary setting type"  vc={agg.codability.primary_setting_type} color={C.amber}  total={d.coded} />
-                  <ValDistPanel label="Visibility"            vc={agg.codability.visibility_case}      color={C.blue}   total={d.coded} />
-                  <ValDistPanel label="Isolation"             vc={agg.codability.isolation_case}       color={C.coral}  total={d.coded} />
-                  <ValDistPanel label="Guardianship"          vc={agg.codability.guardianship_case}    color={C.green}  total={d.coded} />
-                  <ValDistPanel label="Setting control"       vc={agg.codability.setting_control}      color={C.purple} total={d.coded} />
+                  <ValDistPanel label="Primary setting type"  vc={agg.codability.primary_setting_type}   color={C.amber}  total={d.coded} />
+                  <ValDistPanel label="Specific setting type" vc={agg.codability.specific_setting_type}  color={C.slate}  total={d.coded} />
+                  <ValDistPanel label="Visibility"            vc={agg.codability.visibility_case}        color={C.blue}   total={d.coded} />
+                  <ValDistPanel label="Isolation"             vc={agg.codability.isolation_case}         color={C.coral}  total={d.coded} />
+                  <ValDistPanel label="Guardianship"          vc={agg.codability.guardianship_case}      color={C.green}  total={d.coded} />
+                  <ValDistPanel label="Setting control"       vc={agg.codability.setting_control}        color={C.purple} total={d.coded} />
+                  <ValDistPanel label="Access to help"        vc={agg.codability.access_to_help}         color={C.coral}  total={d.coded} />
                 </div>
               )}
             </div>

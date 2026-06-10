@@ -665,6 +665,7 @@ export interface CodabilityAggregate {
   movement_timing:             ValCount;
   mappable_status:             ValCount;
   primary_setting_type:        ValCount;
+  specific_setting_type:       ValCount;
   visibility_case:             ValCount;
   isolation_case:              ValCount;
   guardianship_case:           ValCount;

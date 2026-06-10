@@ -1619,6 +1619,7 @@ def get_research_aggregate(db: Session = Depends(get_db)):
         'movement_timing':             _val_counts('movement_timing'),
         'mappable_status':             _val_counts('mappable_status'),
         'primary_setting_type':        _val_counts('primary_setting_type'),
+        'specific_setting_type':       _val_counts('specific_setting_type'),
         'visibility_case':             _val_counts('visibility_case'),
         'isolation_case':              _val_counts('isolation_case'),
         'guardianship_case':           _val_counts('guardianship_case'),
