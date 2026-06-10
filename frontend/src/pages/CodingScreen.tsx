@@ -41,26 +41,6 @@ function NlpBadge({ rank, evidence, fieldValue }: { rank: number; evidence: stri
   );
 }
 
-const EV_PREFIX_LABELS: Record<string, string> = {
-  'restraint SVO': 'Grammatical pattern', 'physical SVO': 'Grammatical pattern',
-  'transport SVO': 'Grammatical pattern', 'arc:': 'Narrative arc',
-  'coercion phrase': 'Phrase match', 'physical phrase': 'Phrase match',
-  'movement phrase': 'Phrase match', 'weapon display phrase': 'Display phrase',
-  'weapon + action': 'Weapon + action context', 'weapon mentioned': 'Weapon term (possible)',
-  'weapon (negated)': 'Weapon (negated)', 'primary term': 'Direct wording',
-  'secondary term': 'Contextual phrase', 'term (negated)': 'Negated phrase',
-  'two locations': 'Two locations detected', 'keyword': 'Keyword signal',
-  'keyword (negated)': 'Keyword (negated)', 'phrase (negated)': 'Phrase (negated)',
-};
-
-function formatEvidence(ev: string): { type: string; text: string } {
-  for (const prefix of Object.keys(EV_PREFIX_LABELS)) {
-    if (ev.startsWith(prefix)) {
-      return { type: EV_PREFIX_LABELS[prefix], text: ev.slice(prefix.length).replace(/^:\s*/, '').trim() };
-    }
-  }
-  return { type: 'Signal', text: ev };
-}
 
 // ── Location hint display validation ─────────────────────────────────────────
 //
@@ -1395,7 +1375,6 @@ export default function CodingScreen() {
     return () => window.removeEventListener('keydown', handler);
   }, [prevId, nextId, handleSave, navigate]);
 
-  const nlpSourceId = nlp._source_report_id as string | undefined;
   // NLP chips and highlights are hidden from the research-facing interface.
   // Backend data is preserved internally; toggle via dev flag if needed.
   const showNlpChips = false;
