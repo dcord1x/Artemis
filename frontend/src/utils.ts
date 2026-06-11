@@ -168,6 +168,12 @@ export const FIELD_VALUE_LABELS: Record<string, string> = {
   physical_violence:         'Physical violence',
   severe_violence:           'Severe violence',
 
+  // Single-word stored values that need explicit capitalization (no underscore, not handled by snake_case fallback)
+  pressure:                  'Pressure',
+  aggression:                'Aggression',
+  resistance:                'Resistance',
+  compliance:                'Compliance',
+
   // Blank/unknown sentinels — explicit display
   unknown:                   'Unknown',
   unclear:                   'Unclear',

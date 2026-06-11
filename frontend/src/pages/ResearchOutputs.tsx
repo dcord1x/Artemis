@@ -1130,19 +1130,21 @@ export default function ResearchOutputs() {
 
         {/* Escalation pathway visual */}
         <Panel style={{ gridColumn: '1 / -1' }}>
-          <SectionHeading>Stage-to-stage transitions</SectionHeading>
+          <SectionHeading>Field-derived indicator transitions</SectionHeading>
           <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: '0 0 14px' }}>
-            Consecutive stage pairs — which stages are observed to follow each other. Analyst-coded cases only.
+            Consecutive indicator pairs — which field-derived indicators are observed to co-occur in sequence.
+            Generated from imported incident-level indicator fields, not from analyst-coded stage records.
           </p>
           <EscalationPathwayDiagram bigrams={sequences.most_common_bigrams} stageFreq={sequences.stage_frequency} />
         </Panel>
 
         {/* Most common full sequences — text list */}
         <Panel>
-          <SectionHeading>All sequences (text)</SectionHeading>
+          <SectionHeading>Imported indicator sequences (text)</SectionHeading>
           <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: '0 0 14px' }}>
-            Full sequence text ranked by frequency. Sequences appearing in only one case are
-            labelled "single coded" and are not recurring patterns.
+            Field-derived indicator sequences ranked by frequency. These are generated from imported
+            incident-level fields, not analyst-coded stage records. Sequences appearing in only one case
+            are not recurring patterns.
           </p>
           {sequences.most_common_sequences.length === 0 ? (
             <div style={{ fontSize: 12.5, color: 'var(--text-3)' }}>
@@ -1163,11 +1165,11 @@ export default function ResearchOutputs() {
           )}
         </Panel>
 
-        {/* Stage frequency */}
+        {/* Indicator frequency */}
         <Panel>
-          <SectionHeading>Stage occurrence frequency</SectionHeading>
+          <SectionHeading>Indicator occurrence frequency</SectionHeading>
           <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: '0 0 14px' }}>
-            How often each stage appears across all coded cases.
+            How often each field-derived indicator appears across all cases. These are imported indicator labels, not current VIRGO stage types.
           </p>
           {sequences.stage_frequency.slice(0, 15).map((row: StageRow, i: number) => (
             <FreqBar key={i} label={row.stage} count={row.count} max={maxStg}
