@@ -615,7 +615,7 @@ export default function Analysis() {
               </p>
             </div>
             <button className="btn-ghost" onClick={() => navigate('/research')} style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-              <ExternalLink size={10} /> Full Sequence Analysis
+              <ExternalLink size={10} /> Full Stage Analysis
             </button>
           </div>
 
@@ -634,46 +634,7 @@ export default function Analysis() {
             )}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 22 }}>
 
-              {/* Left: Top pathway chains (main visual) */}
-              <div>
-                <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.08em', marginBottom: 4 }}>IMPORTED SEQUENCE PATTERNS</div>
-                <div style={{ fontSize: 10.5, color: 'var(--text-3)', marginBottom: 12, lineHeight: 1.45, padding: '6px 10px', background: 'var(--surface-3)', borderRadius: 5, border: '1px solid var(--border)' }}>
-                  Preliminary sequence patterns. These are descriptive summaries generated from imported incident-level indicator fields.
-                  They are separate from analyst-coded VIRGO stage sequences.
-                  For staged sequence analysis, see <strong>Research Outputs → Stage Patterns</strong>.
-                </div>
-                {topSeqs.length === 0 ? (
-                  <EmptyState message="Awaiting full sequence data." />
-                ) : (
-                  topSeqs.map((s, i) => <PathwayChain key={i} sequence={s.sequence} count={s.count} rank={i + 1} />)
-                )}
-                {bigrams.length > 0 && (
-                  <div style={{ marginTop: 14 }}>
-                    <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.08em', marginBottom: 10 }}>COMMON STAGE TRANSITIONS</div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                      {bigrams.map((b, i) => {
-                        const parts = b.pattern.split(' → ');
-                        return (
-                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 10px', background: 'var(--surface-2)', borderRadius: 6 }}>
-                            <span style={{ fontSize: 10.5, color: 'var(--text-3)', fontFamily: 'Lora, serif', minWidth: 16 }}>{i + 1}.</span>
-                            {parts.map((p, j) => (
-                              <span key={j} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                {j > 0 && <ArrowRight size={9} style={{ color: 'var(--text-3)', flexShrink: 0 }} />}
-                                <span style={{ fontSize: 10.5, fontWeight: 600, padding: '2px 7px', borderRadius: 4, background: (STAGE_COLORS[p] || C.slate) + '18', color: STAGE_COLORS[p] || C.slate, border: `1px solid ${(STAGE_COLORS[p] || C.slate)}30`, whiteSpace: 'nowrap' }}>
-                                  {STAGE_LABELS[p] || formatLabel(p)}
-                                </span>
-                              </span>
-                            ))}
-                            <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text-3)', fontWeight: 600 }}>{b.count}×</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Right: Stage frequency + visibility */}
+              {/* Stage frequency — analyst-coded data only */}
               <div>
                 <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.08em', marginBottom: 12 }}>STAGE FREQUENCY ACROSS ANALYST-STAGED REPORTS</div>
                 {d.analystStaged === 0 ? (
@@ -698,17 +659,19 @@ export default function Analysis() {
                   );
                 })}
 
-                {agg.codability && (
-                  <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
-                    <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.08em', marginBottom: 12 }}>STAGE VISIBILITY (CODABILITY)</div>
-                    <ValDistPanel label="Initial contact visible"    vc={agg.codability.initial_contact_visible}    color={STAGE_COLORS.initial_contact}   total={d.coded} />
-                    <ValDistPanel label="Negotiation visible"        vc={agg.codability.negotiation_visible}        color={STAGE_COLORS.negotiation}        total={d.coded} />
-                    <ValDistPanel label="Movement visible"           vc={agg.codability.movement_visible}           color={STAGE_COLORS.movement_travel}    total={d.coded} />
-                    <ValDistPanel label="Violence / coercion visible" vc={agg.codability.violence_coercion_visible} color={STAGE_COLORS.violence_coercion}  total={d.coded} />
-                    <ValDistPanel label="Exit / aftermath visible"   vc={agg.codability.exit_aftermath_visible}     color={STAGE_COLORS.exit_escape}        total={d.coded} />
-                  </div>
-                )}
               </div>
+
+              {/* Stage visibility (codability) */}
+              {agg.codability && (
+                <div>
+                  <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.08em', marginBottom: 12 }}>STAGE VISIBILITY (CODABILITY)</div>
+                  <ValDistPanel label="Initial contact visible"    vc={agg.codability.initial_contact_visible}    color={STAGE_COLORS.initial_contact}   total={d.coded} />
+                  <ValDistPanel label="Negotiation visible"        vc={agg.codability.negotiation_visible}        color={STAGE_COLORS.negotiation}        total={d.coded} />
+                  <ValDistPanel label="Movement visible"           vc={agg.codability.movement_visible}           color={STAGE_COLORS.movement_travel}    total={d.coded} />
+                  <ValDistPanel label="Violence / coercion visible" vc={agg.codability.violence_coercion_visible} color={STAGE_COLORS.violence_coercion}  total={d.coded} />
+                  <ValDistPanel label="Exit / aftermath visible"   vc={agg.codability.exit_aftermath_visible}     color={STAGE_COLORS.exit_escape}        total={d.coded} />
+                </div>
+              )}
             </div>
 
             {/* Initial Contact Stage Detail — sub-section within RQ1 */}
@@ -739,6 +702,65 @@ export default function Analysis() {
             )}
             </>
           )}
+        </div>
+
+        {/* ═══ IMPORTED INDICATOR SUMMARIES ════════════════════════════════════ */}
+        <div className="card" style={{ padding: '18px 20px', marginBottom: 20, borderColor: 'var(--border)' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
+            <div>
+              <h3 style={{ fontFamily: 'Lora, serif', fontSize: 16, fontWeight: 500, margin: '0 0 3px' }}>
+                Imported Indicator Summaries
+              </h3>
+              <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: 0 }}>
+                Descriptive summaries generated from incident-level indicator fields imported with the raw reports.
+                These are <strong>not</strong> analyst-coded VIRGO stage sequences.
+                For analyst-coded encounter reconstruction, see <strong>RQ1 — Stage Visibility and Encounter Sequence</strong> above.
+              </p>
+            </div>
+            <button className="btn-ghost" onClick={() => navigate('/research')} style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+              <ExternalLink size={10} /> Full indicator summaries
+            </button>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 22 }}>
+            {/* Left: top imported sequences */}
+            <div>
+              <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.08em', marginBottom: 8 }}>IMPORTED INDICATOR SEQUENCES — TOP 4</div>
+              {topSeqs.length === 0 ? (
+                <EmptyState message="No imported sequence data." />
+              ) : (
+                topSeqs.map((s, i) => <PathwayChain key={i} sequence={s.sequence} count={s.count} rank={i + 1} />)
+              )}
+            </div>
+
+            {/* Right: common indicator transitions */}
+            <div>
+              <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.08em', marginBottom: 8 }}>COMMON INDICATOR TRANSITIONS</div>
+              {bigrams.length === 0 ? (
+                <EmptyState message="No transition data." />
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                  {bigrams.map((b, i) => {
+                    const parts = b.pattern.split(' → ');
+                    return (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 10px', background: 'var(--surface-2)', borderRadius: 6 }}>
+                        <span style={{ fontSize: 10.5, color: 'var(--text-3)', fontFamily: 'Lora, serif', minWidth: 16 }}>{i + 1}.</span>
+                        {parts.map((p, j) => (
+                          <span key={j} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            {j > 0 && <ArrowRight size={9} style={{ color: 'var(--text-3)', flexShrink: 0 }} />}
+                            <span style={{ fontSize: 10.5, fontWeight: 600, padding: '2px 7px', borderRadius: 4, background: (STAGE_COLORS[p] || C.slate) + '18', color: STAGE_COLORS[p] || C.slate, border: `1px solid ${(STAGE_COLORS[p] || C.slate)}30`, whiteSpace: 'nowrap' }}>
+                              {STAGE_LABELS[p] || formatLabel(p)}
+                            </span>
+                          </span>
+                        ))}
+                        <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text-3)', fontWeight: 600 }}>{b.count}×</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* ═══ RQ2 — BEHAVIOURAL AND SITUATIONAL CONDITIONS ════════════════════ */}

@@ -641,9 +641,9 @@ type Tab = 'encounter_overview' | 'vawg' | 'sequences' | 'mobility' | 'environme
 const TABS: { id: Tab; label: string }[] = [
   { id: 'encounter_overview', label: 'Coded Case Overview' },
   { id: 'stage_patterns',     label: 'RQ1 — Stage Patterns' },
-  { id: 'sequences',          label: 'RQ1 — Encounter Sequences' },
   { id: 'environment',        label: 'RQ2 — Environmental Patterns' },
   { id: 'mobility',           label: 'RQ3 — Mobility Pathways' },
+  { id: 'sequences',          label: 'Imported Indicator Summaries' },
   { id: 'spatial',            label: 'RQ3 — Spatial Movement' },
   { id: 'filtered_groups',    label: 'Filtered Case Groups' },
   { id: 'linkage_view',       label: 'Case Comparison' },
@@ -1108,13 +1108,17 @@ export default function ResearchOutputs() {
     return (
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
 
-        {/* Preliminary / field-derived notice */}
-        <div style={{ gridColumn: '1 / -1', padding: '10px 14px', borderRadius: 6,
-          background: 'var(--surface-2)', border: '1px solid var(--border)',
-          fontSize: 12, lineHeight: 1.55, color: 'var(--text-2)' }}>
-          <strong>Preliminary sequence patterns.</strong> These patterns are generated from imported incident-level indicator
-          fields and are provided as descriptive summaries only. They are separate from analyst-coded VIRGO stage sequences.
-          For staged sequence analysis, see <strong>Stage Patterns</strong>.
+        {/* Imported indicator notice — prominent, not a typical amber warning */}
+        <div style={{ gridColumn: '1 / -1', padding: '14px 16px', borderRadius: 7,
+          background: 'var(--surface-2)', border: '2px solid var(--border)',
+          fontSize: 12.5, lineHeight: 1.65, color: 'var(--text-2)' }}>
+          <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 5, color: 'var(--text-1)' }}>
+            Imported Indicator Summaries — not analyst-coded VIRGO stage sequences
+          </div>
+          This page summarises broad imported indicator patterns across the full dataset.
+          These are <strong>not</strong> analyst-coded VIRGO stage sequences — they are descriptive summaries generated from
+          incident-level indicator fields that were imported with the raw reports. For the current staged methodology and
+          analyst-coded encounter reconstruction, use <strong>RQ1 — Stage Patterns</strong>.
         </div>
 
         {/* Visual sequence flow diagram */}
