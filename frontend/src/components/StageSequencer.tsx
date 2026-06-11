@@ -395,7 +395,7 @@ function StageSelect({
     >
       <option value="">{placeholder ?? '— select —'}</option>
       {isLegacy && (
-        <option value={value}>(legacy: {value})</option>
+        <option value={value}>(imported value: {value})</option>
       )}
       {options.map((o) => (
         <option key={o.value} value={o.value}>{o.label}</option>

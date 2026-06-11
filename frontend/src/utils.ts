@@ -101,6 +101,73 @@ export const FIELD_VALUE_LABELS: Record<string, string> = {
   medium:                    'Medium',
   low:                       'Low',
 
+  // Visibility levels (stage-level)
+  semi_public:               'Semi-public',
+  semi_private:              'Semi-private',
+  public:                    'Public',
+  private:                   'Private',
+
+  // Guardianship values (stage-level)
+  reduced:                   'Reduced',
+  delayed:                   'Delayed',
+
+  // Isolation levels
+  not_isolated:              'Not isolated',
+  partially_isolated:        'Partially isolated',
+  isolated:                  'Isolated',
+
+  // Client behaviours (stored snake_case from stage records)
+  pressure_coercion:         'Pressure / coercion',
+  deception_misrepresentation: 'Deception / misrepresentation',
+  verbal_aggression:         'Verbal aggression',
+  threats_intimidation:      'Threats / intimidation',
+  payment_dispute:           'Payment dispute / refusal to pay',
+  boundary_violation:        'Boundary violation',
+  condom_refusal:            'Condom refusal / removal',
+  sexual_violence:           'Sexual violence',
+  confinement:               'Confinement / refusal to let worker leave',
+  substance_administration:  'Substance administration',
+  weapon_present:            'Weapon present / threatened',
+  abandonment:               'Abandonment',
+  surveillance_stalking:     'Surveillance / stalking',
+  forced_movement:           'Forced movement / relocation',
+  property_interference:     'Property interference',
+  image_video_threat:        'Image / video threat',
+  refusal_to_leave_alone:    'Refusal to leave worker alone',
+  impersonation:             'Impersonation / false identity',
+  drug_facilitation:         'Drug facilitation',
+  luring:                    'Luring / false pretence for movement',
+  blocking_help:             'Blocking help / isolating from support',
+  not_stated_unclear:        'Not stated / unclear',
+
+  // Worker responses (stored snake_case from stage records)
+  resistance_refusal:        'Resistance / refusal',
+  de_escalation_attempt:     'De-escalation attempt',
+  attempted_exit:            'Attempted exit',
+  escape:                    'Escape',
+  help_seeking:              'Help-seeking',
+  survival_compliance:       'Survival compliance / appeasement',
+  unable_to_respond:         'Unable to respond / incapacitated',
+  verbal_boundary_setting:   'Verbal boundary setting',
+  refusal_of_service:        'Refusal of service',
+  refusal_to_enter_vehicle:  'Refusal to enter vehicle',
+  calling_for_help:          'Calling for help / signalling',
+  defensive_action:          'Defensive action',
+  physical_resistance:       'Physical resistance',
+  fought_back:               'Fought back / defensive physical force',
+  freezing:                  'Freezing / dissociation',
+  partial_compliance:        'Partial compliance',
+  escape_after_opportunity:  'Escape after finding opportunity',
+  reporting_after_event:     'Reporting after the event',
+
+  // Escalation levels
+  no_escalation:             'No escalation evident',
+  tension_concern:           'Tension / concern',
+  coercion_control:          'Coercion / control',
+  threats:                   'Threats / intimidation',
+  physical_violence:         'Physical violence',
+  severe_violence:           'Severe violence',
+
   // Blank/unknown sentinels — explicit display
   unknown:                   'Unknown',
   unclear:                   'Unclear',

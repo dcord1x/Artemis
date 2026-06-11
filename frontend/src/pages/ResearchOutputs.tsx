@@ -19,6 +19,12 @@ import { Download, RefreshCw, AlertTriangle, ChevronDown, ChevronUp, Trash2, Fil
 import { GoogleMap, Marker, Polyline } from '@react-google-maps/api';
 import { api } from '../api';
 import { formatLabel } from '../utils';
+
+/** Worker response labels — overrides shared formatLabel for values that overlap with stage-type names. */
+function formatWorkerResponse(v: string): string {
+  if (v === 'negotiation') return 'Negotiated / attempted negotiation';
+  return formatLabel(v);
+}
 import type {
   ResearchAggregate,
   AggregateEncounter,
@@ -1102,23 +1108,22 @@ export default function ResearchOutputs() {
     return (
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
 
-        {/* Legacy warning */}
+        {/* Preliminary / field-derived notice */}
         <div style={{ gridColumn: '1 / -1', padding: '10px 14px', borderRadius: 6,
-          background: '#92400e18', border: '1px solid #92400e40', color: '#92400e',
-          fontSize: 12, lineHeight: 1.55 }}>
-          <strong>Legacy field-derived sequences.</strong> The patterns below are imported preliminary sequence labels
-          derived from incident-level indicator fields (coercion, movement, harm type, etc.) using an earlier coding
-          approach. They are <em>not</em> the current VIRGO staged framework. For analyst-coded VIRGO stage sequences,
-          see <strong>Stage Patterns</strong>.
+          background: 'var(--surface-2)', border: '1px solid var(--border)',
+          fontSize: 12, lineHeight: 1.55, color: 'var(--text-2)' }}>
+          <strong>Preliminary sequence patterns.</strong> These patterns are generated from imported incident-level indicator
+          fields and are provided as descriptive summaries only. They are separate from analyst-coded VIRGO stage sequences.
+          For staged sequence analysis, see <strong>Stage Patterns</strong>.
         </div>
 
         {/* Visual sequence flow diagram */}
         <Panel style={{ gridColumn: '1 / -1' }}>
-          <SectionHeading>Encounter sequence flow — top 5</SectionHeading>
+          <SectionHeading>Field-derived encounter sequence flow — top 5</SectionHeading>
           <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: '0 0 14px' }}>
-            Observed stage-by-stage sequences as connected node diagrams.
-            Derived from analyst-coded indicator fields across{' '}
+            Connected sequence patterns generated from imported incident-level indicator fields across{' '}
             <strong style={{ color: 'var(--text-2)' }}>{total}</strong> cases.
+            These are descriptive pattern summaries, not analyst-coded stage reconstructions.
           </p>
           <SequenceFlowDiagram sequences={sequences.most_common_sequences} total={total} />
         </Panel>
@@ -2395,7 +2400,7 @@ export default function ResearchOutputs() {
             {sd.response_frequency.length === 0 ? (
               <div style={{ fontSize: 12.5, color: 'var(--text-3)', fontStyle: 'italic' }}>No responses coded yet.</div>
             ) : sd.response_frequency.map(r => (
-              <FreqBar key={r.value} label={formatLabel(r.value)} count={r.count} max={maxRespCount} color="var(--green)" />
+              <FreqBar key={r.value} label={formatWorkerResponse(r.value)} count={r.count} max={maxRespCount} color="var(--green)" />
             ))}
           </Panel>
 
@@ -2474,7 +2479,7 @@ export default function ResearchOutputs() {
                     {formatLabel(stageKey)}
                   </div>
                   {rows.slice(0, 5).map(r => (
-                    <FreqBar key={r.value} label={formatLabel(r.value)} count={r.count} max={stageMax} color="var(--green)" />
+                    <FreqBar key={r.value} label={formatWorkerResponse(r.value)} count={r.count} max={stageMax} color="var(--green)" />
                   ))}
                 </div>
               );

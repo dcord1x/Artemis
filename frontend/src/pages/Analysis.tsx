@@ -307,7 +307,7 @@ function PathwayChain({ sequence, count, rank }: { sequence: string; count: numb
         <span style={{ marginLeft: 'auto', fontSize: 10.5, color: 'var(--text-3)', fontWeight: 600, flexShrink: 0, paddingLeft: 6 }}>{count}×</span>
         {isLegacy && (
           <span style={{ fontSize: 8.5, padding: '1px 5px', borderRadius: 3, background: C.slate + '18', color: C.slate, border: `1px solid ${C.slate}44`, fontWeight: 700, letterSpacing: '0.04em', flexShrink: 0 }}>
-            LEGACY
+            Imported
           </span>
         )}
       </div>
@@ -636,10 +636,11 @@ export default function Analysis() {
 
               {/* Left: Top pathway chains (main visual) */}
               <div>
-                <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.08em', marginBottom: 4 }}>LEGACY IMPORTED SEQUENCE CATEGORIES</div>
-                <div style={{ fontSize: 10.5, color: C.amber, marginBottom: 12, lineHeight: 1.45 }}>
-                  These are imported preliminary sequence labels from earlier coding and are not the current VIRGO staged framework.
-                  For VIRGO stage-coded sequences, see <strong>Research Outputs → Stage Patterns</strong>.
+                <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.08em', marginBottom: 4 }}>IMPORTED SEQUENCE PATTERNS</div>
+                <div style={{ fontSize: 10.5, color: 'var(--text-3)', marginBottom: 12, lineHeight: 1.45, padding: '6px 10px', background: 'var(--surface-3)', borderRadius: 5, border: '1px solid var(--border)' }}>
+                  Preliminary sequence patterns. These are descriptive summaries generated from imported incident-level indicator fields.
+                  They are separate from analyst-coded VIRGO stage sequences.
+                  For staged sequence analysis, see <strong>Research Outputs → Stage Patterns</strong>.
                 </div>
                 {topSeqs.length === 0 ? (
                   <EmptyState message="Awaiting full sequence data." />

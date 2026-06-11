@@ -2396,7 +2396,7 @@ def export_codebook(db: Session = Depends(get_db)):
         ('incident_date',          'Basics', 'Date the incident occurred', 'YYYY-MM-DD or free text', 'analyst', 'yes'),
         ('incident_time_range',    'Basics', 'Approximate time period of the incident', 'free text', 'analyst', 'yes'),
         ('day_of_week',            'Basics', 'Day of week of the incident', 'Monday–Sunday | unknown', 'analyst', 'yes'),
-        ('city',                   'Basics', 'Primary city label for the case (legacy summary field)', 'free text', 'analyst', 'yes'),
+        ('city',                   'Basics', 'Primary city label for the case (imported summary field — see initial_contact_city and incident_city for stage-specific values)', 'free text', 'analyst', 'yes'),
         ('neighbourhood',          'Basics', 'Neighbourhood or area within the city', 'free text', 'analyst', 'yes'),
         ('initial_contact_city',          'Basics', 'City where initial contact occurred', 'free text', 'analyst', 'yes'),
         ('initial_contact_city_confidence', 'Basics', 'Confidence level for initial contact city', 'known | probable | inferred | unknown', 'analyst', 'yes'),
