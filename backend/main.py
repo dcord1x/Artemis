@@ -2197,42 +2197,77 @@ def export_research_tables(db: Session = Depends(get_db)):
             _csv_str(['pattern', 'count'], env_data['combined_patterns']))
 
         # ── Stage-level exports ───────────────────────────────────────────────
+        _STAGE_TYPE_LABELS = {
+            'initial_contact':       'Initial contact',
+            'screening_recognition': 'Screening / recognition',
+            'negotiation':           'Negotiation',
+            'pickup_meeting':        'Pickup / meeting',
+            'movement_relocation':   'Movement / relocation',
+            'movement_travel':       'Movement / relocation',
+            'arrival_setting':       'Arrival / setting',
+            'arrival_location':      'Arrival / setting',
+            'escalation':            'Escalation',
+            'violence_coercion':     'Violence / coercion',
+            'exit_escape':           'Exit / escape',
+            'exit_aftermath':        'Exit / aftermath',
+            'aftermath':             'Aftermath / warning',
+            'aftermath_warning':     'Aftermath / warning',
+            'other':                 'Other',
+            'unknown_unclear':       'Unknown / unclear',
+        }
+        _VISIBILITY_LABELS = {
+            'public': 'Public', 'semi_public': 'Semi-public',
+            'semi_private': 'Semi-private', 'private': 'Private', 'unknown': 'Unknown',
+        }
+        _ISOLATION_LABELS = {
+            'not_isolated': 'Not isolated', 'partially_isolated': 'Partially isolated',
+            'isolated': 'Isolated', 'unknown': 'Unknown',
+        }
+
+        def _slabel(code, lookup):
+            return lookup.get(code or '', code or '')
+
         all_stages = db.query(ReportStage).order_by(ReportStage.report_id, ReportStage.stage_order).all()
         stage_rows = []
         for s in all_stages:
             r = next((x for x in reports if x.report_id == s.report_id), None)
             stage_rows.append({
-                'report_id':            s.report_id,
-                'stage_order':          s.stage_order,
-                'stage_type':           s.stage_type or '',
-                'client_behaviors':     ', '.join(s.client_behaviors or []),
-                'worker_responses':     ', '.join(s.victim_responses or []),
-                'escalation_level':     getattr(s, 'escalation_level', '') or '',
-                'location_type':        s.location_type or '',
-                'location_label':       s.location_label or '',
-                'movement_type_to_here':s.movement_type_to_here or '',
-                'movement_impact':      getattr(s, 'movement_impact', '') or '',
-                'visibility':           s.visibility or '',
-                'guardianship':         s.guardianship or '',
-                'isolation_level':      s.isolation_level or '',
-                'control_type':         s.control_type or '',
-                'able_to_leave':        getattr(s, 'able_to_leave', '') or '',
-                'spatial_precision':    getattr(s, 'spatial_precision', '') or '',
-                'turning_point_notes':  s.turning_point_notes or '',
-                'supporting_excerpt':   getattr(s, 'supporting_excerpt', '') or '',
-                'coder_notes_stage':    getattr(s, 'coder_notes_stage', '') or '',
-                'coding_confidence':    getattr(s, 'coding_confidence', '') or '',
-                'analyst_name':         (r.analyst_name if r else '') or '',
-                'coding_status':        (r.coding_status if r else '') or '',
-                'incident_date':        (r.incident_date if r else '') or '',
-                'provenance':           'analyst_confirmed',
+                'report_id':                s.report_id,
+                'stage_order':              s.stage_order,
+                'stage_type':               s.stage_type or '',
+                'stage_type_label':         _slabel(s.stage_type, _STAGE_TYPE_LABELS),
+                'client_behaviors':         ', '.join(s.client_behaviors or []),
+                'worker_responses':         ', '.join(s.victim_responses or []),
+                'escalation_level':         getattr(s, 'escalation_level', '') or '',
+                'location_type':            s.location_type or '',
+                'location_label':           s.location_label or '',
+                'movement_type_to_here':    s.movement_type_to_here or '',
+                'movement_impact':          getattr(s, 'movement_impact', '') or '',
+                'visibility':               s.visibility or '',
+                'visibility_label':         _slabel(s.visibility, _VISIBILITY_LABELS),
+                'guardianship':             s.guardianship or '',
+                'isolation_level':          s.isolation_level or '',
+                'isolation_level_label':    _slabel(getattr(s, 'isolation_level', ''), _ISOLATION_LABELS),
+                'control_type':             s.control_type or '',
+                'able_to_leave':            getattr(s, 'able_to_leave', '') or '',
+                'spatial_precision':        getattr(s, 'spatial_precision', '') or '',
+                'turning_point_notes':      s.turning_point_notes or '',
+                'supporting_excerpt':       getattr(s, 'supporting_excerpt', '') or '',
+                'coder_notes_stage':        getattr(s, 'coder_notes_stage', '') or '',
+                'coding_confidence':        getattr(s, 'coding_confidence', '') or '',
+                'analyst_name':             (r.analyst_name if r else '') or '',
+                'coding_status':            (r.coding_status if r else '') or '',
+                'incident_date':            (r.incident_date if r else '') or '',
+                'provenance':               'analyst_confirmed',
             })
 
-        _STAGE_FIELDS = ['report_id','stage_order','stage_type','client_behaviors','worker_responses',
-            'escalation_level','location_type','location_label','movement_type_to_here','movement_impact',
-            'visibility','guardianship','isolation_level','control_type','able_to_leave','spatial_precision',
-            'turning_point_notes','supporting_excerpt','coder_notes_stage','coding_confidence',
-            'analyst_name','coding_status','incident_date','provenance']
+        _STAGE_FIELDS = ['report_id','stage_order','stage_type','stage_type_label','client_behaviors',
+            'worker_responses','escalation_level','location_type','location_label',
+            'movement_type_to_here','movement_impact','visibility','visibility_label',
+            'guardianship','isolation_level','isolation_level_label','control_type',
+            'able_to_leave','spatial_precision','turning_point_notes','supporting_excerpt',
+            'coder_notes_stage','coding_confidence','analyst_name','coding_status',
+            'incident_date','provenance']
         zf.writestr('stage_sequences.csv', _csv_str(_STAGE_FIELDS, stage_rows))
 
         # Stage transitions (consecutive stage pairs per report)
@@ -2246,22 +2281,25 @@ def export_research_tables(db: Session = Depends(get_db)):
                 a, b = grp_list[i], grp_list[i + 1]
                 has_mov = (a.movement_type_to_here or b.movement_type_to_here or '') not in ('', 'no_movement', 'none')
                 transition_rows.append({
-                    'report_id':             report_id,
-                    'from_stage_order':      a.stage_order,
-                    'to_stage_order':        b.stage_order,
-                    'from_stage_type':       a.stage_type or '',
-                    'to_stage_type':         b.stage_type or '',
-                    'from_escalation_level': getattr(a, 'escalation_level', '') or '',
-                    'to_escalation_level':   getattr(b, 'escalation_level', '') or '',
-                    'movement_involved':     'yes' if has_mov else 'no',
+                    'report_id':               report_id,
+                    'from_stage_order':        a.stage_order,
+                    'to_stage_order':          b.stage_order,
+                    'from_stage_type':         a.stage_type or '',
+                    'from_stage_type_label':   _slabel(a.stage_type, _STAGE_TYPE_LABELS),
+                    'to_stage_type':           b.stage_type or '',
+                    'to_stage_type_label':     _slabel(b.stage_type, _STAGE_TYPE_LABELS),
+                    'from_escalation_level':   getattr(a, 'escalation_level', '') or '',
+                    'to_escalation_level':     getattr(b, 'escalation_level', '') or '',
+                    'movement_involved':       'yes' if has_mov else 'no',
                     'public_to_private_shift': 'yes' if (a.visibility in ('public','semi_public') and b.visibility in ('semi_private','private')) else 'no',
-                    'isolation_increased':   'yes' if (a.isolation_level in ('not_isolated','partially_isolated') and b.isolation_level == 'isolated') else 'no',
-                    'movement_impact':       getattr(b, 'movement_impact', '') or '',
-                    'incident_date':         (r.incident_date if r else '') or '',
+                    'isolation_increased':     'yes' if (a.isolation_level in ('not_isolated','partially_isolated') and b.isolation_level == 'isolated') else 'no',
+                    'movement_impact':         getattr(b, 'movement_impact', '') or '',
+                    'incident_date':           (r.incident_date if r else '') or '',
                 })
-        _TRANS_FIELDS = ['report_id','from_stage_order','to_stage_order','from_stage_type','to_stage_type',
-            'from_escalation_level','to_escalation_level','movement_involved','public_to_private_shift',
-            'isolation_increased','movement_impact','incident_date']
+        _TRANS_FIELDS = ['report_id','from_stage_order','to_stage_order',
+            'from_stage_type','from_stage_type_label','to_stage_type','to_stage_type_label',
+            'from_escalation_level','to_escalation_level','movement_involved',
+            'public_to_private_shift','isolation_increased','movement_impact','incident_date']
         zf.writestr('stage_transitions.csv', _csv_str(_TRANS_FIELDS, transition_rows))
 
     zip_buf.seek(0)

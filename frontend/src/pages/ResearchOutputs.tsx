@@ -1102,12 +1102,22 @@ export default function ResearchOutputs() {
     return (
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
 
+        {/* Legacy warning */}
+        <div style={{ gridColumn: '1 / -1', padding: '10px 14px', borderRadius: 6,
+          background: '#92400e18', border: '1px solid #92400e40', color: '#92400e',
+          fontSize: 12, lineHeight: 1.55 }}>
+          <strong>Legacy field-derived sequences.</strong> The patterns below are imported preliminary sequence labels
+          derived from incident-level indicator fields (coercion, movement, harm type, etc.) using an earlier coding
+          approach. They are <em>not</em> the current VIRGO staged framework. For analyst-coded VIRGO stage sequences,
+          see <strong>Stage Patterns</strong>.
+        </div>
+
         {/* Visual sequence flow diagram */}
         <Panel style={{ gridColumn: '1 / -1' }}>
           <SectionHeading>Encounter sequence flow — top 5</SectionHeading>
           <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: '0 0 14px' }}>
             Observed stage-by-stage sequences as connected node diagrams.
-            Derived from analyst-coded stage fields across{' '}
+            Derived from analyst-coded indicator fields across{' '}
             <strong style={{ color: 'var(--text-2)' }}>{total}</strong> cases.
           </p>
           <SequenceFlowDiagram sequences={sequences.most_common_sequences} total={total} />
@@ -2408,7 +2418,12 @@ export default function ResearchOutputs() {
             {sd.sequence_frequency.length === 0 ? (
               <div style={{ fontSize: 12.5, color: 'var(--text-3)', fontStyle: 'italic' }}>No multi-stage cases yet.</div>
             ) : sd.sequence_frequency.slice(0, 8).map(r => (
-              <FreqBar key={r.value} label={r.value} count={r.count} max={maxSeqCount} />
+              <FreqBar
+                key={r.value}
+                label={r.value.split(' → ').map(t => formatLabel(t.trim())).join(' → ')}
+                count={r.count}
+                max={maxSeqCount}
+              />
             ))}
           </Panel>
 
@@ -2873,8 +2888,11 @@ export default function ResearchOutputs() {
             <h2 style={{ fontFamily: 'Lora, serif', fontSize: 22, fontWeight: 500, margin: '0 0 6px', color: 'var(--text-1)' }}>
               Research Outputs
             </h2>
-            <p style={{ fontSize: 13, color: 'var(--text-3)', margin: 0, maxWidth: 560, lineHeight: 1.55 }}>
-              Cross-case analysis outputs for dissertation research — stage sequences (RQ1), situational conditions (RQ2), and mobility patterns (RQ3). All outputs reflect analyst-coded cases only.
+            <p style={{ fontSize: 13, color: 'var(--text-3)', margin: 0, maxWidth: 600, lineHeight: 1.55 }}>
+              These outputs are derived from analyst-coded fields. Descriptive summaries show what has been coded.
+              Analytic patterns show relationships between stages, behaviours, movement, and situational conditions.
+              Counts are preliminary and will change as coding progresses.
+              Stage sequences (RQ1) · Situational conditions (RQ2) · Mobility patterns (RQ3).
             </p>
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'flex-end' }}>

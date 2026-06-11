@@ -636,7 +636,11 @@ export default function Analysis() {
 
               {/* Left: Top pathway chains (main visual) */}
               <div>
-                <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.08em', marginBottom: 12 }}>OBSERVED STAGE SEQUENCES — ANALYST CODED CASES</div>
+                <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', letterSpacing: '0.08em', marginBottom: 4 }}>LEGACY IMPORTED SEQUENCE CATEGORIES</div>
+                <div style={{ fontSize: 10.5, color: C.amber, marginBottom: 12, lineHeight: 1.45 }}>
+                  These are imported preliminary sequence labels from earlier coding and are not the current VIRGO staged framework.
+                  For VIRGO stage-coded sequences, see <strong>Research Outputs → Stage Patterns</strong>.
+                </div>
                 {topSeqs.length === 0 ? (
                   <EmptyState message="Awaiting full sequence data." />
                 ) : (
