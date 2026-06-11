@@ -674,7 +674,7 @@ export default function ResearchOutputs() {
   const [caseFilterMovement, setCaseFilterMovement] = useState('');
   const [caseFilterHarm, setCaseFilterHarm]         = useState('');
   const [caseFilterEsc, setCaseFilterEsc]           = useState('');
-  const [caseFilterStages, setCaseFilterStages]     = useState('1+');
+  const [caseFilterStages, setCaseFilterStages]     = useState('');
 
   // Filtered case groups
   const [fgReports, setFgReports]           = useState<import('../types').Report[]>([]);
@@ -2056,9 +2056,8 @@ export default function ResearchOutputs() {
       <Panel>
         <SectionHeading>Case Sequence Table</SectionHeading>
         <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: '0 0 12px' }}>
-          Encounter-level overview for each case. Click a report ID to open it.
-          Default: stage-coded cases only. Use the Stages filter to show all cases.
-          Default sort: severity (high → low). Click column headers to re-sort.
+          Encounter-level overview for all imported cases. Click a report ID to open it.
+          The Stages column shows field-derived indicator counts. Default sort: severity (high → low). Click column headers to re-sort.
         </p>
 
         {/* Filters */}
@@ -2073,10 +2072,10 @@ export default function ResearchOutputs() {
             ]],
             ['Stages', filterStages, setFilterStages, [
               ['', 'All cases'],
-              ['1+', 'Stage-coded only'],
-              ['2+', '2+ stages'],
-              ['1', '1 stage only'],
-              ['0', 'No stages coded'],
+              ['1+', '1+ field indicators'],
+              ['2+', '2+ field indicators'],
+              ['1', '1 indicator only'],
+              ['0', 'No indicators'],
             ]],
             ['Movement', filterMovement, setFilterMovement, [
               ['', 'All'],

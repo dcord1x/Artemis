@@ -610,6 +610,14 @@ def aggregate_environment(reports: list) -> dict:
         'at the time', 'foot ',  # e.g. "foot" as lone word → not a category
     )
 
+    # Exact single-word / short tokens that are not meaningful location values.
+    # Checked before narrative-starter logic so "The" (no trailing space) is caught.
+    _LOCATION_STOPWORDS = frozenset({
+        'the', 'a', 'an', 'and', 'or', 'to', 'of', 'in', 'at', 'on',
+        'unknown', 'unclear', 'not stated', 'n/a', 'na', 'none', 'nil',
+        'yes', 'no', 'other', 'various', '-', '--', '—', '?', '.',
+    })
+
     def _classify_location(loc: str) -> tuple[str, str | None]:
         """
         Return (category, specific_location | None).
@@ -623,7 +631,12 @@ def aggregate_environment(reports: list) -> dict:
         if not raw:
             return ('unknown / unclear', None)
 
-        lc = raw.lower()
+        lc = raw.lower().strip()
+
+        # Reject meaningless single-token values before narrative-starter check
+        # (e.g. bare "The" has no trailing space so _NARRATIVE_STARTERS misses it)
+        if lc in _LOCATION_STOPWORDS or len(raw) <= 2:
+            return ('other / unclear', None)
 
         # Reject outright if it looks like a sentence fragment
         is_long_narrative = len(raw) > 40 or '.' in raw or raw.endswith(',')
