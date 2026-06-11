@@ -1557,7 +1557,14 @@ def get_research_aggregate(db: Session = Depends(get_db)):
         return bool(val) and prov in ('analyst_filled', 'reviewed')
 
     from models import ReportStage
-    stage_report_ids = {s.report_id for s in db.query(ReportStage.report_id).distinct().all()}
+    from collections import Counter as _StageCounter
+    _all_stages = db.query(ReportStage).all()
+    stage_report_ids = {s.report_id for s in _all_stages}
+    _type_freq: _StageCounter = _StageCounter()
+    for _s in _all_stages:
+        if _s.stage_type:
+            _type_freq[_s.stage_type] += 1
+    analyst_stage_type_frequency = [{'stage': k, 'count': v} for k, v in _type_freq.most_common()]
 
     _POSITIVE_VALS = {'yes', 'probable', 'inferred', 'probable / inferred'}
     _HARM_FIELDS = [
@@ -1637,8 +1644,11 @@ def get_research_aggregate(db: Session = Depends(get_db)):
         'initial_contact_guardianship': _val_counts('initial_contact_guardianship'),
     }
 
+    _seq = aggregate_sequences(reports)
+    _seq['stage_type_frequency'] = analyst_stage_type_frequency
+
     return {
-        'sequences':    aggregate_sequences(reports),
+        'sequences':    _seq,
         'mobility':     aggregate_mobility(reports),
         'environment':  aggregate_environment(reports),
         'encounter':    aggregate_encounter(reports),

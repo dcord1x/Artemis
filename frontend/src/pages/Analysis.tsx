@@ -403,7 +403,7 @@ export default function Analysis() {
   const mob       = agg.mobility.counts;
   const mobMax    = Math.max(mob.movement_present, mob.entered_vehicle, mob.public_to_private, mob.public_to_secluded, mob.cross_neighbourhood, mob.cross_municipality, 1);
   const maxHarm   = Math.max(stats.coercion.count, stats.physical_force.count, stats.sexual_assault.count, stats.threats_present.count, agg.encounter.indicator_counts.robbery_theft, agg.encounter.indicator_counts.weapon_present_used, 1);
-  const stageFreq = agg.sequences.stage_frequency.filter(s => STAGE_LABELS[s.stage]).slice(0, 8);
+  const stageFreq = (agg.sequences.stage_type_frequency ?? []).slice(0, 10);
   const maxStageFreq = stageFreq.length ? Math.max(...stageFreq.map(s => s.count), 1) : 1;
   const bigrams   = agg.sequences.most_common_bigrams.slice(0, 5);
   const topSeqs   = agg.sequences.most_common_sequences.slice(0, 4);

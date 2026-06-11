@@ -479,10 +479,11 @@ export interface PathwayRow     { pathway: string;   count: number }
 export interface RouteRow       { route: string;     count: number }
 
 export interface AggregateSequences {
-  most_common_sequences:  SequenceRow[];
-  most_common_bigrams:    PatternRow[];
-  stage_frequency:        StageRow[];
-  escalation_pathways:    PathwayRow[];
+  most_common_sequences:   SequenceRow[];
+  most_common_bigrams:     PatternRow[];
+  stage_frequency:         StageRow[];
+  stage_type_frequency:    StageRow[];
+  escalation_pathways:     PathwayRow[];
   per_case:               {
     report_id: string;
     sequence: string;
