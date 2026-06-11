@@ -671,6 +671,8 @@ export interface CodabilityAggregate {
   guardianship_case:           ValCount;
   access_to_help:              ValCount;
   setting_control:             ValCount;
+  other_people_nearby:         ValCount;
+  security_or_business_nearby: ValCount;
   sequence_pattern:            ValCount;
   highest_stage_reached:       ValCount;
   approach_method:             ValCount | undefined;

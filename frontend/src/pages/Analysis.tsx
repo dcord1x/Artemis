@@ -229,6 +229,13 @@ function OutputTile({ label, desc, icon, onClick, color = 'var(--accent)' }: {
   );
 }
 
+/** Splits pipe-separated stored values and formats each part. */
+function displayVal(v: string): string {
+  if (!v) return v;
+  if (v.includes('|')) return v.split('|').map(p => formatLabel(p.trim())).join(' / ');
+  return formatLabel(v);
+}
+
 function ValDistPanel({ label, vc, color = 'var(--accent)', total }: {
   label: string;
   vc: { counts: Record<string, number>; total_coded: number } | undefined;
@@ -254,9 +261,9 @@ function ValDistPanel({ label, vc, color = 'var(--accent)', total }: {
       {sorted.map(([val, cnt]) => (
         <div key={val} style={{ marginBottom: 5 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
-            <span style={{ fontSize: 11.5, color: 'var(--text-2)' }}>{formatLabel(val)}</span>
+            <span style={{ fontSize: 11.5, color: 'var(--text-2)' }}>{displayVal(val)}</span>
             <span style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 600 }}>
-              {cnt} <span style={{ fontWeight: 400, fontSize: 10 }}>({total > 0 ? Math.round(cnt / total * 100) : 0}%)</span>
+              {cnt} <span style={{ fontWeight: 400, fontSize: 10 }}>({total > 0 ? Math.round(cnt / total * 100) : 0}% of {total} coded)</span>
             </span>
           </div>
           <div style={{ height: 4, borderRadius: 10, background: 'var(--surface-3)', overflow: 'hidden' }}>
@@ -279,23 +286,30 @@ function EmptyState({ message }: { message: string }) {
 // Renders a full sequence string as a horizontal pill chain
 function PathwayChain({ sequence, count, rank }: { sequence: string; count: number; rank: number }) {
   const stages = sequence.split(' → ');
+  const isLegacy = stages.some(s => s && !STAGE_LABELS[s]);
   return (
-    <div style={{ padding: '9px 12px', background: 'var(--surface-2)', borderRadius: 7, border: '1px solid var(--border)', marginBottom: 7 }}>
+    <div style={{ padding: '9px 12px', background: 'var(--surface-2)', borderRadius: 7, border: `1px solid ${isLegacy ? C.slate + '55' : 'var(--border)'}`, marginBottom: 7 }}>
       <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4, rowGap: 4 }}>
         <span style={{ fontSize: 10.5, color: 'var(--text-3)', fontFamily: 'Lora, serif', marginRight: 2, flexShrink: 0 }}>{rank}.</span>
         {stages.map((s, i) => {
+          const isKnown = !!STAGE_LABELS[s];
           const lbl = STAGE_LABELS[s] || formatLabel(s);
-          const col = STAGE_COLORS[s] || C.slate;
+          const col = isKnown ? (STAGE_COLORS[s] || C.slate) : C.slate;
           return (
             <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
               {i > 0 && <span style={{ color: 'var(--text-3)', fontSize: 9, flexShrink: 0 }}>→</span>}
-              <span style={{ fontSize: 10.5, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: col + '18', color: col, border: `1px solid ${col}30`, whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: 10.5, fontWeight: 600, padding: '2px 8px', borderRadius: 20, background: col + '18', color: col, border: `1px solid ${col}30`, whiteSpace: 'nowrap', opacity: isKnown ? 1 : 0.65 }}>
                 {lbl}
               </span>
             </span>
           );
         })}
         <span style={{ marginLeft: 'auto', fontSize: 10.5, color: 'var(--text-3)', fontWeight: 600, flexShrink: 0, paddingLeft: 6 }}>{count}×</span>
+        {isLegacy && (
+          <span style={{ fontSize: 8.5, padding: '1px 5px', borderRadius: 3, background: C.slate + '18', color: C.slate, border: `1px solid ${C.slate}44`, fontWeight: 700, letterSpacing: '0.04em', flexShrink: 0 }}>
+            LEGACY
+          </span>
+        )}
       </div>
     </div>
   );
@@ -389,7 +403,7 @@ export default function Analysis() {
   const mob       = agg.mobility.counts;
   const mobMax    = Math.max(mob.movement_present, mob.entered_vehicle, mob.public_to_private, mob.public_to_secluded, mob.cross_neighbourhood, mob.cross_municipality, 1);
   const maxHarm   = Math.max(stats.coercion.count, stats.physical_force.count, stats.sexual_assault.count, stats.threats_present.count, agg.encounter.indicator_counts.robbery_theft, agg.encounter.indicator_counts.weapon_present_used, 1);
-  const stageFreq = agg.sequences.stage_frequency.slice(0, 8);
+  const stageFreq = agg.sequences.stage_frequency.filter(s => STAGE_LABELS[s.stage]).slice(0, 8);
   const maxStageFreq = stageFreq.length ? Math.max(...stageFreq.map(s => s.count), 1) : 1;
   const bigrams   = agg.sequences.most_common_bigrams.slice(0, 5);
   const topSeqs   = agg.sequences.most_common_sequences.slice(0, 4);
@@ -597,6 +611,7 @@ export default function Analysis() {
               </h3>
               <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: 0 }}>
                 Behavioural stages across violent client–sex worker encounters. Analyst-confirmed stage sequences only.
+                Preliminary output based on currently analyst-coded cases — counts will change as coding progresses.
               </p>
             </div>
             <button className="btn-ghost" onClick={() => navigate('/research')} style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
@@ -724,10 +739,15 @@ export default function Analysis() {
         {/* ═══ RQ2 — BEHAVIOURAL AND SITUATIONAL CONDITIONS ════════════════════ */}
         <div style={{ marginBottom: 20 }}>
           <SectionLabel text="RQ2 — Behavioural and Situational Conditions" icon={<Shield size={11} />} />
-          <p style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 10, marginTop: -4 }}>
-            Situational and environmental conditions present across analyst-coded cases.
-            Based on {d.coded} analyst-coded report{d.coded !== 1 ? 's' : ''}.{d.coded < 5 ? ' Treat as highly preliminary.' : ''}
+          <p style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: d.coded < 5 ? 6 : 10, marginTop: -4 }}>
+            Harm indicators, situational conditions, and environmental context across analyst-coded cases.
+            Preliminary output based on {d.coded} currently analyst-coded report{d.coded !== 1 ? 's' : ''} — counts will change as coding progresses.
           </p>
+          {d.coded < 5 && (
+            <div style={{ fontSize: 11, color: C.amber, padding: '6px 10px', background: `${C.amber}10`, border: `1px solid ${C.amber}30`, borderRadius: 5, marginBottom: 14 }}>
+              Only {d.coded} analyst-coded case{d.coded !== 1 ? 's' : ''} — treat all patterns as highly preliminary.
+            </div>
+          )}
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
 
@@ -792,8 +812,10 @@ export default function Analysis() {
                   <ValDistPanel label="Visibility"            vc={agg.codability.visibility_case}        color={C.blue}   total={d.coded} />
                   <ValDistPanel label="Isolation"             vc={agg.codability.isolation_case}         color={C.coral}  total={d.coded} />
                   <ValDistPanel label="Guardianship"          vc={agg.codability.guardianship_case}      color={C.green}  total={d.coded} />
-                  <ValDistPanel label="Setting control"       vc={agg.codability.setting_control}        color={C.purple} total={d.coded} />
-                  <ValDistPanel label="Access to help"        vc={agg.codability.access_to_help}         color={C.coral}  total={d.coded} />
+                  <ValDistPanel label="Setting control"           vc={agg.codability.setting_control}            color={C.purple} total={d.coded} />
+                  <ValDistPanel label="Access to help"            vc={agg.codability.access_to_help}             color={C.coral}  total={d.coded} />
+                  <ValDistPanel label="Other people nearby"       vc={agg.codability.other_people_nearby}        color={C.teal}   total={d.coded} />
+                  <ValDistPanel label="Security / business nearby" vc={agg.codability.security_or_business_nearby} color={C.teal}  total={d.coded} />
                 </div>
               )}
             </div>
@@ -809,13 +831,13 @@ export default function Analysis() {
               ) : (
                 <>
                   {agg.encounter.incident_type_distribution.slice(0, 5).map(it => (
-                    <CountBar key={it.value} label={it.value} count={it.count} max={Math.max(...agg.encounter.incident_type_distribution.map(x => x.count), 1)} color={C.coral} />
+                    <CountBar key={it.value} label={displayVal(it.value)} count={it.count} max={Math.max(...agg.encounter.incident_type_distribution.map(x => x.count), 1)} color={C.coral} />
                   ))}
                   {agg.encounter.severity_distribution.length > 0 && (
                     <div style={{ marginTop: 10, paddingTop: 9, borderTop: '1px solid var(--border)' }}>
                       <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', marginBottom: 8, letterSpacing: '0.07em' }}>SEVERITY</div>
                       {agg.encounter.severity_distribution.slice(0, 4).map(s => (
-                        <CountBar key={s.value} label={s.value} count={s.count} max={Math.max(...agg.encounter.severity_distribution.map(x => x.count), 1)} color={s.value.toLowerCase().includes('severe') ? C.red : C.coral} />
+                        <CountBar key={s.value} label={displayVal(s.value)} count={s.count} max={Math.max(...agg.encounter.severity_distribution.map(x => x.count), 1)} color={s.value.toLowerCase().includes('severe') ? C.red : C.coral} />
                       ))}
                     </div>
                   )}
@@ -828,9 +850,15 @@ export default function Analysis() {
         {/* ═══ RQ3 — MOBILITY AND SPATIAL MOVEMENT ═════════════════════════════ */}
         <div style={{ marginBottom: 20 }}>
           <SectionLabel text="RQ3 — Mobility and Spatial Movement" icon={<Navigation size={11} />} />
-          <p style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 10, marginTop: -4 }}>
-            Movement patterns, mode of movement, and spatial control indicators across coded cases. Addresses how relocation alters victim vulnerability, isolation and offender control.
+          <p style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: d.coded < 5 ? 6 : 10, marginTop: -4 }}>
+            Movement patterns, mode of movement, spatial control indicators, and movement timing in the encounter sequence.
+            Preliminary output based on currently analyst-coded cases — counts will change as coding progresses.
           </p>
+          {d.coded < 5 && (
+            <div style={{ fontSize: 11, color: C.amber, padding: '6px 10px', background: `${C.amber}10`, border: `1px solid ${C.amber}30`, borderRadius: 5, marginBottom: 14 }}>
+              Only {d.coded} analyst-coded case{d.coded !== 1 ? 's' : ''} — treat all patterns as highly preliminary.
+            </div>
+          )}
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
 
@@ -866,7 +894,10 @@ export default function Analysis() {
                 <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
                   <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-3)', marginBottom: 10, letterSpacing: '0.07em' }}>MOVEMENT PATTERNS (CODED)</div>
                   <ValDistPanel label="Movement pattern type" vc={agg.codability.movement_pattern_type} color={C.purple} total={d.coded} />
-                  <ValDistPanel label="Movement timing"       vc={agg.codability.movement_timing}       color={C.amber}  total={d.coded} />
+                  <ValDistPanel label="Movement timing in sequence" vc={agg.codability.movement_timing} color={C.amber}  total={d.coded} />
+                  <p style={{ fontSize: 10, color: 'var(--text-3)', marginTop: -4, lineHeight: 1.5 }}>
+                    Movement timing indicates where in the encounter sequence relocation occurred — before negotiation, during escalation, after refusal, before or after violence, or in the aftermath.
+                  </p>
                 </div>
               )}
             </div>
@@ -971,9 +1002,11 @@ export default function Analysis() {
                 <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.07em', color: C.teal, textTransform: 'uppercase', marginBottom: 12, borderBottom: `2px solid ${C.teal}22`, paddingBottom: 8 }}>
                   Sequence Coverage
                 </div>
-                <ValDistPanel label="Sequence pattern"              vc={agg.codability.sequence_pattern}            color={C.indigo} total={d.coded} />
-                <ValDistPanel label="Highest stage reached"         vc={agg.codability.highest_stage_reached}       color={C.coral}  total={d.coded} />
-                <ValDistPanel label="Access to help"                vc={agg.codability.access_to_help}              color={C.green}  total={d.coded} />
+                <ValDistPanel label="Sequence pattern"        vc={agg.codability.sequence_pattern}      color={C.indigo} total={d.coded} />
+                <ValDistPanel label="Highest escalation level" vc={agg.codability.highest_stage_reached} color={C.coral}  total={d.coded} />
+                <p style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 4, lineHeight: 1.5 }}>
+                  Highest escalation level reflects the analyst's narrative-level harm/escalation categorisation, not an encounter stage type.
+                </p>
               </div>
 
             </div>
@@ -1005,9 +1038,9 @@ export default function Analysis() {
                 Analytic Extraction
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                <MetricCard label="Analyst Staged" value={d.analystStaged} sub={`of ${d.coded} analyst coded`} color={C.purple} icon={<GitBranch size={11} />}  onClick={() => navigate('/research')} />
-                <MetricCard label="Movement-Coded" value={agg.data_quality.with_movement_coded} sub={`of ${d.coded} reviewed`} color={C.amber} icon={<Navigation size={11} />} onClick={() => go({ movement_present: 'yes' })} />
-                <MetricCard label="Harm-Coded"     value={agg.data_quality.with_harm_coded}     sub={`of ${d.coded} reviewed`} color={C.coral} icon={<Shield size={11} />}    onClick={() => go({ coding_status: 'coded' })} />
+                <MetricCard label="Analyst Staged" value={d.analystStaged} sub="cases with stage records created" color={C.purple} icon={<GitBranch size={11} />}  onClick={() => navigate('/research')} />
+                <MetricCard label="Movement-Coded" value={agg.data_quality.with_movement_coded} sub={`of ${d.total} reports`} color={C.amber} icon={<Navigation size={11} />} onClick={() => go({ movement_present: 'yes' })} />
+                <MetricCard label="Harm-Coded"     value={agg.data_quality.with_harm_coded}     sub={`of ${d.total} reports`} color={C.coral} icon={<Shield size={11} />}    onClick={() => go({ coding_status: 'coded' })} />
                 <MetricCard label="Vehicle Present" value={stats.vehicle_present.count} sub="cases with vehicle"       color={C.blue}  icon={<Activity size={11} />}  onClick={() => go({ vehicle_present: 'yes' })} />
               </div>
             </div>

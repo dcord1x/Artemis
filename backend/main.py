@@ -1625,6 +1625,8 @@ def get_research_aggregate(db: Session = Depends(get_db)):
         'guardianship_case':           _val_counts('guardianship_case'),
         'access_to_help':              _val_counts('access_to_help'),
         'setting_control':             _val_counts('setting_control'),
+        'other_people_nearby':         _val_counts('other_people_nearby'),
+        'security_or_business_nearby': _val_counts('security_or_business_nearby'),
         'sequence_pattern':            _val_counts('sequence_pattern'),
         'highest_stage_reached':       _val_counts('highest_stage_reached'),
         'approach_method':             _val_counts('approach_method'),
